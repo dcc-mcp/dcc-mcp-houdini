@@ -1,45 +1,86 @@
 # dcc-mcp-houdini
 
-SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem — exposes Houdini tools via MCP.
+[![CI](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml)
+[![E2E](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml)
+[![Release](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
+[![Python](https://img.shields.io/pypi/pyversions/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
+[![Downloads](https://static.pepy.tech/badge/dcc-mcp-houdini)](https://pepy.tech/project/dcc-mcp-houdini)
+[![License](https://img.shields.io/github/license/loonghao/dcc-mcp-houdini.svg)](LICENSE)
+[![Release Assets](https://img.shields.io/github/v/release/loonghao/dcc-mcp-houdini?label=github%20release)](https://github.com/loonghao/dcc-mcp-houdini/releases)
+
+SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
+It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
+skills-first Houdini automation tools to agents.
 
 ## Features
 
 - Embedded MCP Streamable HTTP server inside Houdini
 - Auto-gateway with first-wins port competition (port 8765)
 - Progressive skill loading (discover → load → unload)
-- Houdini Python (`hython`) integration
-- Prometheus metrics endpoint (`/metrics`)
-- Job persistence and workflow engine support
+- Houdini Python (`hython`) and interactive UI-thread dispatch
+- Python 3.7+ package metadata for older Houdini runtimes
+- Bundled skills for scripting, scene inspection, node authoring, HDA execution, and automation
+- Wheel, sdist, and Houdini quickinstall ZIP release assets
+- Prometheus metrics endpoint (`/metrics`), job persistence, and workflow engine support
+- Optional licensed Houdini Docker E2E workflow
 
 ## Installation
 
-```bash
-# Install in editable mode for development
-pip install -e ".[dev]"
+### Wheel
 
-# Or install from PyPI (when available)
+```bash
 pip install dcc-mcp-houdini
 ```
 
-## Usage (inside Houdini Python)
+### Houdini Quickinstall ZIP
+
+Download `dcc_mcp_houdini_quickinstall_<platform>_v<version>.zip` from
+[GitHub Releases](https://github.com/loonghao/dcc-mcp-houdini/releases), extract
+it to a stable folder, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
+```
+
+On Linux/macOS:
+
+```bash
+chmod +x install.sh
+./install.sh 20.5
+```
+
+The package writes a Houdini package JSON into the user preferences folder.
+On startup, `scripts/123.py` extracts bundled wheels into `vendor/` and starts
+the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
+
+## Usage
 
 ```python
 import dcc_mcp_houdini
 
-# Start server (auto-detects Houdini version)
 server = dcc_mcp_houdini.start_server()
-
-# Progressive skill loading
-n = server.discover_skills()        # scan paths, register metadata
-server.load_skill("houdini-scene") # lazy-load a specific skill
-
-# Get MCP URL for AI agent connection
-handle = server.start()
-print(handle.mcp_url())  # http://127.0.0.1:8765/mcp
-
-# Stop server
-dcc_mcp_houdini.stop_server()
+print(server.mcp_url)  # http://127.0.0.1:8765/mcp
 ```
+
+Default minimal mode (`DCC_MCP_MINIMAL=1`) loads only:
+
+- `houdini-scripting`
+- `houdini-scene`
+
+Use progressive discovery for heavier tools:
+
+```text
+search_skills(query="hda")
+load_skill("houdini-hda")
+call houdini_hda__execute_hda
+```
+
+## Local MCP debug (Cursor / Claude)
+
+See [`docs/guide/local-mcp-debug.md`](docs/guide/local-mcp-debug.md) and copy
+[`examples/mcp/cursor-houdini-streamable-http.json`](examples/mcp/cursor-houdini-streamable-http.json)
+into your MCP host config.
 
 ## Development
 
@@ -58,24 +99,48 @@ just houdini-version=20.5 houdini-dev-build-link-core-win
 
 # Windows: start Houdini with debugpy
 just houdini-version=20.5 houdini-dev-debug-win
+
+# Build wheel + platform quickinstall package
+just build-houdini-package platform=win64
 ```
+
+## Bundled Skills
+
+| Skill | Stage | Tools |
+|-------|-------|-------|
+| `houdini-scripting` | bootstrap | `execute_python`, `get_session_info` |
+| `houdini-scene` | scene | `get_scene_info`, `list_obj_nodes` |
+| `houdini-nodes` | authoring | `create_node`, `set_node_parms`, `connect_nodes`, `cook_node`, `layout_children`, `delete_node` |
+| `houdini-hda` | authoring | `install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda` |
+| `houdini-automation` | pipeline | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
+
+## CI and Houdini Docker
+
+Normal CI runs without Houdini installed: unit tests, skill validation, Python
+3.7 syntax checks, wheel/sdist build, and quickinstall ZIP assembly.
+
+Live Houdini E2E is in `.github/workflows/e2e.yml`. It defaults to
+`sabjorn/hbuild-worker:21.0.559-base` and runs only when SideFX licensing
+secrets are configured. See [`docs/ci/houdini-docker.md`](docs/ci/houdini-docker.md).
 
 ## Project Structure
 
 ```
 dcc-mcp-houdini/
-├── src/dcc_mcp_houdini/   # Python package
-├── tests/                  # Test suite
-├── tools/                  # Dev scripts (link, unlink, status)
-├── examples/               # Usage examples
-├── justfile                # Task runner
-└── pyproject.toml         # Build config
+├── src/dcc_mcp_houdini/        # Python package and bundled skills
+├── packaging/                  # Quickinstall ZIP assembly
+├── tests/                      # Unit and packaging tests
+├── tools/                      # Dev, lint, and syntax scripts
+├── examples/                   # Usage examples
+├── docs/                       # Guides and CI notes
+├── justfile                    # Task runner
+└── pyproject.toml              # Build config
 ```
 
 ## Requirements
 
-- Houdini 20.5+ (Python 3.9+)
-- dcc-mcp-core >= 0.17.2
+- Houdini with Python 3.7+ (`hython` or interactive Houdini)
+- `dcc-mcp-core >= 0.17.26`
 - See `pyproject.toml` for full dependencies
 
 ## License

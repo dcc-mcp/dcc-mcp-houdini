@@ -5,7 +5,8 @@
 #   just                                    — show this help
 #   just dev                                — pip install -e ".[dev]"
 #   just test                               — pytest
-#   just lint                               — ruff check + format check
+#   just lint                               — ruff check
+#   just lint-all                           — ruff + skill metadata + py37 syntax
 #   just houdini-version=20.5 houdini-dev-build-link-core-win  — build core + symlink (Windows)
 #
 # Cross-platform: uses sh on Unix/macOS, pwsh on Windows for dev-* commands.
@@ -26,6 +27,9 @@ python := "hython"
     just --list
 
 # ── Development (install in editable mode) ────────────────────────────────────
+
+dev:
+    pip install -e ".[dev]"
 
 # Unix/macOS: symlink src/dcc_mcp_houdini into Houdini's Python site-packages
 houdini-link:
@@ -107,23 +111,33 @@ test-cov:
     pytest tests/ -v --tb=short --cov=src/dcc_mcp_houdini --cov-report=term-missing
 
 lint:
-    ruff check src/ tests/
+    ruff check src/ tests/ tools/ packaging/
 
 lint-format:
-    ruff format --check src/ tests/
+    ruff format --check src/ tests/ tools/ packaging/
+
+lint-skills:
+    python tools/lint_skills.py --warnings-as-errors
+
+check-py37-syntax:
+    python tools/check_py37_syntax.py src tests tools packaging
 
 fix:
-    ruff check --fix src/ tests/
+    ruff check --fix src/ tests/ tools/ packaging/
 
 format:
-    ruff format src/ tests/
+    ruff format src/ tests/ tools/ packaging/
 
-lint-all: lint lint-format
+lint-all: lint lint-format lint-skills check-py37-syntax
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 build:
     python -m build
+
+build-houdini-package platform="win64":
+    python -m build
+    python packaging/assemble_houdini_package.py --platform {{platform}} --dist-dir dist --output-dir dist_houdini
 
 clean:
     python -c "import shutil, pathlib; [shutil.rmtree(p, ignore_errors=True) for p in ['dist', 'build', 'src/dcc_mcp_houdini.egg-info']]"

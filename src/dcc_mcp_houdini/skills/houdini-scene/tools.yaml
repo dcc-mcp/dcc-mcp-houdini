@@ -1,0 +1,48 @@
+tools:
+  - name: get_scene_info
+    description: >-
+      Return hip file path, whether a file is saved, current frame, playback
+      range, and the number of children under /obj. Does not modify the scene.
+    source_file: scripts/get_scene_info.py
+    execution: sync
+    affinity: main
+    group: scene-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties: {}
+    next-tools:
+      on-success:
+        - houdini_scene__list_obj_nodes
+      on-failure:
+        - houdini_scripting__get_session_info
+  - name: list_obj_nodes
+    description: >-
+      List object-level nodes under /obj with path, name, and type. Optional
+      type_filter matches node type names (case-insensitive substring).
+    source_file: scripts/list_obj_nodes.py
+    execution: sync
+    affinity: main
+    group: scene-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        type_filter:
+          type: string
+          description: Optional substring filter on Houdini node type name (e.g. geo, cam).
+    next-tools:
+      on-failure:
+        - houdini_scene__get_scene_info

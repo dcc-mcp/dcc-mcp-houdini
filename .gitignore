@@ -8,6 +8,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+dist_houdini/
 downloads/
 eggs/
 .eggs/

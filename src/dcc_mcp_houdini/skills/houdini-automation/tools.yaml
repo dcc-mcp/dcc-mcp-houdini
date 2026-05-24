@@ -1,0 +1,178 @@
+tools:
+  - name: run_python_file
+    description: >-
+      Execute an existing Python file inside Houdini with `hou`, `args`, and
+      `context` pre-bound. Mutates the session according to the script.
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: "Path to an existing Python file."
+        args:
+          type: array
+          items: {}
+          default: []
+          description: "Optional positional values exposed as args."
+        context:
+          type: object
+          additionalProperties: true
+          description: "Optional globals exposed as context and merged into the script namespace."
+        working_directory:
+          type: string
+          description: "Optional working directory while the script runs."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 300
+    source_file: scripts/run_python_file.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-failure:
+        - houdini_scripting__get_session_info
+
+  - name: set_frame_range
+    description: "Set Houdini timeline frame range and optional current frame."
+    input_schema:
+      type: object
+      required: [start_frame, end_frame]
+      properties:
+        start_frame:
+          type: number
+          description: "Timeline start frame."
+        end_frame:
+          type: number
+          description: "Timeline end frame."
+        current_frame:
+          type: number
+          description: "Optional frame to set after updating the range."
+    read_only: false
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/set_frame_range.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+
+  - name: save_hip_file
+    description: "Save the current Houdini hip file, optionally to a new path."
+    input_schema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: "Optional destination hip path. Omit to save the current file."
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/save_hip_file.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+
+  - name: load_hip_file
+    description: "Load a Houdini hip file into the current session. Destructive to the open scene."
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: "Existing .hip/.hiplc/.hipnc file to load."
+        suppress_save_prompt:
+          type: boolean
+          default: true
+          description: "Suppress Houdini save prompts when loading."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/load_hip_file.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+
+  - name: build_node_chain
+    description: >-
+      Build a small Houdini node chain from structured node specs and
+      connections. Mutates the scene and can cook the last created node.
+    input_schema:
+      type: object
+      required: [parent_path, nodes]
+      properties:
+        parent_path:
+          type: string
+          description: "Parent network path for all nodes."
+        nodes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [node_type]
+            properties:
+              node_type:
+                type: string
+              node_name:
+                type: string
+              parameters:
+                type: object
+                additionalProperties: true
+        connections:
+          type: array
+          items:
+            type: object
+            required: [input, output]
+            properties:
+              input:
+                type: string
+                description: "Node name/path receiving the connection."
+              output:
+                type: string
+                description: "Node name/path providing the connection."
+              input_index:
+                type: integer
+                minimum: 0
+                default: 0
+              output_index:
+                type: integer
+                minimum: 0
+                default: 0
+        layout:
+          type: boolean
+          default: true
+        cook_last:
+          type: boolean
+          default: true
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 300
+    source_file: scripts/build_node_chain.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_nodes__layout_children
+      on-failure:
+        - houdini_scene__get_scene_info

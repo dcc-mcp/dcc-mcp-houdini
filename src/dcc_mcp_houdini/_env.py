@@ -1,16 +1,26 @@
 """Environment variable helpers for dcc-mcp-houdini."""
 
+from __future__ import annotations
+
+import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-# Re-export core helpers for convenience
-from dcc_mcp_core.environment import (  # noqa: F401
-    resolve_bool,
-    resolve_int,
-    resolve_path,
-    resolve_str,
-)
+logger = logging.getLogger(__name__)
+
+ENV_METRICS = "DCC_MCP_HOUDINI_METRICS"
+ENV_JOB_STORAGE = "DCC_MCP_HOUDINI_JOB_STORAGE_PATH"
+ENV_ENABLE_WORKFLOWS = "DCC_MCP_HOUDINI_ENABLE_WORKFLOWS"
+ENV_ENABLE_GATEWAY_FAILOVER = "DCC_MCP_HOUDINI_ENABLE_GATEWAY_FAILOVER"
+ENV_READINESS_TIMEOUT_SECS = "DCC_MCP_HOUDINI_READINESS_TIMEOUT_SECS"
+ENV_PORT = "DCC_MCP_HOUDINI_PORT"
+ENV_GATEWAY_PORT = "DCC_MCP_GATEWAY_PORT"
+DEFAULT_JOB_DB_FILENAME = "jobs.db"
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def get_extra_skill_paths() -> list[str]:
@@ -21,10 +31,10 @@ def get_extra_skill_paths() -> list[str]:
     for env_var in ("DCC_MCP_HOUDINI_SKILL_PATHS", "DCC_MCP_SKILL_PATHS"):
         raw = os.environ.get(env_var, "")
         if raw:
-            for p in raw.split(sep):
-                p = p.strip()
-                if p:
-                    paths.append(p)
+            for part in raw.split(sep):
+                part = part.strip()
+                if part:
+                    paths.append(part)
 
     return paths
 
@@ -33,25 +43,49 @@ def resolve_enable_gateway_failover(value: Optional[bool]) -> bool:
     """Resolve enable_gateway_failover with env var fallback."""
     if value is not None:
         return value
-    return resolve_bool("DCC_MCP_HOUDINI_ENABLE_GATEWAY_FAILOVER", default=True)
+    raw = os.environ.get(ENV_ENABLE_GATEWAY_FAILOVER, "").strip()
+    if raw:
+        return _env_truthy(ENV_ENABLE_GATEWAY_FAILOVER)
+    return True
 
 
 def resolve_metrics_enabled(value: Optional[bool]) -> bool:
     """Resolve metrics_enabled with env var fallback."""
     if value is not None:
-        return value
-    return resolve_bool("DCC_MCP_HOUDINI_METRICS_ENABLED", default=False)
+        return bool(value)
+    return _env_truthy(ENV_METRICS)
 
 
 def resolve_job_storage(value: Optional[str]) -> Optional[str]:
     """Resolve job_storage_path with env var fallback."""
     if value is not None:
+        if not str(value).strip():
+            return ""
         return value
-    return resolve_path("DCC_MCP_HOUDINI_JOB_STORAGE_PATH", default=None)
+
+    env_val = os.environ.get(ENV_JOB_STORAGE)
+    if env_val is not None:
+        return env_val
+
+    try:
+        from dcc_mcp_core import get_data_dir  # noqa: PLC0415
+
+        data_dir = Path(get_data_dir()) / "dcc-mcp-houdini"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return str(data_dir / DEFAULT_JOB_DB_FILENAME)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not resolve default job storage path: %s", exc)
+        return None
 
 
 def resolve_enable_workflows(value: Optional[bool]) -> bool:
     """Resolve enable_workflows with env var fallback."""
     if value is not None:
         return value
-    return resolve_bool("DCC_MCP_HOUDINI_ENABLE_WORKFLOWS", default=False)
+    return _env_truthy(ENV_ENABLE_WORKFLOWS)
+
+
+def resolve_minimal_mode_enabled() -> bool:
+    """Return True when progressive minimal mode should be used at startup."""
+    raw = os.environ.get("DCC_MCP_MINIMAL", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")

@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from typing import Optional
 
-from dcc_mcp_houdini import HoudiniMcpServer
+from dcc_mcp_houdini import start_server, stop_server
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -22,19 +23,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    server = HoudiniMcpServer(port=args.port, gateway_port=args.gateway_port)
-    handle = server.start()
+    server = start_server(port=args.port, gateway_port=args.gateway_port)
 
-    print(f"Houdini MCP server started: {handle.mcp_url()}")
+    print(f"Houdini MCP server started: {server.mcp_url}")
     print("Press Ctrl+C to stop...")
 
     try:
         import time
+
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nShutting down...")
-        server.shutdown()
+        stop_server()
 
     return 0
 
