@@ -3,9 +3,8 @@
 [![CI](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml)
 [![E2E](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml)
 [![Release](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml)
-[![PyPI](https://img.shields.io/pypi/v/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
-[![Python](https://img.shields.io/pypi/pyversions/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
-[![Downloads](https://static.pepy.tech/badge/dcc-mcp-houdini)](https://pepy.tech/project/dcc-mcp-houdini)
+[![Python](https://img.shields.io/badge/python-3.7%2B-blue.svg)](pyproject.toml)
+[![Downloads](https://img.shields.io/github/downloads/loonghao/dcc-mcp-houdini/total.svg)](https://github.com/loonghao/dcc-mcp-houdini/releases)
 [![License](https://img.shields.io/github/license/loonghao/dcc-mcp-houdini.svg)](LICENSE)
 [![Release Assets](https://img.shields.io/github/v/release/loonghao/dcc-mcp-houdini?label=github%20release)](https://github.com/loonghao/dcc-mcp-houdini/releases)
 
@@ -27,10 +26,10 @@ skills-first Houdini automation tools to agents.
 
 ## Installation
 
-### Wheel
+### Release Wheel
 
 ```bash
-pip install dcc-mcp-houdini
+pip install https://github.com/loonghao/dcc-mcp-houdini/releases/download/v0.1.0/dcc_mcp_houdini-0.1.0-py3-none-any.whl
 ```
 
 ### Houdini Quickinstall ZIP
