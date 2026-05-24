@@ -52,8 +52,9 @@ When adding or changing bundled skills, load the project skill:
 | Skill | Tools |
 |-------|-------|
 | `houdini-scripting` | `execute_python`, `get_session_info` |
-| `houdini-scene` | `get_scene_info`, `list_obj_nodes` |
+| `houdini-scene` | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` |
 | `houdini-nodes` | `create_node`, `set_node_parms`, `connect_nodes`, `cook_node`, `layout_children`, `delete_node` |
+| `houdini-materials` | `create_material`, `assign_material` |
 | `houdini-hda` | `install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
