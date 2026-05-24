@@ -3,6 +3,7 @@
 [![CI](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml)
 [![E2E](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml)
 [![Release](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
 [![Python](https://img.shields.io/badge/python-3.7%2B-blue.svg)](pyproject.toml)
 [![Downloads](https://img.shields.io/github/downloads/loonghao/dcc-mcp-houdini/total.svg)](https://github.com/loonghao/dcc-mcp-houdini/releases)
 [![License](https://img.shields.io/github/license/loonghao/dcc-mcp-houdini.svg)](LICENSE)
@@ -27,6 +28,12 @@ skills-first Houdini automation tools to agents.
 ## Installation
 
 ### Release Wheel
+
+```bash
+pip install dcc-mcp-houdini
+```
+
+For an unreleased GitHub asset, install a release wheel directly:
 
 ```bash
 pip install https://github.com/loonghao/dcc-mcp-houdini/releases/download/v0.1.0/dcc_mcp_houdini-0.1.0-py3-none-any.whl
@@ -103,13 +110,22 @@ just houdini-version=20.5 houdini-dev-debug-win
 just build-houdini-package platform=win64
 ```
 
+## Release Publishing
+
+The Release workflow publishes to PyPI when `release-please` creates a new
+release. To backfill an existing GitHub release tag, run the Release workflow
+manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
+PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
+available.
+
 ## Bundled Skills
 
 | Skill | Stage | Tools |
 |-------|-------|-------|
 | `houdini-scripting` | bootstrap | `execute_python`, `get_session_info` |
-| `houdini-scene` | scene | `get_scene_info`, `list_obj_nodes` |
+| `houdini-scene` | scene | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` |
 | `houdini-nodes` | authoring | `create_node`, `set_node_parms`, `connect_nodes`, `cook_node`, `layout_children`, `delete_node` |
+| `houdini-materials` | authoring | `create_material`, `assign_material` |
 | `houdini-hda` | authoring | `install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda` |
 | `houdini-automation` | pipeline | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 

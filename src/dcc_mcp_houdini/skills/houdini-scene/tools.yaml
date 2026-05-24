@@ -46,3 +46,76 @@ tools:
     next-tools:
       on-failure:
         - houdini_scene__get_scene_info
+  - name: list_child_nodes
+    description: >-
+      List child nodes below any Houdini network path, optionally filtered by
+      node type and recursively traversed to a bounded depth. Does not modify
+      the scene.
+    source_file: scripts/list_child_nodes.py
+    execution: sync
+    affinity: main
+    group: scene-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: "/obj"
+          description: Network path whose children should be listed.
+        type_filter:
+          type: string
+          description: Optional substring filter on Houdini node type name.
+        recursive:
+          type: boolean
+          default: false
+          description: Traverse descendants when true.
+        max_depth:
+          type: integer
+          minimum: 0
+          default: 1
+          description: Maximum descendant depth when recursive is true.
+        include_hidden:
+          type: boolean
+          default: false
+          description: Include nodes for which Houdini reports isHidden().
+    next-tools:
+      on-success:
+        - houdini_scene__get_node_info
+      on-failure:
+        - houdini_scene__get_scene_info
+  - name: get_node_info
+    description: >-
+      Return a read-only summary for a Houdini node including path, type,
+      category, parent, child count, flags, and optional input/output links.
+    source_file: scripts/get_node_info.py
+    execution: sync
+    affinity: main
+    group: scene-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Houdini node path to inspect.
+        include_connections:
+          type: boolean
+          default: true
+          description: Include input and output node paths when available.
+    next-tools:
+      on-failure:
+        - houdini_scene__list_child_nodes

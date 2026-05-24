@@ -62,6 +62,7 @@ def test_stage_loader_maps_bootstrap_and_scene() -> None:
 
     assert "houdini-scripting" in skills_for_stage("bootstrap")
     assert "houdini-scene" in skills_for_stage("scene")
+    assert "houdini-materials" in skills_for_stage("authoring")
     cfg = build_minimal_mode_for_stages(["scene"])
     assert "houdini-scene" in cfg.skills
     assert "houdini-scripting" in cfg.skills
@@ -136,6 +137,81 @@ class TestListObjNodesSkill:
         assert result["success"] is True
         assert result["context"]["count"] == 1
         assert result["context"]["nodes"][0]["name"] == "geo1"
+
+
+class TestSceneNodeInspectionSkills:
+    def test_list_child_nodes_with_recursive_filter(self) -> None:
+        mod = _load_script("houdini-scene", "list_child_nodes.py")
+        box = MagicMock()
+        box.path.return_value = "/obj/geo1/box1"
+        box.name.return_value = "box1"
+        box.type.return_value.name.return_value = "box"
+        box.isHidden.return_value = False
+        box.children.return_value = []
+        geo = MagicMock()
+        geo.path.return_value = "/obj/geo1"
+        geo.name.return_value = "geo1"
+        geo.type.return_value.name.return_value = "geo"
+        geo.isHidden.return_value = False
+        geo.children.return_value = [box]
+        obj = MagicMock()
+        obj.path.return_value = "/obj"
+        obj.children.return_value = [geo]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = obj
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.list_child_nodes("/obj", type_filter="box", recursive=True, max_depth=1)
+
+        assert result["success"] is True
+        assert result["context"]["count"] == 1
+        assert result["context"]["nodes"][0]["path"] == "/obj/geo1/box1"
+        assert result["context"]["nodes"][0]["depth"] == 1
+
+    def test_get_node_info_with_connections(self) -> None:
+        mod = _load_script("houdini-scene", "get_node_info.py")
+        category = MagicMock()
+        category.name.return_value = "Sop"
+        type_obj = MagicMock()
+        type_obj.name.return_value = "box"
+        type_obj.category.return_value = category
+        parent = MagicMock()
+        parent.path.return_value = "/obj/geo1"
+        child = MagicMock()
+        child.path.return_value = "/obj/geo1/child"
+        input_node = MagicMock()
+        input_node.path.return_value = "/obj/geo1/input"
+        output_node = MagicMock()
+        output_node.path.return_value = "/obj/geo1/output"
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/box1"
+        node.name.return_value = "box1"
+        node.type.return_value = type_obj
+        node.parent.return_value = parent
+        node.children.return_value = [child]
+        node.inputs.return_value = [input_node, None]
+        node.outputs.return_value = [output_node]
+        node.isBypassed.return_value = False
+        node.isDisplayFlagSet.return_value = True
+        node.isRenderFlagSet.return_value = False
+        node.isTemplateFlagSet.return_value = False
+        node.isCurrent.return_value = True
+        node.isSelected.return_value = True
+        node.isHidden.return_value = False
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_node_info("/obj/geo1/box1")
+
+        assert result["success"] is True
+        info = result["context"]["node"]
+        assert info["type"] == "box"
+        assert info["category"] == "Sop"
+        assert info["parent_path"] == "/obj/geo1"
+        assert info["child_count"] == 1
+        assert info["inputs"] == ["/obj/geo1/input", None]
+        assert info["outputs"] == ["/obj/geo1/output"]
 
 
 class TestNodeSkills:
@@ -248,6 +324,58 @@ class TestHdaSkills:
         assert result["success"] is True
         assert result["context"]["definition_count"] == 1
         assert result["context"]["definitions"][0]["node_type_name"] == "my_hda"
+
+
+class TestMaterialSkills:
+    def test_create_material_sets_parameters(self) -> None:
+        mod = _load_script("houdini-materials", "create_material.py")
+        tuple_parm = MagicMock()
+        scalar_parm = MagicMock()
+        material = MagicMock()
+        material.path.return_value = "/mat/clay"
+        material.name.return_value = "clay"
+        material.type.return_value.name.return_value = "principledshader::2.0"
+        material.parmTuple.side_effect = lambda name: tuple_parm if name == "basecolor" else None
+        material.parm.side_effect = lambda name: scalar_parm if name == "rough" else None
+        parent = MagicMock()
+        parent.path.return_value = "/mat"
+        parent.createNode.return_value = material
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_material(
+                material_name="clay",
+                parameters={"basecolor": [0.8, 0.4, 0.2], "rough": 0.65},
+            )
+
+        assert result["success"] is True
+        parent.createNode.assert_called_once()
+        tuple_parm.set.assert_called_once_with((0.8, 0.4, 0.2))
+        scalar_parm.set.assert_called_once_with(0.65)
+        assert result["context"]["material"]["path"] == "/mat/clay"
+
+    def test_assign_material_sets_material_path(self) -> None:
+        mod = _load_script("houdini-materials", "assign_material.py")
+        parm = MagicMock()
+        target = MagicMock()
+        target.path.return_value = "/obj/geo1"
+        target.name.return_value = "geo1"
+        target.type.return_value.name.return_value = "geo"
+        target.parm.return_value = parm
+        material = MagicMock()
+        material.path.return_value = "/mat/clay"
+        material.name.return_value = "clay"
+        material.type.return_value.name.return_value = "principledshader::2.0"
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {"/obj/geo1": target, "/mat/clay": material}.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.assign_material("/obj/geo1", "/mat/clay")
+
+        assert result["success"] is True
+        parm.set.assert_called_once_with("/mat/clay")
+        assert result["context"]["target"]["path"] == "/obj/geo1"
 
 
 class TestAutomationSkills:
