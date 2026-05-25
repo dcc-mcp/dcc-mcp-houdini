@@ -32,3 +32,12 @@ def test_release_build_verifies_bundled_skills_before_publish() -> None:
     verify_steps = [step for step in build_steps if step.get("name") == "Verify wheel contains bundled skills"]
     assert verify_steps, "release build should verify wheel skill payload"
     assert "houdini-materials/SKILL.md" in verify_steps[0]["run"]
+
+
+def test_release_please_updates_runtime_version_file() -> None:
+    config = yaml.safe_load((ROOT / "release-please-config.json").read_text(encoding="utf-8"))
+    extra_files = config["packages"]["."]["extra-files"]
+    version_file = ROOT / "src" / "dcc_mcp_houdini" / "__version__.py"
+
+    assert "src/dcc_mcp_houdini/__version__.py" in extra_files
+    assert "x-release-please-version" in version_file.read_text(encoding="utf-8")
