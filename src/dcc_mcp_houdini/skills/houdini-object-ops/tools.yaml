@@ -1,0 +1,194 @@
+tools:
+  - name: rename_node
+    description: >-
+      Rename a node, optionally enforcing a unique name within its parent.
+    source_file: scripts/rename_node.py
+    execution: sync
+    affinity: main
+    group: object-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, new_name]
+      properties:
+        node_path:
+          type: string
+          description: Node to rename.
+        new_name:
+          type: string
+          description: New node name.
+        unique_name:
+          type: boolean
+          default: true
+          description: Let Houdini disambiguate the name if it collides.
+  - name: duplicate_node
+    description: >-
+      Copy a node into its parent network and optionally rename the copy.
+    source_file: scripts/duplicate_node.py
+    execution: sync
+    affinity: main
+    group: object-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to duplicate.
+        new_name:
+          type: string
+          description: Optional name for the duplicated node.
+  - name: parent_node
+    description: >-
+      Move a node into a different parent network using hou.moveNodesTo.
+    source_file: scripts/parent_node.py
+    execution: sync
+    affinity: main
+    group: object-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_path, new_parent_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to reparent.
+        new_parent_path:
+          type: string
+          description: Destination parent network path.
+  - name: set_node_flags
+    description: >-
+      Set display, render, template, and/or bypass flags on a node. Unspecified
+      flags are left unchanged.
+    source_file: scripts/set_node_flags.py
+    execution: sync
+    affinity: main
+    group: object-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node whose flags to update.
+        display:
+          type: boolean
+          description: Set the display flag.
+        render:
+          type: boolean
+          description: Set the render flag.
+        template:
+          type: boolean
+          description: Set the template flag.
+        bypass:
+          type: boolean
+          description: Set the bypass flag.
+  - name: set_node_lock
+    description: >-
+      Hard-lock (freeze cooked geometry) or unlock a SOP-style node.
+    source_file: scripts/set_node_lock.py
+    execution: sync
+    affinity: main
+    group: object-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, locked]
+      properties:
+        node_path:
+          type: string
+          description: Node to lock or unlock.
+        locked:
+          type: boolean
+          description: True to hard-lock, false to unlock.
+  - name: get_transform
+    description: >-
+      Read translate/rotate/scale parm tuples (t/r/s) for an OBJ-level node.
+      Read-only.
+    source_file: scripts/get_transform.py
+    execution: sync
+    affinity: main
+    group: object-transform
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: OBJ-level node to inspect.
+  - name: set_transform
+    description: >-
+      Set translate/rotate/scale parm tuples (t/r/s) for an OBJ-level node.
+      Only the supplied components are written.
+    source_file: scripts/set_transform.py
+    execution: sync
+    affinity: main
+    group: object-transform
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: OBJ-level node to transform.
+        translate:
+          type: array
+          items:
+            type: number
+          description: World translate [tx, ty, tz].
+        rotate:
+          type: array
+          items:
+            type: number
+          description: Rotate [rx, ry, rz] in degrees.
+        scale:
+          type: array
+          items:
+            type: number
+          description: Scale [sx, sy, sz].
