@@ -25,6 +25,18 @@ skills-first Houdini automation tools to agents.
 - Prometheus metrics endpoint (`/metrics`), job persistence, and workflow engine support
 - Optional licensed Houdini Docker E2E workflow
 
+## Agent install (recommended)
+
+Let your AI agent do the setup. In an MCP-capable agent (Cursor, Claude, etc.),
+just say:
+
+> 帮我参考 loonghao/dcc-mcp-houdini/install.md 去安装
+
+The agent reads [`install.md`](install.md), runs the
+`dcc-mcp-houdini-setup` skill to install dependencies into Houdini's `hython`,
+generates an MCP host config, guides the Houdini package / `123.py` autostart
+step, and runs a smoke prompt to confirm the connection.
+
 ## Installation
 
 ### Release Wheel
