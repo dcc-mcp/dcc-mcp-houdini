@@ -1,0 +1,246 @@
+tools:
+  - name: list_parms
+    description: >-
+      List a node's parameters with name, label, and current value. Read-only.
+    source_file: scripts/list_parms.py
+    execution: sync
+    affinity: main
+    group: parm-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to inspect.
+        name_filter:
+          type: string
+          description: Optional case-insensitive substring of the parm name.
+  - name: get_parms
+    description: >-
+      Read values for specific parm names (or all parms when names omitted).
+      Read-only; missing names are reported separately.
+    source_file: scripts/get_parms.py
+    execution: sync
+    affinity: main
+    group: parm-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to read from.
+        names:
+          type: array
+          items:
+            type: string
+          description: Parameter names to read; all parms when omitted.
+  - name: set_parms
+    description: >-
+      Set one or many parameters with type-aware coercion. Tuple values target
+      parm tuples; per-parameter validation errors are reported, not fatal.
+    source_file: scripts/set_parms.py
+    execution: sync
+    affinity: main
+    group: parm-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, parameters]
+      properties:
+        node_path:
+          type: string
+          description: Node to modify.
+        parameters:
+          type: object
+          description: Mapping of parm name to scalar or list (tuple) value.
+  - name: get_parm_templates
+    description: >-
+      Inspect parameter templates for one parm or all top-level templates.
+      Read-only.
+    source_file: scripts/get_parm_templates.py
+    execution: sync
+    affinity: main
+    group: parm-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to inspect.
+        parm_name:
+          type: string
+          description: Optional single parameter name; all templates when omitted.
+  - name: add_spare_parm
+    description: >-
+      Add a spare parameter of type float, int, string, or toggle. Unsupported
+      types return a structured error with safe guidance.
+    source_file: scripts/add_spare_parm.py
+    execution: sync
+    affinity: main
+    group: parm-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_path, name]
+      properties:
+        node_path:
+          type: string
+          description: Node to add the spare parameter to.
+        name:
+          type: string
+          description: Internal parameter name.
+        parm_type:
+          type: string
+          enum: [float, int, string, toggle]
+          default: float
+          description: Spare parameter type.
+        label:
+          type: string
+          description: UI label (defaults to name).
+        num_components:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Number of components (ignored for toggle).
+  - name: remove_spare_parm
+    description: >-
+      Remove a spare parameter tuple by name.
+    source_file: scripts/remove_spare_parm.py
+    execution: sync
+    affinity: main
+    group: parm-edit
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, name]
+      properties:
+        node_path:
+          type: string
+          description: Node to modify.
+        name:
+          type: string
+          description: Spare parameter tuple name to remove.
+  - name: set_expression
+    description: >-
+      Set a channel expression on a parameter (hscript or python language).
+    source_file: scripts/set_expression.py
+    execution: sync
+    affinity: main
+    group: parm-expression
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, parm_name, expression]
+      properties:
+        node_path:
+          type: string
+          description: Node owning the parameter.
+        parm_name:
+          type: string
+          description: Parameter to bind.
+        expression:
+          type: string
+          description: Expression source.
+        language:
+          type: string
+          enum: [hscript, python]
+          default: hscript
+          description: Expression language.
+  - name: get_expression
+    description: >-
+      Read a parameter's expression and language, or its plain value when no
+      expression is set. Read-only.
+    source_file: scripts/get_expression.py
+    execution: sync
+    affinity: main
+    group: parm-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, parm_name]
+      properties:
+        node_path:
+          type: string
+          description: Node owning the parameter.
+        parm_name:
+          type: string
+          description: Parameter to inspect.
+  - name: clear_expression
+    description: >-
+      Remove a parameter's expression/keyframes while freezing its current
+      evaluated value.
+    source_file: scripts/clear_expression.py
+    execution: sync
+    affinity: main
+    group: parm-expression
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, parm_name]
+      properties:
+        node_path:
+          type: string
+          description: Node owning the parameter.
+        parm_name:
+          type: string
+          description: Parameter to clear.
