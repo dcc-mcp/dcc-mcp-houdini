@@ -11,6 +11,15 @@ from dcc_mcp_core import DccServerOptions, HostExecutionBridge, MinimalModeConfi
 from dcc_mcp_core.server_base import DccServerBase
 
 from dcc_mcp_houdini.__version__ import __version__
+from dcc_mcp_houdini._capability_manifest import (
+    HoudiniCapabilityManifestBuilder,
+    build_manifest_payload,
+    register_capability_mcp_tool,
+)
+from dcc_mcp_houdini._context_snapshot import (
+    HoudiniContextSnapshotProvider,
+    collect_gateway_metadata,
+)
 from dcc_mcp_houdini._skill_loader import build_minimal_mode_config
 from dcc_mcp_houdini._version_probe import get_houdini_version_string
 
@@ -177,6 +186,55 @@ class HoudiniMcpServer(DccServerBase):
 
         self.readiness = install_readiness(self)
 
+        # ── Context snapshot + capability manifest ──────────────────────
+        # Houdini-specific context provider feeds both the core post-tool
+        # ``append_context_snapshot`` wrapper and the per-DCC ``/v1/context``
+        # REST endpoint.  Wrapped so a missing core API never breaks startup.
+        self._snapshot_provider_impl: HoudiniContextSnapshotProvider = HoudiniContextSnapshotProvider()
+        try:
+            self.set_context_snapshot_provider(self._snapshot_provider_impl)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] set_context_snapshot_provider failed: %s", _DCC_NAME, exc)
+
+        self._capability_builder: HoudiniCapabilityManifestBuilder = HoudiniCapabilityManifestBuilder(
+            dcc_name=_DCC_NAME,
+            skill_lister=self.list_skills,
+            action_lister=self._list_actions_safe,
+            is_loaded=self.is_skill_loaded,
+            skill_info_lister=self._skill_info_safe,
+        )
+
+        # Populated by :meth:`register_builtin_actions`.
+        self._project_tools: Any = None
+        self._resources: Any = None
+
+        # ── Morphology-aware semantic recall (opt-in) ───────────────────
+        try:
+            from dcc_mcp_houdini._semantic_index import build_semantic_index
+
+            self._semantic = build_semantic_index()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] semantic index init failed: %s", _DCC_NAME, exc)
+            self._semantic = None
+        if self._semantic is not None:
+            logger.info("[%s] semantic skill recall enabled (embedder=%s)", _DCC_NAME, self._semantic.embedder_kind)
+
+    def _list_actions_safe(self) -> List[Any]:
+        """Best-effort ``list_actions`` for the capability builder."""
+        try:
+            return list(self.list_actions())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] list_actions failed: %s", _DCC_NAME, exc)
+            return []
+
+    def _skill_info_safe(self, name: str) -> Any:
+        """Best-effort ``get_skill_info`` for the capability builder."""
+        try:
+            return self.get_skill_info(name)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] get_skill_info(%r) failed: %s", _DCC_NAME, name, exc)
+            return None
+
     def _version_string(self) -> str:
         """Return the Houdini version via ``hou.applicationVersionString()``."""
         return get_houdini_version_string()
@@ -219,6 +277,182 @@ class HoudiniMcpServer(DccServerBase):
             include_bundled=include_bundled,
             minimal_mode=minimal_mode,
         )
+
+        # ── Core integrations (parity with Maya's registration phases) ───
+        # Each step degrades gracefully: an unavailable core API or a
+        # registration failure is logged at debug and never breaks startup.
+        self._register_recipes_tools(extra_skill_paths, include_bundled)
+        self._register_skill_reference_docs_tools(extra_skill_paths, include_bundled)
+        self._register_introspect_tools()
+        self._register_feedback_tool()
+        self._register_qt_ui_inspector()
+        self._register_capability_manifest_tool()
+        self._attach_project_tools()
+        self._attach_resources()
+
+    # ── Core integration wiring (optional / graceful) ───────────────────
+
+    def _scan_skill_metadata_for_sidecars(
+        self,
+        extra_skill_paths: Optional[List[str]],
+        include_bundled: bool,
+    ) -> List[Any]:
+        """Return ``SkillMetadata`` list aligned with ``collect_skill_search_paths``."""
+        from dcc_mcp_core import scan_and_load_lenient
+
+        paths = self.collect_skill_search_paths(
+            extra_paths=extra_skill_paths if extra_skill_paths is not None else self._extra_skill_paths,
+            include_bundled=include_bundled,
+            filter_existing=True,
+        )
+        extra = paths if paths else None
+        skills, _skipped = scan_and_load_lenient(extra_paths=extra, dcc_name=_DCC_NAME)
+        return skills
+
+    def _register_skill_metadata_tools(
+        self,
+        register_fn: Any,
+        kind: str,
+        extra_skill_paths: Optional[List[str]],
+        include_bundled: bool,
+    ) -> None:
+        try:
+            skills = self._scan_skill_metadata_for_sidecars(extra_skill_paths, include_bundled)
+            register_fn(self._server, skills=skills, dcc_name=_DCC_NAME)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] %s tools failed: %s", _DCC_NAME, kind, exc)
+
+    def _register_recipes_tools(
+        self,
+        extra_skill_paths: Optional[List[str]] = None,
+        include_bundled: bool = True,
+    ) -> None:
+        """Register ``recipes__*`` tools for ``metadata.dcc-mcp.recipes`` sidecars."""
+        try:
+            from dcc_mcp_core.recipes import register_recipes_tools
+        except ImportError as exc:
+            logger.debug("[%s] recipes tools skipped (import): %s", _DCC_NAME, exc)
+            return
+        self._register_skill_metadata_tools(register_recipes_tools, "recipes", extra_skill_paths, include_bundled)
+
+    def _register_skill_reference_docs_tools(
+        self,
+        extra_skill_paths: Optional[List[str]] = None,
+        include_bundled: bool = True,
+    ) -> None:
+        """Register ``skill_refs__*`` for sibling reference Markdown/text docs."""
+        try:
+            from dcc_mcp_core.skill_reference_docs import register_skill_reference_docs_tools
+        except ImportError as exc:
+            logger.debug("[%s] skill_refs tools skipped (import): %s", _DCC_NAME, exc)
+            return
+        self._register_skill_metadata_tools(
+            register_skill_reference_docs_tools,
+            "skill_refs",
+            extra_skill_paths,
+            include_bundled,
+        )
+
+    def _register_introspect_tools(self) -> None:
+        """Register the core ``dcc_introspect__*`` runtime-introspection tools."""
+        try:
+            from dcc_mcp_core import register_introspect_tools
+        except ImportError as exc:
+            logger.debug("[%s] introspect tools skipped (import): %s", _DCC_NAME, exc)
+            return
+        try:
+            register_introspect_tools(self._server, dcc_name=_DCC_NAME)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] introspect tools failed: %s", _DCC_NAME, exc)
+
+    def _register_feedback_tool(self) -> None:
+        """Register the core ``dcc_feedback__report`` tool."""
+        try:
+            from dcc_mcp_core import register_feedback_tool
+        except ImportError as exc:
+            logger.debug("[%s] feedback tool skipped (import): %s", _DCC_NAME, exc)
+            return
+        try:
+            register_feedback_tool(self._server, dcc_name=_DCC_NAME)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] feedback tool failed: %s", _DCC_NAME, exc)
+
+    def _register_qt_ui_inspector(self) -> None:
+        """Adopt the shared core ``qt_ui_inspector__*`` tools (main-thread routed)."""
+        try:
+            from dcc_mcp_houdini._qt_inspector import register_houdini_qt_ui_inspector
+
+            register_houdini_qt_ui_inspector(self, dcc_name=_DCC_NAME, dispatcher=self._houdini_dispatcher)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] qt-ui-inspector registration failed: %s", _DCC_NAME, exc)
+
+    def _register_capability_manifest_tool(self) -> None:
+        try:
+            register_capability_mcp_tool(self, builder=self._capability_builder)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] capability manifest MCP tool registration failed: %s", _DCC_NAME, exc)
+
+    def _attach_project_tools(self) -> None:
+        try:
+            from dcc_mcp_houdini import _project_tools
+
+            self._project_tools = _project_tools.attach_to_server(self)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] project tools registration failed: %s", _DCC_NAME, exc)
+
+    def _attach_resources(self) -> None:
+        try:
+            from dcc_mcp_houdini import _resources
+
+            self._resources = _resources.install_resources(
+                self,
+                snapshot_provider=self._snapshot_provider_impl.collect,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] resources registration failed: %s", _DCC_NAME, exc)
+
+    def build_capability_manifest(self, *, loaded_only: bool = False) -> Dict[str, Any]:
+        """Return the compact Houdini capability manifest as a dict."""
+        records = self._capability_builder.build()
+        if loaded_only:
+            records = [r for r in records if r.loaded]
+        instance_id = getattr(self, "instance_id", None)
+        scene = getattr(self._config, "scene", None)
+        version = getattr(self._config, "dcc_version", None)
+        return build_manifest_payload(
+            records,
+            dcc_name=_DCC_NAME,
+            dcc_version=version,
+            scene=scene,
+            instance_id=instance_id,
+        )
+
+    def publish_capability_snapshot(self, *, reason: str = "manual") -> bool:
+        """Push current Houdini context into the gateway registry (best effort)."""
+        if not self.is_running:
+            return False
+        gateway_port = getattr(self._config, "gateway_port", 0)
+        if not gateway_port or gateway_port <= 0:
+            return False
+        try:
+            meta = collect_gateway_metadata(self._snapshot_provider_impl)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] capability snapshot: provider failed: %s", _DCC_NAME, exc)
+            return False
+        if not any((meta.get("scene"), meta.get("version"), meta.get("display_name"))):
+            logger.debug("[%s] capability snapshot (%s): skipped — no actionable state", _DCC_NAME, reason)
+            return False
+        try:
+            ok = self.update_gateway_metadata(
+                scene=meta.get("scene"),
+                version=meta.get("version"),
+                documents=meta.get("documents"),
+                display_name=meta.get("display_name"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[%s] update_gateway_metadata failed (%s): %s", _DCC_NAME, reason, exc)
+            return False
+        return bool(ok)
 
     def start(self, *, install_atexit_hook: bool = True) -> HoudiniMcpServer:
         """Start the MCP HTTP server. Returns *self* for chaining."""
@@ -281,7 +515,7 @@ class HoudiniMcpServer(DccServerBase):
         tags_list: List[str] = tags if tags is not None else []
         dcc_name: str = dcc if dcc is not None else _DCC_NAME
         try:
-            return list(
+            base = list(
                 self._server.search_skills(
                     query=query,
                     tags=tags_list,
@@ -291,7 +525,20 @@ class HoudiniMcpServer(DccServerBase):
                 )
             )
         except TypeError:
-            return list(self._server.search_skills(query=query, tags=tags_list, dcc=dcc_name))
+            base = list(self._server.search_skills(query=query, tags=tags_list, dcc=dcc_name))
+
+        # When the opt-in semantic index is enabled, augment the canonical BM25
+        # results with morphology recalls. Base ordering is preserved (promote,
+        # never demote); vector-only hits are appended.
+        if self._semantic is not None and query:
+            try:
+                return self._semantic.augment(base, query, self.list_skills(), limit=limit)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[%s] semantic augment failed: %s", _DCC_NAME, exc)
+        return base
+
+    # Alias mirroring Maya's public ``search_skills`` surface.
+    search_skills = find_skills
 
     def is_skill_loaded(self, skill_name: str) -> bool:
         """Return ``True`` if the named skill is currently loaded."""
@@ -311,6 +558,12 @@ class HoudiniMcpServer(DccServerBase):
 
     def stop(self) -> None:
         """Stop the MCP server and detach the Houdini host adapter."""
+        if self._resources is not None:
+            try:
+                self._resources.unbind()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[%s] resources.unbind failed: %s", _DCC_NAME, exc)
+
         host = self._houdini_host
         if host is not None:
             try:
