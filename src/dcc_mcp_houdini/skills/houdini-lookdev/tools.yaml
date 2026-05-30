@@ -1,0 +1,256 @@
+tools:
+  - name: list_materials
+    description: List shader/material nodes under a material network (read-only).
+    source_file: scripts/list_materials.py
+    execution: sync
+    affinity: main
+    group: lookdev-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: /mat
+  - name: list_assignments
+    description: List object → material assignments under a network (read-only).
+    source_file: scripts/list_assignments.py
+    execution: sync
+    affinity: main
+    group: lookdev-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: /obj
+  - name: get_material_parms
+    description: Read parameter names and values for a material/shader node (read-only).
+    source_file: scripts/get_material_parms.py
+    execution: sync
+    affinity: main
+    group: lookdev-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path]
+      properties:
+        material_path:
+          type: string
+        name_filter:
+          type: string
+  - name: set_material_parms
+    description: Set material/shader parameter values with type-aware coercion.
+    source_file: scripts/set_material_parms.py
+    execution: sync
+    affinity: main
+    group: lookdev-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path, parameters]
+      properties:
+        material_path:
+          type: string
+        parameters:
+          type: object
+          description: name -> value (lists target parm tuples).
+  - name: get_shader_connections
+    description: Inspect a shader/VOP node's input and output connections (read-only).
+    source_file: scripts/get_shader_connections.py
+    execution: sync
+    affinity: main
+    group: lookdev-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+  - name: connect_shader
+    description: Wire a shader output into a shader/VOP node input (by index or name).
+    source_file: scripts/connect_shader.py
+    execution: sync
+    affinity: main
+    group: lookdev-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_path, source_path]
+      properties:
+        node_path:
+          type: string
+        source_path:
+          type: string
+        input_index:
+          type: integer
+        input_name:
+          type: string
+        source_output:
+          type: integer
+          default: 0
+  - name: disconnect_shader
+    description: Clear a shader/VOP node input slot.
+    source_file: scripts/disconnect_shader.py
+    execution: sync
+    affinity: main
+    group: lookdev-edit
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, input_index]
+      properties:
+        node_path:
+          type: string
+        input_index:
+          type: integer
+  - name: reset_material
+    description: >-
+      Reset object material assignments to a default value (default empty) and
+      report affected/skipped objects.
+    source_file: scripts/reset_material.py
+    execution: sync
+    affinity: main
+    group: lookdev-edit
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [object_paths]
+      properties:
+        object_paths:
+          type: array
+          items: {type: string}
+          minItems: 1
+        default_material:
+          type: string
+          default: ""
+  - name: save_preset
+    description: Save a material's parameter values as an adapter-owned JSON preset.
+    source_file: scripts/save_preset.py
+    execution: sync
+    affinity: main
+    group: presets
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path, preset_name]
+      properties:
+        material_path:
+          type: string
+        preset_name:
+          type: string
+        parm_names:
+          type: array
+          items: {type: string}
+  - name: list_presets
+    description: List saved material presets (read-only, no Houdini required).
+    source_file: scripts/list_presets.py
+    execution: sync
+    affinity: any
+    group: presets
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties: {}
+  - name: load_preset
+    description: Apply a saved material preset onto a material/shader node.
+    source_file: scripts/load_preset.py
+    execution: sync
+    affinity: main
+    group: presets
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [preset_name, material_path]
+      properties:
+        preset_name:
+          type: string
+        material_path:
+          type: string
+  - name: delete_preset
+    description: Delete a saved material preset (no Houdini required).
+    source_file: scripts/delete_preset.py
+    execution: sync
+    affinity: any
+    group: presets
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [preset_name]
+      properties:
+        preset_name:
+          type: string
