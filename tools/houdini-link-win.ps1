@@ -58,7 +58,7 @@ $CoreRepo = Resolve-Path "$ProjectRoot\..\dcc-mcp-core" -ErrorAction SilentlyCon
 if ($CoreRepo) {
     $CoreSource = "$CoreRepo\python\dcc_mcp_core"
     $CoreTarget = "$SitePackages\dcc_mcp_core"
-    
+
     if (Test-Path $CoreSource) {
         if (Test-Path $CoreTarget) {
             Remove-Item $CoreTarget -Recurse -Force
