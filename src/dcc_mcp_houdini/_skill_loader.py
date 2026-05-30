@@ -21,8 +21,13 @@ STAGES: Tuple[str, ...] = (
 # Map stage → bundled skill names (extend as new skills land).
 STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     "bootstrap": ("houdini-scripting",),
-    "scene": ("houdini-scene",),
-    "authoring": ("houdini-nodes", "houdini-materials", "houdini-hda"),
+    "scene": ("houdini-scene", "houdini-scene-edit"),
+    "authoring": (
+        "houdini-nodes",
+        "houdini-object-ops",
+        "houdini-materials",
+        "houdini-hda",
+    ),
     "interchange": (),
     "pipeline": ("houdini-automation",),
 }

@@ -5,8 +5,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Stage | Skills | Default loaded |
 |-------|--------|----------------|
 | `bootstrap` | `houdini-scripting` | yes |
-| `scene` | `houdini-scene` | yes |
-| `authoring` | `houdini-nodes`, `houdini-materials`, `houdini-hda` | no |
+| `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
+| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-materials`, `houdini-hda` | no |
 | `interchange` | _(planned: USD, FBX, Alembic)_ | no |
 | `pipeline` | `houdini-automation` | no |
 
@@ -16,6 +16,9 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 |------|-------|
 | Verify MCP session | `houdini_scripting__get_session_info` |
 | Inspect hip | `houdini_scene__get_scene_info` → `houdini_scene__list_obj_nodes` |
+| Scene lifecycle | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__open_scene` / `houdini_scene_edit__save_scene` |
+| Select & frame | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__find_nodes` → `houdini_scene_edit__set_selection` → `houdini_scene_edit__get_bounding_box` |
+| Edit existing object | `load_skill("houdini-object-ops")` → `houdini_object_ops__get_transform` → `houdini_object_ops__set_transform` → `houdini_object_ops__set_node_flags` |
 | Build SOP/OBJ network | `load_skill("houdini-nodes")` → `houdini_nodes__create_node` → `houdini_nodes__set_node_parms` → `houdini_nodes__connect_nodes` → `houdini_nodes__cook_node` |
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |

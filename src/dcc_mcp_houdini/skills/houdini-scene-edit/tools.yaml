@@ -1,0 +1,212 @@
+tools:
+  - name: new_scene
+    description: >-
+      Clear the current hip file and start an empty scene. Refuses to discard
+      unsaved changes unless force is true.
+    source_file: scripts/new_scene.py
+    execution: sync
+    affinity: main
+    group: scene-lifecycle
+    read_only: false
+    destructive: true
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    input_schema:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Discard unsaved changes without prompting.
+    next-tools:
+      on-failure:
+        - houdini_scene_edit__save_scene
+  - name: open_scene
+    description: >-
+      Load an existing hip file. Refuses to discard unsaved changes unless
+      force is true; returns a structured error when the file is missing.
+    source_file: scripts/open_scene.py
+    execution: sync
+    affinity: main
+    group: scene-lifecycle
+    read_only: false
+    destructive: true
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: Absolute path to the .hip/.hipnc/.hiplc file to load.
+        force:
+          type: boolean
+          default: false
+          description: Discard unsaved changes without prompting.
+    next-tools:
+      on-success:
+        - houdini_scene__get_scene_info
+      on-failure:
+        - houdini_scene_edit__save_scene
+  - name: save_scene
+    description: >-
+      Save the current scene. With no file_path the existing hip path is reused
+      (must have been saved at least once); otherwise saves to file_path.
+    source_file: scripts/save_scene.py
+    execution: sync
+    affinity: main
+    group: scene-lifecycle
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: Optional destination path; reuses the current hip path when omitted.
+  - name: get_selection
+    description: >-
+      Return the nodes Houdini currently reports as selected, with path, name,
+      and type. Does not modify the scene.
+    source_file: scripts/get_selection.py
+    execution: sync
+    affinity: main
+    group: scene-selection
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties: {}
+  - name: set_selection
+    description: >-
+      Replace (or extend) the node selection from a list of node paths. Missing
+      paths are reported without aborting.
+    source_file: scripts/set_selection.py
+    execution: sync
+    affinity: main
+    group: scene-selection
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_paths]
+      properties:
+        node_paths:
+          type: array
+          items:
+            type: string
+          description: Node paths to select.
+        clear_existing:
+          type: boolean
+          default: true
+          description: Clear the prior selection before selecting the given nodes.
+  - name: find_nodes
+    description: >-
+      Search under a root path for nodes matching a name glob and/or a node
+      type substring. Read-only discovery for selection and inspection.
+    source_file: scripts/find_nodes.py
+    execution: sync
+    affinity: main
+    group: scene-selection
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        name_pattern:
+          type: string
+          description: Glob pattern matched against node names (e.g. "geo*").
+        type_filter:
+          type: string
+          description: Case-insensitive substring of the node type name.
+        root_path:
+          type: string
+          default: "/obj"
+          description: Network path to search beneath.
+        recursive:
+          type: boolean
+          default: true
+          description: Traverse all descendants when true.
+        max_results:
+          type: integer
+          minimum: 1
+          default: 200
+          description: Cap on returned matches.
+    next-tools:
+      on-success:
+        - houdini_scene_edit__set_selection
+        - houdini_scene__get_node_info
+  - name: list_cameras
+    description: >-
+      List object-level camera nodes (type name starting with "cam"). Read-only.
+    source_file: scripts/list_cameras.py
+    execution: sync
+    affinity: main
+    group: scene-selection
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        root_path:
+          type: string
+          default: "/obj"
+          description: Network path to search beneath.
+        recursive:
+          type: boolean
+          default: true
+          description: Traverse all descendants when true.
+  - name: get_bounding_box
+    description: >-
+      Return the geometry bounding box (min, max, size, center) of a SOP node or
+      an OBJ geo's display node. Read-only query.
+    source_file: scripts/get_bounding_box.py
+    execution: sync
+    affinity: main
+    group: scene-selection
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node path whose geometry bounds should be measured.
