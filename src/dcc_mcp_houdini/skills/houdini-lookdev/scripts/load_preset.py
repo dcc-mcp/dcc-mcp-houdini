@@ -41,9 +41,7 @@ def load_preset(preset_name: str, material_path: str) -> dict:
         material_type = data.get("material_type")
         warnings = []
         if material_type and node.type().name() != material_type:
-            warnings.append(
-                "Preset is for {!r}; target is {!r}".format(material_type, node.type().name())
-            )
+            warnings.append("Preset is for {!r}; target is {!r}".format(material_type, node.type().name()))
         applied, errors = set_parameters(node, data.get("parameters", {}))
         return skill_success(
             "Loaded material preset",
