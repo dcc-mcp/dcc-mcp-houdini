@@ -15,6 +15,28 @@ metadata:
     version: "1.0.0"
     tags: [houdini, nodes, hom, sop, obj, authoring]
     search-hint: "create node, connect nodes, set parms, cook node, layout network"
+    search-aliases: [create sop node, add node, make node, build network, wire nodes, connect inputs, set parameters, cook node, delete node, layout graph]
+    example-prompts:
+      - "Create a box SOP under /obj/geo1"
+      - "Wire the transform into the merge node"
+      - "Set the radius parameter on the sphere and cook it"
+    intent: "Build and edit Houdini node networks (SOP/OBJ/ROP) through typed HOM operations."
+    recall-context:
+      app_type: houdini
+      domain: modeling
+      workflow-stage: authoring
+      task-category: mutate
+    requires: []
+    produces: [scene_node, node_network]
+    preconditions:
+      - type: software
+        name: houdini
+        version: ">=18.5"
+    side-effects:
+      creates: true
+      modifies: true
+      deletes: true
+      targets: [scene_node, node_network]
     tools: tools.yaml
 ---
 

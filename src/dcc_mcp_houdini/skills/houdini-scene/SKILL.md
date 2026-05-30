@@ -16,6 +16,24 @@ metadata:
     version: "1.0.0"
     tags: [houdini, scene, hip, nodes, obj]
     search-hint: "scene info, hip file, list nodes, node details, obj context, frame range"
+    search-aliases: [scene summary, what is in the scene, list nodes, find nodes, hip info, frame range, inspect node, node connections, obj tree]
+    example-prompts:
+      - "What's in the current Houdini scene?"
+      - "List all geo nodes under /obj"
+      - "Show the inputs and outputs of /obj/geo1"
+    intent: "Inspect the active hip file and node graph without modifying anything."
+    recall-context:
+      app_type: houdini
+      domain: scene
+      workflow-stage: scene
+      task-category: query
+    requires: []
+    produces: [scene_report]
+    preconditions:
+      - type: software
+        name: houdini
+        version: ">=18.5"
+    side-effects: {}
     tools: tools.yaml
 ---
 
