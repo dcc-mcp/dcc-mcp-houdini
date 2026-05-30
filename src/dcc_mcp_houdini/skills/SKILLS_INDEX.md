@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda` | no |
 | `interchange` | `houdini-interchange` | no |
-| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-automation` | no |
+| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-automation` | no |
 
 ## Common chains
 
@@ -31,5 +31,6 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Lookdev & shader networks | `load_skill("houdini-lookdev")` → `houdini_lookdev__list_materials` → `houdini_lookdev__get_material_parms` → `houdini_lookdev__set_material_parms` → `houdini_lookdev__save_preset` / `houdini_lookdev__load_preset` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
+| Automate HDA + PDG/ROP | `load_skill("houdini-hda-automation")` → `houdini_hda_automation__scan_hda_libraries` → `houdini_hda_automation__inspect_hda_definition` → `houdini_hda_automation__instantiate_hda` → `houdini_hda_automation__validate_hda` → `houdini_hda_automation__cook_top_network` / `houdini_hda_automation__execute_rop_chain` |
 | File-based automation | `load_skill("houdini-automation")` → `houdini_automation__run_python_file` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
