@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-hda` | no |
 | `interchange` | `houdini-interchange` | no |
-| `pipeline` | `houdini-render`, `houdini-automation` | no |
+| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-automation` | no |
 
 ## Common chains
 
@@ -27,6 +27,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Set up cameras & lights | `load_skill("houdini-camera-light")` → `houdini_camera_light__create_camera` → `houdini_camera_light__create_light` → `houdini_camera_light__frame_view` |
 | Render & verify | `load_skill("houdini-render")` → `houdini_render__set_render_settings` → `houdini_render__capture_viewport` → `houdini_render__render_rop` |
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
+| Animate & bake | `load_skill("houdini-animation")` → `houdini_animation__set_timeline` → `houdini_animation__set_keyframe` → `houdini_animation__get_keyframes` → `houdini_animation__bake_channels` / `houdini_animation__cache_simulation` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | File-based automation | `load_skill("houdini-automation")` → `houdini_automation__run_python_file` |
