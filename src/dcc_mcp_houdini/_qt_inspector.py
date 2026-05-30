@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from dcc_mcp_houdini._env import ENV_QT_UI_INSPECTOR, resolve_qt_ui_inspector_enabled
 
