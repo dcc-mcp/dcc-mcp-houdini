@@ -32,7 +32,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
         "houdini-materials",
         "houdini-hda",
     ),
-    "interchange": (),
+    "interchange": ("houdini-interchange",),
     "pipeline": ("houdini-automation",),
 }
 
