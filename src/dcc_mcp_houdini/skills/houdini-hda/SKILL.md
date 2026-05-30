@@ -15,6 +15,28 @@ metadata:
     version: "1.0.0"
     tags: [houdini, hda, otl, digital-asset, automation]
     search-hint: "install hda, load otl, execute hda, create hda node, save digital asset"
+    search-aliases: [use hda, install hda, load otl, run digital asset, instantiate hda, execute hda, save hda, create digital asset]
+    example-prompts:
+      - "Install this .hda file and run the asset"
+      - "Use the labs::my_asset HDA under /obj with these parameters"
+      - "Save /obj/geo1 as a digital asset"
+    intent: "Install, inspect, instantiate, cook, and save Houdini Digital Assets."
+    recall-context:
+      app_type: houdini
+      domain: assets
+      workflow-stage: authoring
+      task-category: mutate
+    requires: []
+    produces: [scene_node, file:hda]
+    preconditions:
+      - type: software
+        name: houdini
+        version: ">=18.5"
+    side-effects:
+      creates: true
+      modifies: true
+      file-output: true
+      targets: [scene_node, file:hda]
     tools: tools.yaml
 ---
 

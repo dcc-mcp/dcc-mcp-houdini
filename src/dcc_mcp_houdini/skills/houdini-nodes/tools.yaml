@@ -39,6 +39,10 @@ tools:
     affinity: main
     timeout_hint_secs: 30
     source_file: scripts/create_node.py
+    tool_role: action
+    risk: medium
+    search_aliases: [create node, add node, make sop, new node, instantiate operator]
+    produces: [scene_node]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -78,6 +82,10 @@ tools:
     affinity: main
     timeout_hint_secs: 30
     source_file: scripts/set_node_parms.py
+    tool_role: action
+    risk: medium
+    search_aliases: [set parameters, edit parms, change values, press button parm]
+    produces: [scene_node]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -119,6 +127,10 @@ tools:
     affinity: main
     timeout_hint_secs: 30
     source_file: scripts/connect_nodes.py
+    tool_role: action
+    risk: medium
+    search_aliases: [connect nodes, wire inputs, link nodes, plug into input]
+    produces: [node_network]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -151,6 +163,9 @@ tools:
     affinity: main
     timeout_hint_secs: 300
     source_file: scripts/cook_node.py
+    tool_role: action
+    risk: medium
+    search_aliases: [cook node, evaluate node, recook, force cook, compute geometry]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -175,6 +190,9 @@ tools:
     affinity: main
     timeout_hint_secs: 30
     source_file: scripts/layout_children.py
+    tool_role: action
+    risk: low
+    search_aliases: [layout nodes, arrange network, tidy graph, organize nodes]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -196,6 +214,9 @@ tools:
     affinity: main
     timeout_hint_secs: 30
     source_file: scripts/delete_node.py
+    tool_role: destructive
+    risk: high
+    search_aliases: [delete node, remove node, destroy node, erase node]
     annotations:
       read_only_hint: false
       destructive_hint: true

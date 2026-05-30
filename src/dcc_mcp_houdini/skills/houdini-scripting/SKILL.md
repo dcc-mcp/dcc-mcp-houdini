@@ -16,6 +16,29 @@ metadata:
     version: "1.0.0"
     tags: [houdini, scripting, python, automation, bootstrap]
     search-hint: "execute python, run script, hython, hou, session info"
+    search-aliases: [run python, execute code, hython script, run hou code, arbitrary script, session info, houdini version, escape hatch]
+    example-prompts:
+      - "Run this Python snippet in Houdini"
+      - "What Houdini version and hip file is loaded?"
+      - "Execute a one-off hou script"
+    intent: "Run arbitrary Python in Houdini when no typed skill fits, or read session diagnostics."
+    recall-context:
+      app_type: houdini
+      domain: scripting
+      workflow-stage: bootstrap
+      task-category: mutate
+    requires: []
+    produces: [scene_state]
+    preconditions:
+      - type: software
+        name: houdini
+        version: ">=18.5"
+    side-effects:
+      creates: true
+      modifies: true
+      deletes: true
+      ui-mutation: true
+      targets: [scene_state, scene_node]
     tools: tools.yaml
 ---
 
