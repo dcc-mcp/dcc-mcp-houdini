@@ -22,8 +22,8 @@ def _resolve_index(node, input_index: Optional[int], input_name: Optional[str]) 
         try:
             names = list(node.inputNames())
             return names.index(input_name)
-        except (ValueError, Exception):  # noqa: BLE001
-            raise ValueError("No input named {!r}".format(input_name))
+        except Exception:  # noqa: BLE001
+            raise ValueError("No input named {!r}".format(input_name)) from None
     raise ValueError("Provide input_index or input_name")
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 ENV_PRESET_DIR = "DCC_MCP_HOUDINI_MATERIAL_PRESET_DIR"
 
