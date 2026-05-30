@@ -1,0 +1,199 @@
+tools:
+  - name: transform_geometry
+    description: >-
+      Append a Transform (xform) SOP downstream of an input SOP and set
+      translate/rotate/scale.
+    source_file: scripts/transform_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path]
+      properties:
+        input_path:
+          type: string
+          description: Upstream SOP node path.
+        translate:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+        rotate:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+        scale:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+        node_name:
+          type: string
+  - name: merge_geometry
+    description: Append a Merge SOP joining several upstream SOP streams.
+    source_file: scripts/merge_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_paths]
+      properties:
+        input_paths:
+          type: array
+          items: {type: string}
+          minItems: 1
+          description: Upstream SOP node paths to merge in order.
+        node_name:
+          type: string
+  - name: blast_geometry
+    description: >-
+      Append a Blast SOP that deletes a group (or keeps it and deletes the
+      rest when delete_non_selected is true).
+    source_file: scripts/blast_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: true
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path, group]
+      properties:
+        input_path:
+          type: string
+        group:
+          type: string
+          description: Group name or pattern to blast.
+        group_type:
+          type: string
+          enum: [guess, points, prims, primitives, edges, vertices, breakpoints]
+          default: prims
+        delete_non_selected:
+          type: boolean
+          default: false
+          description: Keep the selection and delete everything else.
+        node_name:
+          type: string
+  - name: group_geometry
+    description: Append a Group Create SOP to define a point/primitive/edge group.
+    source_file: scripts/group_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path, group_name]
+      properties:
+        input_path:
+          type: string
+        group_name:
+          type: string
+        group_type:
+          type: string
+          enum: [points, prims, primitives, edges, vertices]
+          default: prims
+        pattern:
+          type: string
+          description: Optional base-group selection pattern.
+        node_name:
+          type: string
+  - name: add_normals
+    description: Append a Normal SOP to compute point/vertex/primitive normals.
+    source_file: scripts/add_normals.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path]
+      properties:
+        input_path:
+          type: string
+        attribute_class:
+          type: string
+          enum: [point, vertex, primitive, detail]
+          default: point
+        node_name:
+          type: string
+  - name: triangulate_geometry
+    description: Append a Divide SOP configured to convex-triangulate polygons.
+    source_file: scripts/triangulate_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path]
+      properties:
+        input_path:
+          type: string
+        node_name:
+          type: string
+  - name: convert_geometry
+    description: Append a Convert SOP to change the primitive type (poly/mesh/nurbs/...).
+    source_file: scripts/convert_geometry.py
+    execution: sync
+    affinity: main
+    group: mesh-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [input_path]
+      properties:
+        input_path:
+          type: string
+        to_type:
+          type: string
+          enum: [polygons, poly, mesh, nurbs, bezier, subdivision, subdiv]
+          default: polygons
+        node_name:
+          type: string
