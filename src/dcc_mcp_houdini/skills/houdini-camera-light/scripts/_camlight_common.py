@@ -47,7 +47,7 @@ def eval_parm(node: Any, name: str) -> Optional[Any]:
     parm_tuple = node.parmTuple(name)
     if parm_tuple is not None:
         try:
-            return [v for v in parm_tuple.eval()]
+            return list(parm_tuple.eval())
         except Exception:  # noqa: BLE001
             return None
     parm = node.parm(name)

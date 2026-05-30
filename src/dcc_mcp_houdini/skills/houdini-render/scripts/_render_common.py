@@ -62,7 +62,7 @@ def eval_first_parm(node: Any, names: Sequence[str]):
         parm_tuple = node.parmTuple(name)
         if parm_tuple is not None:
             try:
-                return [v for v in parm_tuple.eval()]
+                return list(parm_tuple.eval())
             except Exception:  # noqa: BLE001
                 continue
         parm = node.parm(name)
