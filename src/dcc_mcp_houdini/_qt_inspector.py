@@ -76,7 +76,9 @@ def _make_marshaller(dispatcher: Any) -> Callable[[Callable[[], Any]], Any]:
     return _marshal
 
 
-def _wrap_main_thread(handler: Callable[[Any], Any], marshal: Callable[[Callable[[], Any]], Any]) -> Callable[[Any], Any]:
+def _wrap_main_thread(
+    handler: Callable[[Any], Any], marshal: Callable[[Callable[[], Any]], Any]
+) -> Callable[[Any], Any]:
     def wrapper(params: Any) -> Any:
         return marshal(lambda: handler(params))
 
