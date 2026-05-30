@@ -25,6 +25,8 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     "authoring": (
         "houdini-nodes",
         "houdini-object-ops",
+        "houdini-parameters",
+        "houdini-node-graph",
         "houdini-materials",
         "houdini-hda",
     ),
