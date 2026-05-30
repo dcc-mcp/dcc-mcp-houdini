@@ -66,26 +66,20 @@ def test_skill_has_intent_and_example_prompts(skill_dir: str) -> None:
 
 
 def test_scripting_marked_escape_hatch() -> None:
-    tools = yaml.safe_load(
-        (_SKILLS_ROOT / "houdini-scripting" / "tools.yaml").read_text(encoding="utf-8")
-    )["tools"]
+    tools = yaml.safe_load((_SKILLS_ROOT / "houdini-scripting" / "tools.yaml").read_text(encoding="utf-8"))["tools"]
     execute = next(t for t in tools if t["name"] == "execute_python")
     assert execute["tool_role"] == "escape_hatch"
     assert execute["risk"] == "host_script_execution"
 
 
 def test_run_python_file_marked_escape_hatch() -> None:
-    tools = yaml.safe_load(
-        (_SKILLS_ROOT / "houdini-automation" / "tools.yaml").read_text(encoding="utf-8")
-    )["tools"]
+    tools = yaml.safe_load((_SKILLS_ROOT / "houdini-automation" / "tools.yaml").read_text(encoding="utf-8"))["tools"]
     runner = next(t for t in tools if t["name"] == "run_python_file")
     assert runner["tool_role"] == "escape_hatch"
 
 
 def test_destructive_tools_have_high_risk() -> None:
-    nodes = yaml.safe_load(
-        (_SKILLS_ROOT / "houdini-nodes" / "tools.yaml").read_text(encoding="utf-8")
-    )["tools"]
+    nodes = yaml.safe_load((_SKILLS_ROOT / "houdini-nodes" / "tools.yaml").read_text(encoding="utf-8"))["tools"]
     delete = next(t for t in nodes if t["name"] == "delete_node")
     assert delete["tool_role"] == "destructive"
     assert delete["risk"] == "high"
@@ -93,9 +87,7 @@ def test_destructive_tools_have_high_risk() -> None:
 
 def test_every_tool_has_search_aliases() -> None:
     for skill_dir in _TRACKED_SKILLS:
-        tools = yaml.safe_load(
-            (_SKILLS_ROOT / skill_dir / "tools.yaml").read_text(encoding="utf-8")
-        )["tools"]
+        tools = yaml.safe_load((_SKILLS_ROOT / skill_dir / "tools.yaml").read_text(encoding="utf-8"))["tools"]
         for tool in tools:
             aliases = tool.get("search_aliases")
             assert isinstance(aliases, list) and aliases, f"{skill_dir}:{tool['name']}"
@@ -105,9 +97,7 @@ def test_core_loads_skills_with_aliases() -> None:
     """Core must load every bundled skill and expose skill-level aliases today."""
     from dcc_mcp_core import scan_and_load
 
-    skills, skipped = scan_and_load(
-        dcc_name="houdini", extra_paths=[str(_SKILLS_ROOT)]
-    )
+    skills, skipped = scan_and_load(dcc_name="houdini", extra_paths=[str(_SKILLS_ROOT)])
     assert not skipped, skipped
     by_name = {s.name: s for s in skills}
     for skill_dir in _TRACKED_SKILLS:
