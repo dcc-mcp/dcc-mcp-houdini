@@ -1,0 +1,44 @@
+# Pre-commit / prek configuration for dcc-mcp-houdini.
+#
+# Compatible with both `pre-commit` and the faster Rust reimplementation `prek`.
+# Install hooks with `just prek-install` (or `vx prek install`); run on demand
+# with `just prek` (or `vx prek run --all-files`). The hooks mirror the CI
+# `lint` job (ruff check, ruff format, bundled-skill validation, py37 syntax).
+default_language_version:
+  python: python3.11
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: no-commit-to-branch # prevent direct commits to main branch
+      - id: check-yaml
+        args: ["--unsafe"] # tolerate SKILL.md tools.yaml custom tags
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # Python lint + format (ruff) — keep rev in sync with pyproject + CI.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|tools|packaging)/
+      - id: ruff-format
+        files: ^(src|tests|tools|packaging)/
+
+  # Project-specific validators — mirror the CI `lint` job.
+  - repo: local
+    hooks:
+      - id: lint-skills
+        name: validate bundled skills (SKILL.md / tools.yaml)
+        entry: python tools/lint_skills.py --warnings-as-errors
+        language: system
+        pass_filenames: false
+        files: ^src/dcc_mcp_houdini/skills/
+      - id: check-py37-syntax
+        name: Python 3.7 syntax check
+        entry: python tools/check_py37_syntax.py src tests tools packaging
+        language: system
+        pass_filenames: false
+        types: [python]
