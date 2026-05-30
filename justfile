@@ -7,6 +7,8 @@
 #   just test                               — pytest
 #   just lint                               — ruff check
 #   just lint-all                           — ruff + skill metadata + py37 syntax
+#   just prek-install                       — install git hooks (vx prek)
+#   just prek                               — run all hooks on every file
 #   just houdini-version=20.5 houdini-dev-build-link-core-win  — build core + symlink (Windows)
 #
 # Cross-platform: uses sh on Unix/macOS, pwsh on Windows for dev-* commands.
@@ -129,6 +131,14 @@ format:
     ruff format src/ tests/ tools/ packaging/
 
 lint-all: lint lint-format lint-skills check-py37-syntax
+
+# Install git hooks from .pre-commit-config.yaml (uses prek, falls back to pre-commit)
+prek-install:
+    vx prek install --install-hooks
+
+# Run all pre-commit/prek hooks against every file (mirrors the CI lint job)
+prek:
+    vx prek run --all-files
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
