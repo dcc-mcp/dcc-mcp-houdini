@@ -12,7 +12,6 @@ from typing import Any, Callable, List
 
 import pytest
 
-from dcc_mcp_houdini import _qt_inspector
 from dcc_mcp_houdini._qt_inspector import (
     ENV_QT_UI_INSPECTOR,
     _MainThreadHandlerProxy,
