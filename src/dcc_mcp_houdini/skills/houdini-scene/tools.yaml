@@ -10,6 +10,10 @@ tools:
     read_only: true
     destructive: false
     idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [scene info, scene summary, hip path, frame range, obj count]
+    produces: [scene_report]
     annotations:
       read_only_hint: true
       destructive_hint: false
@@ -33,6 +37,10 @@ tools:
     read_only: true
     destructive: false
     idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [list objects, obj nodes, scene objects, find geo nodes, list cameras]
+    produces: [scene_report]
     annotations:
       read_only_hint: true
       destructive_hint: false
@@ -58,6 +66,10 @@ tools:
     read_only: true
     destructive: false
     idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [list children, network contents, traverse nodes, walk graph, list sops]
+    produces: [scene_report]
     annotations:
       read_only_hint: true
       destructive_hint: false
@@ -101,6 +113,10 @@ tools:
     read_only: true
     destructive: false
     idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [node info, inspect node, node details, node flags, node connections]
+    produces: [scene_report]
     annotations:
       read_only_hint: true
       destructive_hint: false

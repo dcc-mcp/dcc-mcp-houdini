@@ -15,6 +15,9 @@ tools:
     affinity: main
     timeout_hint_secs: 60
     source_file: scripts/install_hda_file.py
+    tool_role: action
+    risk: low
+    search_aliases: [install hda, load otl, register asset, add hda file]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -39,6 +42,9 @@ tools:
     affinity: main
     timeout_hint_secs: 60
     source_file: scripts/list_hda_definitions.py
+    tool_role: read_only
+    risk: low
+    search_aliases: [list hda, hda definitions, available assets, otl contents]
     annotations:
       read_only_hint: true
       destructive_hint: false
@@ -91,6 +97,10 @@ tools:
     affinity: main
     timeout_hint_secs: 300
     source_file: scripts/execute_hda.py
+    tool_role: action
+    risk: medium
+    search_aliases: [execute hda, run hda, instantiate asset, use digital asset]
+    produces: [scene_node]
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -135,6 +145,10 @@ tools:
     affinity: main
     timeout_hint_secs: 300
     source_file: scripts/save_node_as_hda.py
+    tool_role: action
+    risk: medium
+    search_aliases: [save hda, create digital asset, export hda, make otl]
+    produces: ["file:hda"]
     annotations:
       read_only_hint: false
       destructive_hint: false

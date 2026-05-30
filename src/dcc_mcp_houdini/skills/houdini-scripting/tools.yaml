@@ -11,6 +11,10 @@ tools:
     read_only: false
     destructive: true
     idempotent: false
+    tool_role: escape_hatch
+    risk: host_script_execution
+    search_aliases: [run python, execute code, eval, hython, arbitrary script, escape hatch]
+    produces: [scene_state]
     annotations:
       destructive_hint: true
       read_only_hint: false
@@ -37,6 +41,9 @@ tools:
     read_only: true
     destructive: false
     idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [session info, houdini version, hip path, ui availability]
     annotations:
       read_only_hint: true
       destructive_hint: false
