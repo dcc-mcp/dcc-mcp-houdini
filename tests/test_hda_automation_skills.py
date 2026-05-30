@@ -149,9 +149,7 @@ class TestHdaEdit:
         mock_hou = MagicMock()
         mock_hou.node.side_effect = lambda p: parent if p == "/obj" else None
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.instantiate_hda(
-                "/obj", "labs::my_asset", inputs=["/obj/missing"], cook=False
-            )
+            result = mod.instantiate_hda("/obj", "labs::my_asset", inputs=["/obj/missing"], cook=False)
         assert result["success"] is True
         assert any("missing" in w for w in result["context"]["warnings"])
 
