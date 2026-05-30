@@ -47,14 +47,10 @@ def validate_scene(
                 if is_output and check_outputs:
                     out_dir = os.path.dirname(resolved)
                     if out_dir and not os.path.isdir(out_dir):
-                        bad_output_dirs.append(
-                            {"node": node.path(), "parm": parm.name(), "dir": out_dir}
-                        )
+                        bad_output_dirs.append({"node": node.path(), "parm": parm.name(), "dir": out_dir})
                     continue
                 if not os.path.exists(resolved):
-                    missing_files.append(
-                        {"node": node.path(), "parm": parm.name(), "path": resolved}
-                    )
+                    missing_files.append({"node": node.path(), "parm": parm.name(), "path": resolved})
             try:
                 errs = list(node.errors()) if hasattr(node, "errors") else []
             except Exception:  # noqa: BLE001
