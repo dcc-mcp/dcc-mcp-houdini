@@ -70,8 +70,8 @@ def _skill(name: str, *, tags: List[str] = None, summary: str = "") -> Dict[str,
 
 def test_builder_empty_catalog_returns_empty_records():
     builder = HoudiniCapabilityManifestBuilder(
-        skill_lister=lambda: [],
-        action_lister=lambda: [],
+        skill_lister=list,
+        action_lister=list,
         is_loaded=lambda _: False,
     )
     assert builder.build() == []
@@ -152,7 +152,7 @@ def test_builder_truncates_long_summary():
 def test_builder_infers_skill_from_tool_name_convention():
     actions = [_action("houdini_scene__get_scene_info")]
     builder = HoudiniCapabilityManifestBuilder(
-        skill_lister=lambda: [],
+        skill_lister=list,
         action_lister=lambda: actions,
         is_loaded=lambda _: False,
     )

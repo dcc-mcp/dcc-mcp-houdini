@@ -49,8 +49,44 @@ def _find_dcc_mcp_cli() -> Optional[str]:
     return None
 
 
-def lint_skills_with_cli(skills_dir: pathlib.Path, warnings_as_errors: bool = False) -> Optional[List[str]]:
-    """Run the standalone dcc-mcp-cli linter when it is installed."""
+class CliLintResult:
+    """Structured outcome of a ``dcc-mcp-cli lint`` invocation."""
+
+    def __init__(
+        self,
+        *,
+        errors: List[str],
+        checked: int = 0,
+        error_count: int = 0,
+        warning_count: int = 0,
+        failed: bool = False,
+        version: str = "",
+    ) -> None:
+        self.errors = errors
+        self.checked = checked
+        self.error_count = error_count
+        self.warning_count = warning_count
+        self.failed = failed
+        self.version = version
+
+
+def _dcc_mcp_cli_version(cli: str) -> str:
+    try:
+        proc = subprocess.run([cli, "--version"], check=False, capture_output=True, text=True)
+    except OSError:
+        return ""
+    return (proc.stdout or proc.stderr).strip()
+
+
+def lint_skills_with_cli(skills_dir: pathlib.Path, warnings_as_errors: bool = False) -> Optional[CliLintResult]:
+    """Run the standalone dcc-mcp-cli linter when it is installed.
+
+    Returns ``None`` when the CLI is not available so callers can fall back to
+    the in-process ``dcc-mcp-core`` validator. Otherwise the parsed
+    :class:`CliLintResult` carries the human-readable errors plus the structured
+    counts the CLI reports (``checked`` / ``errors`` / ``warnings`` / ``failed``)
+    so the caller can surface an accurate summary.
+    """
     cli = _find_dcc_mcp_cli()
     if cli is None:
         return None
@@ -61,12 +97,14 @@ def lint_skills_with_cli(skills_dir: pathlib.Path, warnings_as_errors: bool = Fa
     cmd.append(str(skills_dir))
     proc = subprocess.run(cmd, cwd=str(ROOT), check=False, capture_output=True, text=True)
     output = (proc.stdout or proc.stderr).strip()
+    version = _dcc_mcp_cli_version(cli)
     try:
         payload = json.loads(output) if output else {}
     except json.JSONDecodeError:
-        return (
-            [output or "dcc-mcp-cli lint failed with exit code {}".format(proc.returncode)] if proc.returncode else []
-        )
+        # The CLI did not emit JSON (older build or hard failure): treat any
+        # non-zero exit as a single opaque error so CI still fails loudly.
+        message = output or "dcc-mcp-cli lint failed with exit code {}".format(proc.returncode)
+        return CliLintResult(errors=[message] if proc.returncode else [], failed=bool(proc.returncode), version=version)
 
     errors: List[str] = []
     for report in payload.get("reports", []):
@@ -75,9 +113,18 @@ def lint_skills_with_cli(skills_dir: pathlib.Path, warnings_as_errors: bool = Fa
             if severity == "error" or warnings_as_errors:
                 errors.append("{}: {}: {}".format(report.get("skill_dir"), issue.get("category"), issue.get("message")))
 
-    if proc.returncode != 0 and not errors:
+    failed = bool(payload.get("failed", False)) or proc.returncode != 0
+    if failed and not errors:
         errors.append(output or "dcc-mcp-cli lint failed with exit code {}".format(proc.returncode))
-    return errors
+
+    return CliLintResult(
+        errors=errors,
+        checked=int(payload.get("checked", 0) or 0),
+        error_count=int(payload.get("errors", 0) or 0),
+        warning_count=int(payload.get("warnings", 0) or 0),
+        failed=failed,
+        version=version,
+    )
 
 
 def _parse_front_matter(text: str) -> dict:
@@ -99,6 +146,7 @@ def lint_skills(
     *,
     use_cli: bool = True,
     warnings_as_errors: bool = False,
+    require_cli: bool = False,
 ) -> List[str]:
     """Return validation errors for all bundled skill directories.
 
@@ -106,12 +154,17 @@ def lint_skills(
     which is the authoritative source of truth. Precision order:
 
     1. ``dcc-mcp-cli lint`` — the standalone binary; matches the runtime loader
-       exactly and is the most precise (preferred locally).
+       exactly and is the most precise (preferred locally and in CI).
     2. ``dcc_mcp_core.validate_skill`` — the same Rust validator exposed through
-       the Python API (used in CI, where the wheel is installed but the CLI
-       binary is not).
+       the Python API (used when the wheel is installed but the CLI binary is
+       not).
     3. Built-in structural heuristics — last-resort fallback when neither
        dcc-mcp-cli nor dcc-mcp-core is importable (lean prek environments).
+
+    Pass ``require_cli=True`` to fail hard when the standalone ``dcc-mcp-cli``
+    binary is unavailable instead of silently dropping to a weaker validator —
+    use this in CI to guarantee the runtime loader's validator is what gates the
+    skills.
 
     On top of whichever generic validator runs, Houdini-specific conventions
     (lazy ``hou`` import, ``scripts/`` layout) are always enforced.
@@ -122,12 +175,27 @@ def lint_skills(
     if not skill_dirs:
         return ["No skill directories found under {}".format(skills_dir)]
 
-    cli_errors = lint_skills_with_cli(skills_dir, warnings_as_errors=warnings_as_errors) if use_cli else None
-    if cli_errors is not None:
+    cli_result = lint_skills_with_cli(skills_dir, warnings_as_errors=warnings_as_errors) if use_cli else None
+    if cli_result is not None:
         generic_mode = "cli"
-        errors.extend(cli_errors)
+        errors.extend(cli_result.errors)
+        version = " ({})".format(cli_result.version) if cli_result.version else ""
+        print(
+            "validator: dcc-mcp-cli{ver} — checked={checked} errors={errs} warnings={warns}".format(
+                ver=version,
+                checked=cli_result.checked,
+                errs=cli_result.error_count,
+                warns=cli_result.warning_count,
+            )
+        )
+    elif require_cli:
+        return [
+            "dcc-mcp-cli is required (--require-cli) but was not found on PATH. "
+            "Install it with `python tools/install_dcc_mcp_cli.py` or remove --require-cli."
+        ]
     elif validate_skill is not None:
         generic_mode = "core"
+        print("validator: dcc-mcp-core.validate_skill (Python API; dcc-mcp-cli not found)")
     else:
         generic_mode = "builtin"
         print(
@@ -278,12 +346,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--skills-dir", type=pathlib.Path, default=DEFAULT_SKILLS_DIR)
     parser.add_argument("--no-cli", action="store_true", help="Use Python validation even when dcc-mcp-cli exists.")
     parser.add_argument("--warnings-as-errors", action="store_true")
+    parser.add_argument(
+        "--require-cli",
+        action="store_true",
+        help="Fail if the standalone dcc-mcp-cli binary is not available instead of falling back to a weaker validator.",
+    )
     args = parser.parse_args(argv)
+
+    if args.no_cli and args.require_cli:
+        parser.error("--no-cli and --require-cli are mutually exclusive")
 
     errors = lint_skills(
         args.skills_dir,
         use_cli=not args.no_cli,
         warnings_as_errors=args.warnings_as_errors,
+        require_cli=args.require_cli,
     )
     if errors:
         print("SKILL.md validation errors:")
