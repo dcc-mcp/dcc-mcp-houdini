@@ -114,7 +114,20 @@ line-length = 120
 target-version = "py37"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "B", "C4"]
+# Rule families kept deliberately py37-safe. Broader families such as `UP`
+# (pyupgrade) are intentionally excluded: with target-version = py37 they force
+# runtime-unsafe PEP 585/604 annotation rewrites (list[...]/X | None) and a
+# repo-wide .format -> f-string churn. Skill packages get their own, stronger,
+# runtime-accurate validation via dcc-mcp-cli (see tools/lint_skills.py).
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "W",    # pycodestyle warnings
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie (small, py37-safe simplifications)
+]
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # Do not perform function calls in default arguments

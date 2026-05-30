@@ -121,6 +121,14 @@ lint-format:
 lint-skills:
     python tools/lint_skills.py --warnings-as-errors
 
+# Download the standalone dcc-mcp-cli runtime validator into .tools-bin/
+install-cli:
+    python tools/install_dcc_mcp_cli.py
+
+# Validate skills with the authoritative dcc-mcp-cli binary (matches CI exactly)
+lint-skills-cli:
+    python tools/lint_skills.py --require-cli --warnings-as-errors
+
 check-py37-syntax:
     python tools/check_py37_syntax.py src tests tools packaging
 
