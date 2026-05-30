@@ -42,11 +42,7 @@ def set_keyframe(
         kf = hou.Keyframe()
         kf.setFrame(float(frame))
         if expression is not None:
-            lang = (
-                hou.exprLanguage.Python
-                if language.lower() == "python"
-                else hou.exprLanguage.Hscript
-            )
+            lang = hou.exprLanguage.Python if language.lower() == "python" else hou.exprLanguage.Hscript
             kf.setExpression(expression, lang)
         else:
             kf.setValue(float(value))

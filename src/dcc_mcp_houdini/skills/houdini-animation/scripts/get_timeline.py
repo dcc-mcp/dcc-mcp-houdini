@@ -29,9 +29,7 @@ def get_timeline() -> dict:
             current_frame=hou.frame() if hasattr(hou, "frame") else None,
             current_time=hou.time() if hasattr(hou, "time") else None,
             frame_range=[float(frame_range[0]), float(frame_range[1])] if frame_range else None,
-            playback_range=[float(playback_range[0]), float(playback_range[1])]
-            if playback_range
-            else None,
+            playback_range=[float(playback_range[0]), float(playback_range[1])] if playback_range else None,
             fps=fps,
         )
     except Exception as exc:
