@@ -1,0 +1,128 @@
+tools:
+  - name: create_primitive
+    description: >-
+      Create a common SOP primitive (box, sphere, grid, tube, curve, null,
+      output) under an explicit SOP network path.
+    source_file: scripts/create_primitive.py
+    execution: sync
+    affinity: main
+    group: geometry-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, primitive]
+      properties:
+        parent_path:
+          type: string
+          description: SOP network path to create inside (e.g. /obj/geo1).
+        primitive:
+          type: string
+          enum: [box, sphere, grid, tube, curve, null, output]
+          description: Primitive/utility SOP to create.
+        node_name:
+          type: string
+          description: Optional node name.
+        set_display:
+          type: boolean
+          default: true
+          description: Set the display flag on the new node.
+    next-tools:
+      on-success:
+        - houdini_geometry__get_geometry_info
+  - name: get_geometry_info
+    description: >-
+      Cook and summarise point/primitive/vertex counts and bounds for a SOP
+      node. Read-only.
+    source_file: scripts/get_geometry_info.py
+    execution: sync
+    affinity: main
+    group: geometry-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: SOP node to inspect.
+  - name: list_attributes
+    description: >-
+      List point/primitive/vertex/detail attributes (name, data type, size) for
+      a SOP node. Read-only.
+    source_file: scripts/list_attributes.py
+    execution: sync
+    affinity: main
+    group: geometry-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: SOP node to inspect.
+  - name: list_groups
+    description: >-
+      List point/primitive/edge groups (name, count) for a SOP node. Read-only.
+    source_file: scripts/list_groups.py
+    execution: sync
+    affinity: main
+    group: geometry-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: SOP node to inspect.
+  - name: get_cook_status
+    description: >-
+      Cook a SOP node and return cook success plus any errors and warnings.
+    source_file: scripts/get_cook_status.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 120
+    group: geometry-query
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: SOP node to cook.
+        force:
+          type: boolean
+          default: false
+          description: Force a recook even when the node is already cooked.
