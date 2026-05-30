@@ -218,9 +218,7 @@ class TestMeshOpsSkills:
         }.get(name)
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.blast_geometry(
-                "/obj/geo1/box1", group="0-5", group_type="prims", delete_non_selected=True
-            )
+            result = mod.blast_geometry("/obj/geo1/box1", group="0-5", group_type="prims", delete_non_selected=True)
 
         assert result["success"] is True
         group_parm.set.assert_called_once_with("0-5")
