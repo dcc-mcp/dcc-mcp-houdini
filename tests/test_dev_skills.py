@@ -65,9 +65,7 @@ class TestDevRun:
         pkg_dir = tmp_path / "demo_pkg"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "mod.py").write_text(
-            "def go(x):\n    print('hello', x)\n    return x * 2\n"
-        )
+        (pkg_dir / "mod.py").write_text("def go(x):\n    print('hello', x)\n    return x * 2\n")
         sys.path.insert(0, str(tmp_path))
         try:
             result = mod.run_entrypoint("demo_pkg.mod:go", args=[3], reload=False)
@@ -127,9 +125,7 @@ class TestDevIntrospect:
         sop_cat.name.return_value = "Sop"
         mock_hou.sopNodeTypeCategory.return_value = sop_cat
         # Limit dir() to a known getter so the category scan is deterministic.
-        with patch.dict(sys.modules, {"hou": mock_hou}), patch(
-            "builtins.dir", return_value=["sopNodeTypeCategory"]
-        ):
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch("builtins.dir", return_value=["sopNodeTypeCategory"]):
             result = mod.introspect_hom()
         assert result["success"] is True
         assert "Sop" in result["context"]["categories"]
