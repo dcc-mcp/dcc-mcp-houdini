@@ -1,0 +1,153 @@
+tools:
+  - name: set_project
+    description: Set the Houdini project root ($JOB) with path validation (optionally create it).
+    source_file: scripts/set_project.py
+    execution: sync
+    affinity: main
+    group: project
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [project_root]
+      properties:
+        project_root:
+          type: string
+        create:
+          type: boolean
+          default: false
+  - name: get_project
+    description: Query the current project root ($JOB), $HIP, and hip file path (read-only).
+    source_file: scripts/get_project.py
+    execution: sync
+    affinity: main
+    group: project
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties: {}
+  - name: tag_asset_metadata
+    description: >-
+      Tag adapter-owned asset metadata (JSON) on a node or the hip file using a
+      portable dcc_mcp_meta schema.
+    source_file: scripts/tag_asset_metadata.py
+    execution: sync
+    affinity: main
+    group: metadata
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [metadata]
+      properties:
+        metadata:
+          type: object
+          description: Arbitrary JSON-serialisable key/value asset metadata.
+        node_path:
+          type: string
+          description: Target node; omit to tag the hip file.
+        merge:
+          type: boolean
+          default: true
+  - name: get_asset_metadata
+    description: Read adapter-owned asset metadata from a node or the hip file (read-only).
+    source_file: scripts/get_asset_metadata.py
+    execution: sync
+    affinity: main
+    group: metadata
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        node_path:
+          type: string
+  - name: validate_scene
+    description: >-
+      Validate the scene for missing input files, unwritable output dirs, dirty
+      state, and node cook errors (read-only).
+    source_file: scripts/validate_scene.py
+    execution: sync
+    affinity: main
+    group: validation
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        node_paths:
+          type: array
+          items: {type: string}
+        check_outputs:
+          type: boolean
+          default: true
+  - name: collect_dependencies
+    description: >-
+      Collect external file dependencies for the scene or selected nodes and
+      return a manifest. Never copies files.
+    source_file: scripts/collect_dependencies.py
+    execution: sync
+    affinity: main
+    group: validation
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        node_paths:
+          type: array
+          items: {type: string}
+  - name: export_shot_package
+    description: >-
+      Build a shot/package manifest (frame range, fps, cameras, output nodes,
+      caches, written files); optionally write the JSON document.
+    source_file: scripts/export_shot_package.py
+    execution: sync
+    affinity: main
+    group: package
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        output_path:
+          type: string
+        write_manifest:
+          type: boolean
+          default: false

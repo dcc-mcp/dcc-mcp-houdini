@@ -1,0 +1,226 @@
+tools:
+  - name: create_node
+    description: >-
+      Create a Houdini node under an existing parent path. Returns the created
+      node path, type, and parent. Mutates the scene.
+    input_schema:
+      type: object
+      required: [parent_path, node_type]
+      properties:
+        parent_path:
+          type: string
+          description: "Parent network path, for example /obj or /obj/geo1."
+        node_type:
+          type: string
+          description: "Houdini operator type name, for example geo, box, null, rop_geometry."
+        node_name:
+          type: string
+          description: "Optional node name. Houdini chooses a unique name when omitted."
+        exact_type_name:
+          type: boolean
+          default: false
+          description: "Require an exact operator type name match."
+        run_init_scripts:
+          type: boolean
+          default: true
+          description: "Run Houdini operator initialization scripts."
+        load_contents:
+          type: boolean
+          default: true
+          description: "Load contents for subnet-like assets."
+        set_current:
+          type: boolean
+          default: false
+          description: "Make the new node current/selected when supported."
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/create_node.py
+    tool_role: action
+    risk: medium
+    search_aliases: [create node, add node, make sop, new node, instantiate operator]
+    produces: [scene_node]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_nodes__set_node_parms
+        - houdini_nodes__layout_children
+      on-failure:
+        - houdini_scene__list_obj_nodes
+
+  - name: set_node_parms
+    description: >-
+      Set one or more parameters on a Houdini node. Supports scalar parameters,
+      tuple parameters, and optional button presses. Mutates the scene.
+    input_schema:
+      type: object
+      required: [node_path, parameters]
+      properties:
+        node_path:
+          type: string
+          description: "Target node path."
+        parameters:
+          type: object
+          description: "Parameter name to value map. Lists/tuples target parm tuples when possible."
+          additionalProperties: true
+        press_buttons:
+          type: array
+          items:
+            type: string
+          default: []
+          description: "Button parameter names to press after regular parameter assignment."
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/set_node_parms.py
+    tool_role: action
+    risk: medium
+    search_aliases: [set parameters, edit parms, change values, press button parm]
+    produces: [scene_node]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_nodes__cook_node
+      on-failure:
+        - houdini_scene__get_scene_info
+
+  - name: connect_nodes
+    description: >-
+      Connect one Houdini node into another node's input. Mutates the node
+      network and returns the connected paths and indices.
+    input_schema:
+      type: object
+      required: [input_node_path, output_node_path]
+      properties:
+        input_node_path:
+          type: string
+          description: "Node receiving the connection."
+        output_node_path:
+          type: string
+          description: "Node providing the output connection."
+        input_index:
+          type: integer
+          minimum: 0
+          default: 0
+          description: "Input socket index on input_node_path."
+        output_index:
+          type: integer
+          minimum: 0
+          default: 0
+          description: "Output socket index on output_node_path."
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/connect_nodes.py
+    tool_role: action
+    risk: medium
+    search_aliases: [connect nodes, wire inputs, link nodes, plug into input]
+    produces: [node_network]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_nodes__layout_children
+      on-failure:
+        - houdini_scene__get_scene_info
+
+  - name: cook_node
+    description: >-
+      Cook a Houdini node and return errors/warnings when available. Useful
+      after creating SOP networks, ROPs, or HDA instances.
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: "Node path to cook."
+        force:
+          type: boolean
+          default: false
+          description: "Force a recook when supported."
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 300
+    source_file: scripts/cook_node.py
+    tool_role: action
+    risk: medium
+    search_aliases: [cook node, evaluate node, recook, force cook, compute geometry]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-failure:
+        - houdini_scripting__get_session_info
+
+  - name: layout_children
+    description: "Layout children under a Houdini network node. Mutates node positions only."
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: "/obj"
+          description: "Network path whose children should be laid out."
+    read_only: false
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/layout_children.py
+    tool_role: action
+    risk: low
+    search_aliases: [layout nodes, arrange network, tidy graph, organize nodes]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+
+  - name: delete_node
+    description: "Destroy a Houdini node by path. Destructive; use only when the user asks to remove something."
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: "Node path to destroy."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    source_file: scripts/delete_node.py
+    tool_role: destructive
+    risk: high
+    search_aliases: [delete node, remove node, destroy node, erase node]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-failure:
+        - houdini_scene__get_scene_info

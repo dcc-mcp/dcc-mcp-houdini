@@ -1,0 +1,86 @@
+tools:
+  - name: get_connections
+    description: >-
+      Return a node's input paths, output paths, and (optionally) parameter
+      dependents/consumers. Read-only graph query.
+    source_file: scripts/get_connections.py
+    execution: sync
+    affinity: main
+    group: graph-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Node to inspect.
+        include_dependents:
+          type: boolean
+          default: true
+          description: Include downstream parameter/reference dependents.
+  - name: connect_input
+    description: >-
+      Wire a source node's output into a target node's input at an explicit
+      input index. Returns a structured error if either node is missing.
+    source_file: scripts/connect_input.py
+    execution: sync
+    affinity: main
+    group: graph-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, input_index, source_path]
+      properties:
+        node_path:
+          type: string
+          description: Target node receiving the connection.
+        input_index:
+          type: integer
+          minimum: 0
+          description: Input index on the target node.
+        source_path:
+          type: string
+          description: Source node to feed in.
+        source_output:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Output index on the source node.
+  - name: disconnect_input
+    description: >-
+      Clear the connection feeding a node's input index.
+    source_file: scripts/disconnect_input.py
+    execution: sync
+    affinity: main
+    group: graph-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, input_index]
+      properties:
+        node_path:
+          type: string
+          description: Node whose input to clear.
+        input_index:
+          type: integer
+          minimum: 0
+          description: Input index to disconnect.

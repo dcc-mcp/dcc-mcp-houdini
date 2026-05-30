@@ -1,0 +1,13 @@
+{
+  "release-type": "python",
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "package-name": "dcc-mcp-houdini",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "src/dcc_mcp_houdini/__version__.py"
+      ]
+    }
+  }
+}

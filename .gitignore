@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+dist_houdini/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# MyPy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Build artifacts
+*.manifest
+*.spec
+
+# Resources
+*.pth
+
+# macOS
+.DS_Store
+
+# Just
+.justfile-recipe-cmd*
+
+# Downloaded dev tools (dcc-mcp-cli binary fetched by tools/install_dcc_mcp_cli.py)
+.tools-bin/

@@ -1,0 +1,77 @@
+# dcc-mcp-houdini - AI reference
+
+## Start server
+
+```python
+import dcc_mcp_houdini
+server = dcc_mcp_houdini.start_server(port=8765)
+server.mcp_url  # http://127.0.0.1:8765/mcp
+dcc_mcp_houdini.stop_server()
+```
+
+## Progressive loading
+
+```python
+server.find_skills(query="hda")
+server.load_skill("houdini-scene")
+server.load_skill("houdini-nodes")
+server.loaded_skill_count()
+server.list_skills()
+```
+
+## Public exports
+
+- `HoudiniMcpServer`, `start_server`, `stop_server`, `get_server`
+- `HoudiniHost`, `HoudiniCallableDispatcher`, `create_execution_stack`
+- `houdini_success`, `houdini_error`, `with_houdini`
+- `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
+
+## Bundled tools
+
+- `houdini_scripting__execute_python`
+- `houdini_scripting__get_session_info`
+- `houdini_scene__get_scene_info`
+- `houdini_scene__list_obj_nodes`
+- `houdini_nodes__create_node`
+- `houdini_nodes__set_node_parms`
+- `houdini_nodes__connect_nodes`
+- `houdini_nodes__cook_node`
+- `houdini_nodes__layout_children`
+- `houdini_nodes__delete_node`
+- `houdini_hda__install_hda_file`
+- `houdini_hda__list_hda_definitions`
+- `houdini_hda__execute_hda`
+- `houdini_hda__save_node_as_hda`
+- `houdini_automation__run_python_file`
+- `houdini_automation__set_frame_range`
+- `houdini_automation__save_hip_file`
+- `houdini_automation__load_hip_file`
+- `houdini_automation__build_node_chain`
+
+## Skill stages
+
+- `bootstrap`: `houdini-scripting` (default loaded)
+- `scene`: `houdini-scene` (default loaded)
+- `authoring`: `houdini-nodes`, `houdini-hda`
+- `pipeline`: `houdini-automation`
+
+## Dev (Windows)
+
+```
+just houdini-version=20.5 houdini-dev-build-link-core-win
+just houdini-version=20.5 houdini-dev-debug-win
+```
+
+## Build and release checks
+
+```
+just lint-all
+just test
+just build-houdini-package platform=win64
+python -m twine check dist/*
+```
+
+Quickinstall ZIPs contain the adapter wheel, compatible `dcc-mcp-core` wheels,
+Houdini package templates, `123.py`, and install scripts.
+
+See `docs/guide/local-mcp-debug.md`, `docs/ci/houdini-docker.md`, and `AGENTS.md`.

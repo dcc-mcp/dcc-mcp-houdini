@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "release-please--branches--**"
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and Skill Metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install package with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Ruff check
+        run: ruff check src/ tests/ tools/ packaging/
+      - name: Ruff format check
+        run: ruff format --check src/ tests/ tools/ packaging/
+      - name: Install dcc-mcp-cli (runtime skill validator)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/install_dcc_mcp_cli.py
+      - name: Validate bundled skills (dcc-mcp-cli)
+        run: python tools/lint_skills.py --require-cli --warnings-as-errors
+      - name: Python 3.7 syntax check
+        run: python tools/check_py37_syntax.py src tests tools packaging
+
+  test:
+    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.8", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - os: windows-latest
+            python-version: "3.8"
+          - os: macos-latest
+            python-version: "3.8"
+          - os: windows-latest
+            python-version: "3.10"
+          - os: macos-latest
+            python-version: "3.10"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package with dev dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run unit tests
+        run: python -m pytest
+
+  build:
+    name: Build Wheel and Sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build twine
+      - name: Build package
+        run: python -m build
+      - name: Check package
+        run: python -m twine check dist/*
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  quickinstall:
+    name: Build Houdini Quickinstall (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [win64, linux, macos]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build packaging pytest
+      - name: Build wheel
+        run: python -m build
+      - name: Assemble quickinstall ZIP
+        run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini
+      - name: Verify quickinstall ZIP
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          python - <<'PY'
+          import glob
+          import os
+          import zipfile
+
+          zips = sorted(glob.glob(f"dist_houdini/dcc_mcp_houdini_quickinstall_{os.environ['PLATFORM']}_v*.zip"))
+          assert zips, "quickinstall zip missing"
+          with zipfile.ZipFile(zips[-1]) as zf:
+              names = zf.namelist()
+          assert any(n.endswith("/scripts/123.py") for n in names), names[:40]
+          assert any(n.endswith("/scripts/dcc_mcp_houdini_bootstrap.py") for n in names), names[:40]
+          assert any(n.endswith("/packages/dcc_mcp_houdini.json.template") for n in names), names[:40]
+          assert any("/wheels/dcc_mcp_houdini-" in n and n.endswith(".whl") for n in names), names[:40]
+          assert any("/wheels/dcc_mcp_core-" in n and n.endswith(".whl") for n in names), names[:40]
+          PY
+      - name: Upload quickinstall artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: houdini-quickinstall-${{ matrix.platform }}
+          path: dist_houdini/*.zip

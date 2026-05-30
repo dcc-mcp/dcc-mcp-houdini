@@ -1,0 +1,386 @@
+"""Assemble a Houdini quick-install package for dcc-mcp-houdini.
+
+The output ZIP contains:
+
+* the built ``dcc_mcp_houdini`` wheel from ``dist/``;
+* compatible ``dcc-mcp-core`` wheels from PyPI for the requested platform;
+* a Houdini package JSON template;
+* ``scripts/123.py`` autostart bootstrap;
+* PowerShell and POSIX installer scripts.
+
+Install flow:
+
+1. Extract the ZIP anywhere stable.
+2. Run ``install.ps1 -HoudiniVersion 20.5`` or ``./install.sh 20.5``.
+3. Start Houdini. The package adds ``scripts/`` to ``HOUDINI_PATH``; ``123.py``
+   extracts bundled wheels into ``vendor/`` and starts the MCP server when
+   ``DCC_MCP_HOUDINI_AUTOSTART`` is not disabled.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import tempfile
+import urllib.request
+import zipfile
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from packaging.version import Version
+
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
+CORE_PACKAGE = "dcc-mcp-core"
+MIN_CORE_VERSION = "0.17.26"
+PLATFORMS = ("win64", "linux", "macos")
+PYPI_URL = "https://pypi.org/pypi/{package}/json"
+
+
+def _fetch_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+        return json.loads(resp.read())
+
+
+def get_package_version() -> str:
+    text = PYPROJECT.read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not match:
+        raise RuntimeError("Could not find project version in pyproject.toml")
+    return match.group(1)
+
+
+def _read_assigned_quoted_string(path: Path, key: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r'^{}\s*=\s*"([^"]+)"'.format(re.escape(key)), text, re.MULTILINE)
+    if not match:
+        raise RuntimeError('Could not find {} = "..." in {}'.format(key, path))
+    return match.group(1)
+
+
+def assert_versions_aligned() -> None:
+    pyproject_version = get_package_version()
+    module_version = _read_assigned_quoted_string(
+        PACKAGE_ROOT / "src" / "dcc_mcp_houdini" / "__version__.py",
+        "__version__",
+    )
+    if pyproject_version != module_version:
+        raise RuntimeError(
+            "Version mismatch: pyproject.toml={!r}, __version__.py={!r}".format(
+                pyproject_version,
+                module_version,
+            )
+        )
+
+
+def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
+    data = _fetch_json(PYPI_URL.format(package=CORE_PACKAGE))
+    available = [Version(v) for v in data["releases"].keys() if not Version(v).is_prerelease]
+    compatible = [v for v in available if v >= Version(min_version) and v < Version("1.0.0")]
+    if not compatible:
+        raise RuntimeError("No compatible {} release found >= {}".format(CORE_PACKAGE, min_version))
+    return str(sorted(compatible)[-1])
+
+
+def _wheel_matches_platform(filename: str, platform: str) -> bool:
+    if not filename.endswith(".whl"):
+        return False
+    if platform == "win64":
+        return "win_amd64" in filename
+    if platform == "linux":
+        return "linux" in filename and ("x86_64" in filename or "aarch64" in filename)
+    if platform == "macos":
+        return "macosx" in filename
+    return False
+
+
+def _wheel_rank(filename: str) -> tuple:
+    if "cp38-abi3" in filename:
+        priority = 0
+    elif "abi3" in filename:
+        priority = 1
+    elif "cp313" in filename:
+        priority = 2
+    elif "cp312" in filename:
+        priority = 3
+    elif "cp311" in filename:
+        priority = 4
+    elif "cp310" in filename:
+        priority = 5
+    elif "cp39" in filename:
+        priority = 6
+    elif "cp38" in filename:
+        priority = 7
+    elif "cp37" in filename:
+        priority = 8
+    else:
+        priority = 50
+    return (priority, filename)
+
+
+def pick_core_wheel_files(release_files: List[Dict[str, object]], platform: str) -> List[Dict[str, object]]:
+    candidates = [f for f in release_files if _wheel_matches_platform(str(f.get("filename", "")), platform)]
+    candidates.sort(key=lambda f: _wheel_rank(str(f["filename"])))
+    return candidates
+
+
+def download_core_wheels(version: str, platform: str, dest_dir: Path) -> List[Path]:
+    data = _fetch_json(PYPI_URL.format(package=CORE_PACKAGE))
+    release_files = data["releases"].get(version, [])
+    picks = pick_core_wheel_files(release_files, platform)
+    if not picks:
+        sample = [str(f["filename"]) for f in release_files if str(f.get("filename", "")).endswith(".whl")][:12]
+        raise RuntimeError(
+            "No {} wheel for platform={!r} at version {!r}. Wheel sample: {}".format(
+                CORE_PACKAGE,
+                platform,
+                version,
+                sample,
+            )
+        )
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    paths: List[Path] = []
+    for pick in picks:
+        filename = str(pick["filename"])
+        dest = dest_dir / filename
+        if not dest.exists():
+            urllib.request.urlretrieve(str(pick["url"]), dest)  # noqa: S310
+        paths.append(dest)
+    return paths
+
+
+def find_adapter_wheel(dist_dir: Path, version: str) -> Path:
+    wheels = sorted(dist_dir.glob("dcc_mcp_houdini-{}-*.whl".format(version)))
+    if not wheels:
+        raise RuntimeError("Adapter wheel not found in {} for version {}".format(dist_dir, version))
+    return wheels[-1]
+
+
+def _package_json_template() -> str:
+    payload = {
+        "env": [
+            {"DCC_MCP_HOUDINI_ROOT": "__PACKAGE_ROOT__"},
+            {"DCC_MCP_HOUDINI_AUTOSTART": "1"},
+            {"PYTHONPATH": "__PACKAGE_ROOT__/vendor;&"},
+            {"HOUDINI_PATH": "__PACKAGE_ROOT__;&"},
+        ]
+    }
+    return json.dumps(payload, indent=2) + "\n"
+
+
+def _bootstrap_py() -> str:
+    return r'''"""Bootstrap bundled dcc-mcp-houdini wheels inside Houdini."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import shutil
+import sys
+import zipfile
+
+
+def _package_root() -> Path:
+    env_root = os.environ.get("DCC_MCP_HOUDINI_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+def _wheel_marker(wheels) -> str:
+    return "\n".join(sorted("{}:{}".format(w.name, w.stat().st_size) for w in wheels))
+
+
+def ensure_vendor(root: Path) -> Path:
+    wheels_dir = root / "wheels"
+    vendor_dir = root / "vendor"
+    wheels = sorted(wheels_dir.glob("*.whl"))
+    if not wheels:
+        raise RuntimeError("No bundled wheels found under {}".format(wheels_dir))
+    marker = vendor_dir / ".dcc_mcp_houdini_wheels"
+    desired = _wheel_marker(wheels)
+    if marker.is_file() and marker.read_text(encoding="utf-8") == desired:
+        return vendor_dir
+    if vendor_dir.exists():
+        shutil.rmtree(str(vendor_dir))
+    vendor_dir.mkdir(parents=True, exist_ok=True)
+    for wheel in wheels:
+        with zipfile.ZipFile(str(wheel), "r") as zf:
+            zf.extractall(str(vendor_dir))
+    marker.write_text(desired, encoding="utf-8")
+    return vendor_dir
+
+
+def bootstrap_and_start() -> object:
+    root = _package_root()
+    vendor = ensure_vendor(root)
+    vendor_str = str(vendor)
+    if vendor_str not in sys.path:
+        sys.path.insert(0, vendor_str)
+
+    if os.environ.get("DCC_MCP_HOUDINI_AUTOSTART", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return None
+
+    import dcc_mcp_houdini
+
+    port = int(os.environ.get("DCC_MCP_HOUDINI_PORT", "8765"))
+    gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
+    gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
+    return dcc_mcp_houdini.start_server(port=port, gateway_port=gateway_port, wait_ready=False)
+'''
+
+
+def _startup_py() -> str:
+    return r'''"""Houdini 123.py autostart hook for dcc-mcp-houdini."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+
+def _load_bootstrap():
+    path = Path(__file__).with_name("dcc_mcp_houdini_bootstrap.py")
+    spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", str(path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Cannot load {}".format(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+try:
+    server = _load_bootstrap().bootstrap_and_start()
+    if server is not None:
+        print("dcc-mcp-houdini MCP server started: {}".format(server.mcp_url))
+except Exception as exc:
+    print("dcc-mcp-houdini autostart failed: {}".format(exc))
+'''
+
+
+def _install_ps1() -> str:
+    return r"""param(
+  [string]$HoudiniVersion = "20.5",
+  [string]$PackageRoot = $PSScriptRoot
+)
+
+$ErrorActionPreference = "Stop"
+$resolvedRoot = (Resolve-Path -LiteralPath $PackageRoot).Path.Replace("\", "/")
+$packagesDir = Join-Path $HOME "Documents/houdini$HoudiniVersion/packages"
+New-Item -ItemType Directory -Force -Path $packagesDir | Out-Null
+
+$template = Get-Content -LiteralPath (Join-Path $PSScriptRoot "packages/dcc_mcp_houdini.json.template") -Raw
+$json = $template.Replace("__PACKAGE_ROOT__", $resolvedRoot)
+$target = Join-Path $packagesDir "dcc_mcp_houdini.json"
+Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+
+Write-Host "Installed Houdini package: $target"
+Write-Host "Package root: $resolvedRoot"
+Write-Host "Start Houdini $HoudiniVersion; MCP defaults to http://127.0.0.1:8765/mcp"
+"""
+
+
+def _install_sh() -> str:
+    return r"""#!/usr/bin/env sh
+set -eu
+
+HOUDINI_VERSION="${1:-20.5}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PACKAGE_ROOT="${PACKAGE_ROOT:-$SCRIPT_DIR}"
+PACKAGES_DIR="$HOME/houdini$HOUDINI_VERSION/packages"
+
+mkdir -p "$PACKAGES_DIR"
+ROOT_ESCAPED="$(cd "$PACKAGE_ROOT" && pwd)"
+sed "s#__PACKAGE_ROOT__#$ROOT_ESCAPED#g" \
+  "$SCRIPT_DIR/packages/dcc_mcp_houdini.json.template" \
+  > "$PACKAGES_DIR/dcc_mcp_houdini.json"
+
+echo "Installed Houdini package: $PACKAGES_DIR/dcc_mcp_houdini.json"
+echo "Package root: $ROOT_ESCAPED"
+echo "Start Houdini $HOUDINI_VERSION; MCP defaults to http://127.0.0.1:8765/mcp"
+"""
+
+
+def _readme(version: str, core_version: str, platform: str) -> str:
+    return """dcc-mcp-houdini quick install package
+======================================
+
+Version: {version}
+dcc-mcp-core wheels: {core_version}
+Platform: {platform}
+
+Install on Windows:
+  powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
+
+Install on Linux/macOS:
+  chmod +x install.sh
+  ./install.sh 20.5
+
+The installer writes a Houdini package JSON into the user Houdini preferences
+folder and points it at this extracted package directory. On Houdini startup,
+scripts/123.py extracts bundled wheels into vendor/ and starts the MCP server.
+
+Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
+MCP URL defaults to http://127.0.0.1:8765/mcp.
+""".format(version=version, core_version=core_version, platform=platform)
+
+
+def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
+    if platform not in PLATFORMS:
+        raise ValueError("Unsupported platform {!r}; expected {}".format(platform, ", ".join(PLATFORMS)))
+    assert_versions_aligned()
+    version = get_package_version()
+    adapter_wheel = find_adapter_wheel(dist_dir, version)
+    core_version = resolve_core_version()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = output_dir / "dcc_mcp_houdini_quickinstall_{}_v{}.zip".format(platform, version)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        root = tmp_dir / "dcc_mcp_houdini"
+        wheels_dir = root / "wheels"
+        packages_dir = root / "packages"
+        scripts_dir = root / "scripts"
+        wheels_dir.mkdir(parents=True)
+        packages_dir.mkdir(parents=True)
+        scripts_dir.mkdir(parents=True)
+
+        shutil.copy2(str(adapter_wheel), str(wheels_dir / adapter_wheel.name))
+        for core_wheel in download_core_wheels(core_version, platform, tmp_dir / "wheel-cache"):
+            shutil.copy2(str(core_wheel), str(wheels_dir / core_wheel.name))
+
+        (packages_dir / "dcc_mcp_houdini.json.template").write_text(_package_json_template(), encoding="utf-8")
+        (scripts_dir / "dcc_mcp_houdini_bootstrap.py").write_text(_bootstrap_py(), encoding="utf-8")
+        (scripts_dir / "123.py").write_text(_startup_py(), encoding="utf-8")
+        (root / "install.ps1").write_text(_install_ps1(), encoding="utf-8")
+        install_sh = root / "install.sh"
+        install_sh.write_text(_install_sh(), encoding="utf-8")
+        install_sh.chmod(0o755)
+        (root / "README.txt").write_text(_readme(version, core_version, platform), encoding="utf-8")
+
+        if zip_path.exists():
+            zip_path.unlink()
+        with zipfile.ZipFile(str(zip_path), "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(root.rglob("*")):
+                zf.write(str(path), str(path.relative_to(tmp_dir)).replace("\\", "/"))
+
+    return zip_path
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--platform", choices=PLATFORMS, required=True)
+    parser.add_argument("--dist-dir", type=Path, default=PACKAGE_ROOT / "dist")
+    parser.add_argument("--output-dir", type=Path, default=PACKAGE_ROOT / "dist_houdini")
+    args = parser.parse_args(argv)
+
+    zip_path = assemble(args.platform, args.dist_dir, args.output_dir)
+    print("Created {}".format(zip_path))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
