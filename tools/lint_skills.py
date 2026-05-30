@@ -11,7 +11,11 @@ import sys
 from typing import List, Optional
 
 import yaml
-from dcc_mcp_core import validate_skill
+
+try:  # dcc-mcp-core is a runtime dep, but keep the structural linter usable without it
+    from dcc_mcp_core import validate_skill
+except ImportError:  # pragma: no cover - exercised only in lean (prek) environments
+    validate_skill = None
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_SKILLS_DIR = ROOT / "src" / "dcc_mcp_houdini" / "skills"
@@ -96,71 +100,130 @@ def lint_skills(
     use_cli: bool = True,
     warnings_as_errors: bool = False,
 ) -> List[str]:
-    """Return validation errors for all bundled skill directories."""
+    """Return validation errors for all bundled skill directories.
+
+    The generic SKILL.md / tools.yaml contract is validated by dcc-mcp-core,
+    which is the authoritative source of truth. Precision order:
+
+    1. ``dcc-mcp-cli lint`` — the standalone binary; matches the runtime loader
+       exactly and is the most precise (preferred locally).
+    2. ``dcc_mcp_core.validate_skill`` — the same Rust validator exposed through
+       the Python API (used in CI, where the wheel is installed but the CLI
+       binary is not).
+    3. Built-in structural heuristics — last-resort fallback when neither
+       dcc-mcp-cli nor dcc-mcp-core is importable (lean prek environments).
+
+    On top of whichever generic validator runs, Houdini-specific conventions
+    (lazy ``hou`` import, ``scripts/`` layout) are always enforced.
+    """
     errors: List[str] = []
-    if use_cli:
-        cli_errors = lint_skills_with_cli(skills_dir, warnings_as_errors=warnings_as_errors)
-        if cli_errors is not None:
-            errors.extend(cli_errors)
 
     skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
     if not skill_dirs:
         return ["No skill directories found under {}".format(skills_dir)]
 
+    cli_errors = lint_skills_with_cli(skills_dir, warnings_as_errors=warnings_as_errors) if use_cli else None
+    if cli_errors is not None:
+        generic_mode = "cli"
+        errors.extend(cli_errors)
+    elif validate_skill is not None:
+        generic_mode = "core"
+    else:
+        generic_mode = "builtin"
+        print(
+            "notice: dcc-mcp-cli and dcc-mcp-core are both unavailable; "
+            "ran built-in structural checks only (install dcc-mcp-core for precise validation)",
+            file=sys.stderr,
+        )
+
     for skill_dir in sorted(skill_dirs):
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.exists():
-            errors.append("{}: missing SKILL.md".format(skill_dir.name))
-            continue
-
-        try:
-            front = _parse_front_matter(skill_md.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            errors.append("{}: YAML parse error: {}".format(skill_dir.name, exc))
-            continue
-
-        if not front:
-            errors.append("{}: empty or missing front matter".format(skill_dir.name))
-            continue
-
-        report = validate_skill(str(skill_dir))
-        if report.has_errors:
-            for issue in report.issues:
-                errors.append("{}: {}: {}".format(skill_dir.name, issue.category, issue.message))
-
-        missing = REQUIRED_FIELDS - set(front.keys())
-        if missing:
-            errors.append("{}: missing fields: {}".format(skill_dir.name, sorted(missing)))
-
-        dcc_mcp = front.get("metadata", {}).get("dcc-mcp", {})
-        missing_dcc_mcp = REQUIRED_DCC_MCP_FIELDS - set(dcc_mcp.keys())
-        if missing_dcc_mcp:
-            errors.append("{}: missing metadata.dcc-mcp fields: {}".format(skill_dir.name, sorted(missing_dcc_mcp)))
-            continue
-
-        tools_file = skill_dir / str(dcc_mcp.get("tools", ""))
-        if not tools_file.exists():
-            errors.append("{}: tools file not found: {}".format(skill_dir.name, dcc_mcp.get("tools")))
-            continue
-
-        try:
-            tools_doc = yaml.safe_load(tools_file.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError as exc:
-            errors.append("{}: tools YAML parse error: {}".format(skill_dir.name, exc))
-            continue
-
-        tools = tools_doc.get("tools", [])
-        if not isinstance(tools, list) or not tools:
-            errors.append("{}: tools file must contain a non-empty 'tools' list".format(skill_dir.name))
-            continue
-
-        for tool in tools:
-            _lint_tool(skill_dir, tool, errors)
+        _lint_skill_dir(skill_dir, errors, generic_mode=generic_mode)
 
     return errors
 
 
-def _lint_tool(skill_dir: pathlib.Path, tool: dict, errors: List[str]) -> None:
+def _lint_skill_dir(skill_dir: pathlib.Path, errors: List[str], *, generic_mode: str) -> None:
+    name = skill_dir.name
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        # The CLI already reports missing SKILL.md; only surface it ourselves otherwise.
+        if generic_mode != "cli":
+            errors.append("{}: missing SKILL.md".format(name))
+        return
+
+    try:
+        front = _parse_front_matter(skill_md.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        if generic_mode != "cli":
+            errors.append("{}: YAML parse error: {}".format(name, exc))
+        return
+
+    if not front:
+        if generic_mode != "cli":
+            errors.append("{}: empty or missing front matter".format(name))
+        return
+
+    # Generic contract validation — delegate to dcc-mcp-core when possible.
+    if generic_mode == "core":
+        report = validate_skill(str(skill_dir))
+        if report.has_errors:
+            for issue in report.issues:
+                errors.append("{}: {}: {}".format(name, issue.category, issue.message))
+    elif generic_mode == "builtin":
+        _lint_builtin_contract(skill_dir, front, errors)
+
+    # Houdini-specific conventions always run, regardless of the generic validator.
+    _lint_houdini_conventions(skill_dir, front, errors)
+
+
+def _lint_builtin_contract(skill_dir: pathlib.Path, front: dict, errors: List[str]) -> None:
+    """Last-resort structural checks used only when dcc-mcp-core is unavailable."""
+    name = skill_dir.name
+    missing = REQUIRED_FIELDS - set(front.keys())
+    if missing:
+        errors.append("{}: missing fields: {}".format(name, sorted(missing)))
+
+    dcc_mcp = front.get("metadata", {}).get("dcc-mcp", {})
+    missing_dcc_mcp = REQUIRED_DCC_MCP_FIELDS - set(dcc_mcp.keys())
+    if missing_dcc_mcp:
+        errors.append("{}: missing metadata.dcc-mcp fields: {}".format(name, sorted(missing_dcc_mcp)))
+        return
+
+    tools_file = skill_dir / str(dcc_mcp.get("tools", ""))
+    if not tools_file.exists():
+        errors.append("{}: tools file not found: {}".format(name, dcc_mcp.get("tools")))
+        return
+
+    try:
+        tools_doc = yaml.safe_load(tools_file.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        errors.append("{}: tools YAML parse error: {}".format(name, exc))
+        return
+
+    tools = tools_doc.get("tools", [])
+    if not isinstance(tools, list) or not tools:
+        errors.append("{}: tools file must contain a non-empty 'tools' list".format(name))
+        return
+
+    for tool in tools:
+        _lint_tool_contract(skill_dir, tool, errors)
+
+
+def _load_tools(skill_dir: pathlib.Path, front: dict) -> List[dict]:
+    """Best-effort load of the tools.yaml list; returns [] on any problem."""
+    dcc_mcp = front.get("metadata", {}).get("dcc-mcp", {})
+    tools_file = skill_dir / str(dcc_mcp.get("tools", ""))
+    if not tools_file.exists():
+        return []
+    try:
+        tools_doc = yaml.safe_load(tools_file.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return []
+    tools = tools_doc.get("tools", [])
+    return tools if isinstance(tools, list) else []
+
+
+def _lint_tool_contract(skill_dir: pathlib.Path, tool: dict, errors: List[str]) -> None:
     tool_name = tool.get("name", "?")
     missing_tool = REQUIRED_TOOL_FIELDS - set(tool.keys())
     if missing_tool:
@@ -185,20 +248,29 @@ def _lint_tool(skill_dir: pathlib.Path, tool: dict, errors: List[str]) -> None:
     if source_file and pathlib.PurePosixPath(source_file).parts[:1] != ("scripts",):
         errors.append("{}/{}: source_file must be under scripts/: {}".format(skill_dir.name, tool_name, source_file))
 
-    source = skill_dir / source_file
-    if not source.exists():
-        errors.append("{}: source_file not found: {}".format(skill_dir.name, source_file))
-        return
 
-    try:
-        script_text = source.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        errors.append("{}/{}: could not read source file as UTF-8: {}".format(skill_dir.name, tool_name, exc))
-        return
+def _lint_houdini_conventions(skill_dir: pathlib.Path, front: dict, errors: List[str]) -> None:
+    """Houdini-specific rules dcc-mcp-core does not enforce (lazy ``hou`` import)."""
+    for tool in _load_tools(skill_dir, front):
+        tool_name = tool.get("name", "?")
+        source_file = tool.get("source_file", "")
+        if not source_file:
+            continue
+        source = skill_dir / source_file
+        if not source.exists():
+            continue  # missing source is reported by the generic contract validator
 
-    for forbidden in ("import hou", "from hou"):
-        if any(line.startswith(forbidden) for line in script_text.splitlines()):
-            errors.append("{}/{}: hou import must be lazy inside the tool function".format(skill_dir.name, tool_name))
+        try:
+            script_text = source.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            errors.append("{}/{}: could not read source file as UTF-8: {}".format(skill_dir.name, tool_name, exc))
+            continue
+
+        for forbidden in ("import hou", "from hou"):
+            if any(line.startswith(forbidden) for line in script_text.splitlines()):
+                errors.append(
+                    "{}/{}: hou import must be lazy inside the tool function".format(skill_dir.name, tool_name)
+                )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
