@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.0](https://github.com/loonghao/dcc-mcp-houdini/compare/v0.2.0...v0.3.0) (2026-05-30)
+
+
+### Features
+
+* add Houdini animation, channel, and timeline skills ([6a9afb5](https://github.com/loonghao/dcc-mcp-houdini/commit/6a9afb5c19f91fc12440810d63385a248a2cdff1))
+* add Houdini interchange skill for USD/Alembic/FBX/OBJ/native caches ([1e448b7](https://github.com/loonghao/dcc-mcp-houdini/commit/1e448b7a9c734f1f86cc3e06cacd750919addc3f))
+* add Houdini lookdev and shader-network skill ([a5a5ec4](https://github.com/loonghao/dcc-mcp-houdini/commit/a5a5ec4421cf1e1695bd6355cd8a5771f5052831))
+* add Houdini render, camera, light, and viewport capture skills ([a9b61be](https://github.com/loonghao/dcc-mcp-houdini/commit/a9b61be9f1160e6549e5e1d347d50b9be46c10a3))
+* add Houdini SOP geometry inspection and mesh operation skills ([154d917](https://github.com/loonghao/dcc-mcp-houdini/commit/154d917d4c32a94a0105b16f2d338a88864aa5ae))
+* add houdini-dev skill (dev diagnostics + UI interaction) ([5ecb178](https://github.com/loonghao/dcc-mcp-houdini/commit/5ecb1782daee24da980da002b5f57b13f556ba8c))
+* add houdini-hda-automation skill (HDA library/validation + PDG/ROP) ([d13aa51](https://github.com/loonghao/dcc-mcp-houdini/commit/d13aa51fdd3cd90e29fe39cac298557be53b4b03))
+* add houdini-pipeline skill (project + shot/package automation) ([8bcaecc](https://github.com/loonghao/dcc-mcp-houdini/commit/8bcaeccd7c3d76f45a8f89c87dad983e8838a03e))
+* add latest dcc-mcp-core integrations and agent install skill ([b25f28b](https://github.com/loonghao/dcc-mcp-houdini/commit/b25f28b1ae9219417fab2aed3a4337c47ee30e6a))
+* **lint:** validate bundled skills with the dcc-mcp-cli runtime validator ([8aa9711](https://github.com/loonghao/dcc-mcp-houdini/commit/8aa9711a377ce2cca2088c090d7393617925be5c))
+* **lint:** validate bundled skills with the dcc-mcp-cli runtime validator ([ea38f4b](https://github.com/loonghao/dcc-mcp-houdini/commit/ea38f4ba7b1f15ba2c8f7f5daf2f165af165a1b9))
+* **skills:** add Houdini parameters and node-graph skills ([#12](https://github.com/loonghao/dcc-mcp-houdini/issues/12)) ([8ef2695](https://github.com/loonghao/dcc-mcp-houdini/commit/8ef2695a5b1d03f7e415743ad4bd673654611988))
+* **skills:** add Houdini scene-edit and object-ops skills ([#11](https://github.com/loonghao/dcc-mcp-houdini/issues/11)) ([042d261](https://github.com/loonghao/dcc-mcp-houdini/commit/042d2619fa536120c7658d71c8fcf3cb3135b564))
+
+
+### Bug Fixes
+
+* remove unused imports in _qt_inspector module and tests ([5b2368d](https://github.com/loonghao/dcc-mcp-houdini/commit/5b2368d493f526cb84bd13586edaeea124744129))
+* remove unused imports in _qt_inspector module and tests ([c70b04a](https://github.com/loonghao/dcc-mcp-houdini/commit/c70b04a3375976740e92310b0ca5a91bda8d0708))
+* remove unused imports in _qt_inspector module and tests ([6abfe81](https://github.com/loonghao/dcc-mcp-houdini/commit/6abfe81953dffb8ef00ea790224e3ab0be7480ec))
+* remove unused imports in _qt_inspector module and tests ([8053afd](https://github.com/loonghao/dcc-mcp-houdini/commit/8053afd52fcf99f3dd289f6b8688a9b4761a20d6))
+
 ## [0.2.0](https://github.com/loonghao/dcc-mcp-houdini/compare/v0.1.0...v0.2.0) (2026-05-25)
 
 
