@@ -24,7 +24,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     "scene": ("houdini-scene",),
     "authoring": ("houdini-nodes", "houdini-materials", "houdini-hda"),
     "interchange": (),
-    "pipeline": ("houdini-automation",),
+    "pipeline": ("houdini-hda-automation", "houdini-automation"),
 }
 
 
