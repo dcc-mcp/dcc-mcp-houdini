@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene` | yes |
 | `authoring` | `houdini-nodes`, `houdini-materials`, `houdini-hda` | no |
 | `interchange` | _(planned: USD, FBX, Alembic)_ | no |
-| `pipeline` | `houdini-automation` | no |
+| `pipeline` | `houdini-pipeline`, `houdini-automation` | no |
 
 ## Common chains
 
@@ -19,5 +19,6 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Build SOP/OBJ network | `load_skill("houdini-nodes")` → `houdini_nodes__create_node` → `houdini_nodes__set_node_parms` → `houdini_nodes__connect_nodes` → `houdini_nodes__cook_node` |
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
+| Project + shot packaging | `load_skill("houdini-pipeline")` → `houdini_pipeline__set_project` → `houdini_pipeline__validate_scene` → `houdini_pipeline__collect_dependencies` → `houdini_pipeline__export_shot_package` |
 | File-based automation | `load_skill("houdini-automation")` → `houdini_automation__run_python_file` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
