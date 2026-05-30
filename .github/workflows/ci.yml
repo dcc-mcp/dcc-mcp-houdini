@@ -33,8 +33,12 @@ jobs:
         run: ruff check src/ tests/ tools/ packaging/
       - name: Ruff format check
         run: ruff format --check src/ tests/ tools/ packaging/
-      - name: Validate bundled skills
-        run: python tools/lint_skills.py --warnings-as-errors
+      - name: Install dcc-mcp-cli (runtime skill validator)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/install_dcc_mcp_cli.py
+      - name: Validate bundled skills (dcc-mcp-cli)
+        run: python tools/lint_skills.py --require-cli --warnings-as-errors
       - name: Python 3.7 syntax check
         run: python tools/check_py37_syntax.py src tests tools packaging
 

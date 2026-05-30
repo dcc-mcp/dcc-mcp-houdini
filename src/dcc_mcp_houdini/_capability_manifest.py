@@ -470,7 +470,7 @@ def _slugify_tool_slug(dcc_name: str, tool_name: str) -> str:
 
 
 def _is_stub(name: str) -> bool:
-    return name.startswith(_SKILL_STUB_PREFIX) or name.startswith(_GROUP_STUB_PREFIX)
+    return name.startswith((_SKILL_STUB_PREFIX, _GROUP_STUB_PREFIX))
 
 
 def _derive_skill(tool_name: str) -> Optional[str]:

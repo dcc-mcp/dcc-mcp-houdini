@@ -57,3 +57,6 @@ htmlcov/
 
 # Just
 .justfile-recipe-cmd*
+
+# Downloaded dev tools (dcc-mcp-cli binary fetched by tools/install_dcc_mcp_cli.py)
+.tools-bin/
