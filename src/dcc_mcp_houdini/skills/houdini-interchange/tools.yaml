@@ -1,0 +1,188 @@
+tools:
+  - name: probe_file
+    description: >-
+      Probe a file path: existence, size, detected format category, and whether
+      it is a supported import. Pure filesystem — no Houdini required.
+    source_file: scripts/probe_file.py
+    execution: sync
+    affinity: any
+    group: interchange-probe
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: Absolute or hip-relative path to probe.
+  - name: import_geometry
+    description: >-
+      Import a geometry/scene file (bgeo/obj/fbx/abc/usd) into a SOP network via
+      a File SOP, with explicit parent path and optional cook.
+    source_file: scripts/import_geometry.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 180
+    group: interchange-import
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, file_path]
+      properties:
+        parent_path:
+          type: string
+          description: SOP network to import into (e.g. /obj/geo1).
+        file_path:
+          type: string
+        node_name:
+          type: string
+        cook:
+          type: boolean
+          default: true
+    next-tools:
+      on-success:
+        - houdini_geometry__get_geometry_info
+  - name: export_geometry
+    description: >-
+      Export a SOP node's cooked geometry to a native/interchange file
+      (.bgeo/.geo/.obj/.ply) via Geometry.saveToFile.
+    source_file: scripts/export_geometry.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 300
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, output_path]
+      properties:
+        node_path:
+          type: string
+        output_path:
+          type: string
+        create_dirs:
+          type: boolean
+          default: true
+  - name: export_alembic
+    description: >-
+      Export a SOP stream to Alembic (.abc) via a ROP Alembic Output SOP, with
+      optional frame range and render.
+    source_file: scripts/export_alembic.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, output_path]
+      properties:
+        node_path:
+          type: string
+        output_path:
+          type: string
+        frame_range:
+          type: array
+          items: {type: number}
+          minItems: 2
+          maxItems: 3
+          description: "[start, end] or [start, end, step]."
+        render:
+          type: boolean
+          default: true
+        create_dirs:
+          type: boolean
+          default: true
+  - name: export_fbx
+    description: >-
+      Export an /obj subtree to FBX via a Filmbox FBX ROP, with optional frame
+      range and render. Reports skipped outputs and runtime limitations.
+    source_file: scripts/export_fbx.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [output_path]
+      properties:
+        output_path:
+          type: string
+        root_node:
+          type: string
+          default: /obj
+        frame_range:
+          type: array
+          items: {type: number}
+          minItems: 2
+          maxItems: 3
+        render:
+          type: boolean
+          default: true
+        create_dirs:
+          type: boolean
+          default: true
+  - name: export_usd
+    description: >-
+      Export the composed USD stage of a LOP/Solaris node to disk and report the
+      root layer, output path, frame range, and warnings.
+    source_file: scripts/export_usd.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path, output_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: LOP node whose composed stage will be exported.
+        output_path:
+          type: string
+        frame_range:
+          type: array
+          items: {type: number}
+          minItems: 2
+          maxItems: 3
+        create_dirs:
+          type: boolean
+          default: true
