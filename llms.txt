@@ -9,6 +9,12 @@ server.mcp_url  # http://127.0.0.1:8765/mcp
 dcc_mcp_houdini.stop_server()
 ```
 
+## MCP host config
+
+```json
+{"mcpServers": {"houdini": {"url": "http://127.0.0.1:8765/mcp"}}}
+```
+
 ## Progressive loading
 
 ```python
@@ -26,34 +32,45 @@ server.list_skills()
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 
-## Bundled tools
+## Bundled tools (20 skills, ~70+ tools)
 
-- `houdini_scripting__execute_python`
-- `houdini_scripting__get_session_info`
-- `houdini_scene__get_scene_info`
-- `houdini_scene__list_obj_nodes`
-- `houdini_nodes__create_node`
-- `houdini_nodes__set_node_parms`
-- `houdini_nodes__connect_nodes`
-- `houdini_nodes__cook_node`
-- `houdini_nodes__layout_children`
-- `houdini_nodes__delete_node`
-- `houdini_hda__install_hda_file`
-- `houdini_hda__list_hda_definitions`
-- `houdini_hda__execute_hda`
-- `houdini_hda__save_node_as_hda`
-- `houdini_automation__run_python_file`
-- `houdini_automation__set_frame_range`
-- `houdini_automation__save_hip_file`
-- `houdini_automation__load_hip_file`
-- `houdini_automation__build_node_chain`
+### bootstrap (default)
+- `houdini_scripting__execute_python`, `get_session_info`
+
+### scene (default)
+- `houdini_scene__get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info`
+- `houdini_scene_edit__new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box`
+
+### authoring (load on demand)
+- `houdini_nodes__create_node`, `set_node_parms`, `connect_nodes`, `cook_node`, `layout_children`, `delete_node`
+- `houdini_object_ops__rename_node`, `duplicate_node`, `parent_node`, `set_node_flags`, `set_node_lock`, `get_transform`, `set_transform`
+- `houdini_parameters__list_parms`, `get_parms`, `get_parm_templates`, `get_expression`, `set_parms`, `add_spare_parm`, `remove_spare_parm`, `set_expression`, `clear_expression`
+- `houdini_node_graph__get_connections`, `connect_input`, `disconnect_input`
+- `houdini_geometry__create_primitive`, `get_geometry_info`, `list_attributes`, `list_groups`, `get_cook_status`
+- `houdini_mesh_ops__transform_geometry`, `merge_geometry`, `blast_geometry`, `group_geometry`, `add_normals`, `triangulate_geometry`, `convert_geometry`
+- `houdini_camera_light__list_cameras`, `create_camera`, `update_camera`, `frame_view`, `get_view_state`, `create_light`, `update_light`
+- `houdini_materials__create_material`, `assign_material`
+- `houdini_lookdev__list_materials`, `list_assignments`, `get_material_parms`, `set_material_parms`, `get_shader_connections`, `connect_shader`, `disconnect_shader`, `reset_material`, `save_preset`, `list_presets`, `load_preset`, `delete_preset`
+- `houdini_hda__install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda`
+
+### interchange (load on demand)
+- `houdini_interchange__probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd`
+
+### pipeline (load on demand)
+- `houdini_render__capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`
+- `houdini_animation__get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation`
+- `houdini_hda_automation__scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain`
+- `houdini_pipeline__set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package`
+- `houdini_dev__attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action`
+- `houdini_automation__run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain`
 
 ## Skill stages
 
 - `bootstrap`: `houdini-scripting` (default loaded)
-- `scene`: `houdini-scene` (default loaded)
-- `authoring`: `houdini-nodes`, `houdini-hda`
-- `pipeline`: `houdini-automation`
+- `scene`: `houdini-scene`, `houdini-scene-edit` (partial default)
+- `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`
+- `interchange`: `houdini-interchange`
+- `pipeline`: `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`
 
 ## Dev (Windows)
 
