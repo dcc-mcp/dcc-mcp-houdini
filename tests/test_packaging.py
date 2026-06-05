@@ -30,13 +30,13 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     adapter_wheel = dist_dir / "dcc_mcp_houdini-{}-py3-none-any.whl".format(version)
     adapter_wheel.write_bytes(b"adapter")
     core_wheels = [
-        tmp_path / "dcc_mcp_core-0.17.26-cp37-cp37m-win_amd64.whl",
-        tmp_path / "dcc_mcp_core-0.17.26-cp38-abi3-win_amd64.whl",
+        tmp_path / "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl",
+        tmp_path / "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl",
     ]
     for core_wheel in core_wheels:
         core_wheel.write_bytes(b"core")
 
-    monkeypatch.setattr(pkg, "resolve_core_version", lambda min_version=pkg.MIN_CORE_VERSION: "0.17.26")
+    monkeypatch.setattr(pkg, "resolve_core_version", lambda min_version=pkg.MIN_CORE_VERSION: "0.18.2")
     monkeypatch.setattr(pkg, "download_core_wheels", lambda version, platform, dest_dir: core_wheels)
 
     zip_path = pkg.assemble("win64", dist_dir, tmp_path / "out")
@@ -58,14 +58,14 @@ def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
     pkg = _load_packaging_script()
 
     files = [
-        {"filename": "dcc_mcp_core-0.17.26-cp311-cp311-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.17.26-cp38-abi3-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.17.26-cp37-cp37m-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.17.26-cp38-abi3-manylinux_x86_64.whl"},
+        {"filename": "dcc_mcp_core-0.18.2-cp311-cp311-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.18.2-cp38-abi3-manylinux_x86_64.whl"},
     ]
     picked = pkg.pick_core_wheel_files(files, "win64")
     assert [item["filename"] for item in picked] == [
-        "dcc_mcp_core-0.17.26-cp38-abi3-win_amd64.whl",
-        "dcc_mcp_core-0.17.26-cp311-cp311-win_amd64.whl",
-        "dcc_mcp_core-0.17.26-cp37-cp37m-win_amd64.whl",
+        "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl",
+        "dcc_mcp_core-0.18.2-cp311-cp311-win_amd64.whl",
+        "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl",
     ]
