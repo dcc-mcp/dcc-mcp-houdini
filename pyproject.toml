@@ -28,10 +28,10 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.17.26: import-light public facade, DccServerOptions composition root,
-    # HostExecutionBridge, latest skill-management/search contracts, and
+    # 0.18.2+: Release Train anchor — import-light public facade,
+    # DccServerOptions composition root, HostExecutionBridge, and
     # adapter-ready diagnostics/readiness surfaces.
-    "dcc-mcp-core>=0.17.26,<1.0.0",
+    "dcc-mcp-core>=0.18.2,<1.0.0",
 ]
 
 [project.optional-dependencies]
