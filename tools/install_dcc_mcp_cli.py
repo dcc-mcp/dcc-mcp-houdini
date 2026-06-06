@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-REPO = "loonghao/dcc-mcp-core"
+REPO = "dcc-mcp/dcc-mcp-core"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_INSTALL_DIR = ROOT / ".tools-bin"
 
