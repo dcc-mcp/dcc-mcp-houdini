@@ -119,15 +119,11 @@ def create_three_point_light_rig(
         parent = get_node(hou, parent_path)
         rig = parent.createNode("null", node_name=name)
 
-        key_result = _create_rig_light(
-            rig, "{}_key".format(name), light_type, key_intensity, key_col, key_pos, key_rot
-        )
+        key_result = _create_rig_light(rig, "{}_key".format(name), light_type, key_intensity, key_col, key_pos, key_rot)
         fill_result = _create_rig_light(
             rig, "{}_fill".format(name), light_type, fill_intensity, fill_col, fill_pos, fill_rot
         )
-        rim_result = _create_rig_light(
-            rig, "{}_rim".format(name), light_type, rim_intensity, rim_col, rim_pos, rim_rot
-        )
+        rim_result = _create_rig_light(rig, "{}_rim".format(name), light_type, rim_intensity, rim_col, rim_pos, rim_rot)
 
         return skill_success(
             "Created three-point rig '{}' ({})".format(name, light_type),
