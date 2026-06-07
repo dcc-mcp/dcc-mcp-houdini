@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.1...v0.3.2) (2026-06-07)
+
+
+### Bug Fixes
+
+* **ci:** remove github.token fallback from release-please token ([96b82a1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/96b82a13fd4e812cd98ccefc36da85b10871ad63))
+
 ## [0.3.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.0...v0.3.1) (2026-06-07)
 
 
