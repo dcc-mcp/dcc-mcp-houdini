@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.0...v0.3.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* **ci:** isolate workflow_dispatch from push concurrency in release workflow ([962b44f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/962b44fbf6d40b6620c76e980f9c6547878cd1d0))
+* **ci:** isolate workflow_dispatch from push concurrency in release workflow ([3ff2b6f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3ff2b6fd541cdfd6dfbb51e592a43b91bb7a2d5f))
+* update dcc-mcp-core repo reference from loonghao to dcc-mcp org ([fdc21ee](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fdc21eea5f11f90ea97fdbc8badb82777a5a095b))
+* update README and skill compatibility to core &gt;=0.18.7, add version consistency test ([b4604de](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b4604de68ce034efa644a9307b4515d9cc8191cb))
+* update README and skill compatibility to core &gt;=0.18.7, add version consistency test ([1be87fa](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1be87faa0aea9fc30ff302ed89772f3ef9bc10c4))
+
 ## [0.3.0](https://github.com/loonghao/dcc-mcp-houdini/compare/v0.2.0...v0.3.0) (2026-05-30)
 
 
