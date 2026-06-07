@@ -6,7 +6,7 @@ description: >-
   these typed tools to query and seed geometry before falling back to custom
   scripts. For mesh edit operations (transform/merge/blast) use houdini-mesh-ops.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.7+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
