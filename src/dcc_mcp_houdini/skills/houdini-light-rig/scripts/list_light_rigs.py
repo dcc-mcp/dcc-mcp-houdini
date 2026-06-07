@@ -50,19 +50,23 @@ def list_light_rigs(parent_path: str = "/obj") -> dict:
                 # Read key parms via _light_rig_common
                 from _light_rig_common import eval_parm  # noqa: PLC0415
 
-                member_info.append({
-                    "path": light.path(),
-                    "name": light.name(),
-                    "intensity": eval_parm(light, "light_intensity"),
-                    "enabled": eval_parm(light, "light_enable"),
-                })
+                member_info.append(
+                    {
+                        "path": light.path(),
+                        "name": light.name(),
+                        "intensity": eval_parm(light, "light_intensity"),
+                        "enabled": eval_parm(light, "light_enable"),
+                    }
+                )
 
-            rigs.append({
-                "path": child.path(),
-                "name": child.name(),
-                "light_count": len(members),
-                "lights": member_info,
-            })
+            rigs.append(
+                {
+                    "path": child.path(),
+                    "name": child.name(),
+                    "light_count": len(members),
+                    "lights": member_info,
+                }
+            )
 
         return skill_success(
             "Listed {} light rig(s)".format(len(rigs)),

@@ -126,9 +126,7 @@ def aim_light_at_object(
             applied=applied,
         )
     except Exception as exc:
-        return skill_exception(
-            exc, message="Failed to aim light '{}' at '{}'".format(light_path, target_path)
-        )
+        return skill_exception(exc, message="Failed to aim light '{}' at '{}'".format(light_path, target_path))
 
 
 @skill_entry

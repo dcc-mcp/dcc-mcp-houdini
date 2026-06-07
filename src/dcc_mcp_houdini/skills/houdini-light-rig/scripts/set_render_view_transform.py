@@ -18,6 +18,7 @@ def _get_available_transforms() -> list:
     """Try to read available OCIO view transforms from the active config."""
     try:
         import PyOpenColorIO as OCIO  # noqa: PLC0415
+
         config = OCIO.GetCurrentConfig()
         return [str(vt.getName()) for vt in config.getViews()]
     except Exception:  # noqa: BLE001
@@ -28,6 +29,7 @@ def _get_available_displays() -> list:
     """Try to read available OCIO display devices."""
     try:
         import PyOpenColorIO as OCIO  # noqa: PLC0415
+
         config = OCIO.GetCurrentConfig()
         return [str(d.getName()) for d in config.getDisplays()]
     except Exception:  # noqa: BLE001
@@ -130,9 +132,7 @@ def set_render_view_transform(
         result = _apply_houdini_color_settings(view_transform, display_device, color_space)
 
         return skill_success(
-            "Set render view transform to '{}' ({})".format(
-                view_transform, result["applied"].get("method", "unknown")
-            ),
+            "Set render view transform to '{}' ({})".format(view_transform, result["applied"].get("method", "unknown")),
             applied=result["applied"],
             available_transforms=available_transforms,
             available_displays=available_displays,
