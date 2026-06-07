@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda` | no |
 | `interchange` | `houdini-interchange` | no |
-| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation` | no |
+| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
 ## Common chains
 
@@ -26,6 +26,9 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Edit a mesh procedurally | `load_skill("houdini-mesh-ops")` → `houdini_mesh_ops__transform_geometry` / `merge_geometry` / `blast_geometry` / `group_geometry` / `add_normals` / `triangulate_geometry` / `convert_geometry` → `houdini_geometry__get_cook_status` |
 | Set up cameras & lights | `load_skill("houdini-camera-light")` → `houdini_camera_light__create_camera` → `houdini_camera_light__create_light` → `houdini_camera_light__frame_view` |
 | Render & verify | `load_skill("houdini-render")` → `houdini_render__set_render_settings` → `houdini_render__capture_viewport` → `houdini_render__render_rop` |
+| Texture bake (AO) | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__bake_ambient_occlusion` |
+| Texture bake (lighting) | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__bake_lighting` |
+| Transfer high→low maps | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__transfer_maps` |
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
 | Animate & bake | `load_skill("houdini-animation")` → `houdini_animation__set_timeline` → `houdini_animation__set_keyframe` → `houdini_animation__get_keyframes` → `houdini_animation__bake_channels` / `houdini_animation__cache_simulation` |
 | Lookdev & shader networks | `load_skill("houdini-lookdev")` → `houdini_lookdev__list_materials` → `houdini_lookdev__get_material_parms` → `houdini_lookdev__set_material_parms` → `houdini_lookdev__save_preset` / `houdini_lookdev__load_preset` |
