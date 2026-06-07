@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -66,13 +65,23 @@ def list_bake_targets(
             targets = [t for t in targets if t.get("has_uvs", False)]
 
         bake_ready = [t for t in targets if t.get("bake_ready", False)]
-        methods_info = {k: v for k, v in methods.items()
-                        if k in ("labs_maps_baker_available", "bake_texture_rop_available",
-                                 "available_methods", "recommended", "recommendations")}
+        methods_info = {
+            k: v
+            for k, v in methods.items()
+            if k
+            in (
+                "labs_maps_baker_available",
+                "bake_texture_rop_available",
+                "available_methods",
+                "recommended",
+                "recommendations",
+            )
+        }
 
         return skill_success(
             "Found {} bake target(s) ({} bake-ready)".format(
-                len(targets), len(bake_ready),
+                len(targets),
+                len(bake_ready),
             ),
             targets=targets,
             bake_ready_count=len(bake_ready),
