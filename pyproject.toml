@@ -28,10 +28,9 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.18.2+: Release Train anchor — import-light public facade,
-    # DccServerOptions composition root, HostExecutionBridge, and
-    # adapter-ready diagnostics/readiness surfaces.
-    "dcc-mcp-core>=0.18.7,<1.0.0",
+    # 0.18.9: Release Train anchor — marketplace shared crate,
+    # gateway election disabled for probe server, ADR-010 docs.
+    "dcc-mcp-core>=0.18.9,<1.0.0",
 ]
 
 [project.optional-dependencies]
