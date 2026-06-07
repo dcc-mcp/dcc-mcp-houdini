@@ -104,9 +104,7 @@ def _resolve_download_url(tag: Optional[str], asset_name: str) -> str:
         with urllib.request.urlopen(_request(releases_url), timeout=60) as resp:
             releases = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:  # pragma: no cover - network failure path
-        raise SystemExit(
-            f"failed to query {releases_url}: HTTP {exc.code} {exc.reason}"
-        ) from exc
+        raise SystemExit(f"failed to query {releases_url}: HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:  # pragma: no cover - network failure path
         raise SystemExit(f"failed to query {releases_url}: {exc.reason}") from exc
 
@@ -125,13 +123,11 @@ def _resolve_download_url(tag: Optional[str], asset_name: str) -> str:
             return url
 
     available_summary = "\n".join(
-        f"  {r.get('tag_name', '?')!r}: "
-        f"{', '.join(sorted(a.get('name', '?') for a in r.get('assets', [])))}"
+        f"  {r.get('tag_name', '?')!r}: {', '.join(sorted(a.get('name', '?') for a in r.get('assets', [])))}"
         for r in releases
     )
     raise SystemExit(
-        f"asset {asset_name!r} not found in any of the {len(releases)} most recent releases.\n"
-        f"{available_summary}"
+        f"asset {asset_name!r} not found in any of the {len(releases)} most recent releases.\n{available_summary}"
     )
 
 
