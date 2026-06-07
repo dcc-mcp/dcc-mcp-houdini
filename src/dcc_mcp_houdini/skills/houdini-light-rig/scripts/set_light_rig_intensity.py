@@ -68,19 +68,19 @@ def set_light_rig_intensity(
                 else:
                     new_val = float(intensity)
                 if set_parm_if_exists(light, "light_intensity", new_val):
-                    updated.append({
-                        "path": light.path(),
-                        "name": light.name(),
-                        "intensity": new_val,
-                    })
+                    updated.append(
+                        {
+                            "path": light.path(),
+                            "name": light.name(),
+                            "intensity": new_val,
+                        }
+                    )
             except Exception as exc:
                 logger.warning("Could not set intensity on %s: %s", light.path(), exc)
 
         mode = "multiplied" if multiply else "set"
         return skill_success(
-            "{} intensity on {} light(s) in rig '{}'".format(
-                mode.capitalize(), len(updated), rig.name()
-            ),
+            "{} intensity on {} light(s) in rig '{}'".format(mode.capitalize(), len(updated), rig.name()),
             rig_group=rig_group,
             updated_lights=updated,
             light_count=len(updated),

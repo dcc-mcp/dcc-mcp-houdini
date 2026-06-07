@@ -60,24 +60,28 @@ def group_lights(
             try:
                 light = get_node(hou, light_path)
                 if not is_light_node(light):
-                    skipped.append({
-                        "path": light_path,
-                        "reason": "Not an hlight node (type: {})".format(
-                            light.type().name()
-                        ),
-                    })
+                    skipped.append(
+                        {
+                            "path": light_path,
+                            "reason": "Not an hlight node (type: {})".format(light.type().name()),
+                        }
+                    )
                     continue
                 # Set parent to the rig null
                 light.setParent(rig)
-                grouped.append({
-                    "path": light.path(),
-                    "name": light.name(),
-                })
+                grouped.append(
+                    {
+                        "path": light.path(),
+                        "name": light.name(),
+                    }
+                )
             except Exception as exc:
-                skipped.append({
-                    "path": light_path,
-                    "reason": str(exc),
-                })
+                skipped.append(
+                    {
+                        "path": light_path,
+                        "reason": str(exc),
+                    }
+                )
 
         warnings = None
         if skipped:
