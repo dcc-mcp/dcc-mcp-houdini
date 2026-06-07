@@ -59,13 +59,13 @@ def test_readme_core_floor_matches_pyproject() -> None:
 
 
 def test_skill_compatibility_runtime_floor() -> None:
-    """Every SKILL.md compatibility string must declare dcc-mcp-core >= current floor."""
+    """Every SKILL.md compatibility string must declare dcc-mcp-core exactly at current floor."""
     expected_floor = Version(_extract_pyproject_core_floor())
     for skill_md in sorted(SKILLS_DIR.glob("*/SKILL.md")):
         text = skill_md.read_text(encoding="utf-8")
         m = re.search(r"dcc-mcp-core\s+([0-9]+\.[0-9]+\.[0-9]+)", text)
         assert m, f"{skill_md.relative_to(ROOT)}: missing dcc-mcp-core compatibility"
         declared = Version(m.group(1))
-        assert declared >= expected_floor, (
-            f"{skill_md.relative_to(ROOT)}: declares dcc-mcp-core {declared}, but project floor is >= {expected_floor}"
+        assert declared == expected_floor, (
+            f"{skill_md.relative_to(ROOT)}: declares dcc-mcp-core {declared}, but project floor is {expected_floor}"
         )
