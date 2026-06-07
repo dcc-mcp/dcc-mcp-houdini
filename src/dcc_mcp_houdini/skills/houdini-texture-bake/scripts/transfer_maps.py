@@ -16,8 +16,6 @@ if _SCRIPT_DIR not in sys.path:
 from _texture_bake_common import (  # noqa: E402
     check_uvs,
     detect_bake_methods,
-    get_node,
-    node_summary,
     set_parm_if_exists,
     validate_map_types,
 )
@@ -26,10 +24,17 @@ _VALID_TRANSFER_MODES = ("raytrace", "cage", "projection")
 _DEFAULT_TRANSFER_MAP_TYPES = ["normals"]
 
 
-def _transfer_via_labs(hou, source: str, target: str, map_types: List[str],
-                       output_dir: str, resolution: List[int],
-                       file_format: str, transfer_mode: str,
-                       search_distance: float) -> dict:
+def _transfer_via_labs(
+    hou,
+    source: str,
+    target: str,
+    map_types: List[str],
+    output_dir: str,
+    resolution: List[int],
+    file_format: str,
+    transfer_mode: str,
+    search_distance: float,
+) -> dict:
     """Transfer maps using Labs Maps Baker with high-res source input."""
     parent = hou.node("/out")
     if parent is None:
@@ -56,7 +61,10 @@ def _transfer_via_labs(hou, source: str, target: str, map_types: List[str],
             out_file = os.path.join(
                 output_dir,
                 "{}_from_{}_{}.{}".format(
-                    target.rsplit("/", 1)[-1], source.rsplit("/", 1)[-1], mt, file_format,
+                    target.rsplit("/", 1)[-1],
+                    source.rsplit("/", 1)[-1],
+                    mt,
+                    file_format,
                 ),
             )
             set_parm_if_exists(baker, "picture", out_file)
@@ -102,10 +110,17 @@ def _toggle_transfer_maps(baker, map_types: List[str]) -> None:
                 break
 
 
-def _transfer_via_rop(hou, source: str, target: str, map_types: List[str],
-                      output_dir: str, resolution: List[int],
-                      file_format: str, transfer_mode: str,
-                      search_distance: float) -> dict:
+def _transfer_via_rop(
+    hou,
+    source: str,
+    target: str,
+    map_types: List[str],
+    output_dir: str,
+    resolution: List[int],
+    file_format: str,
+    transfer_mode: str,
+    search_distance: float,
+) -> dict:
     """Transfer maps using Bake Texture ROP with high-res source plugged into second input."""
     parent = hou.node("/out")
     if parent is None:
@@ -143,7 +158,10 @@ def _transfer_via_rop(hou, source: str, target: str, map_types: List[str],
             out_file = os.path.join(
                 output_dir,
                 "{}_from_{}_{}.{}".format(
-                    target.rsplit("/", 1)[-1], source.rsplit("/", 1)[-1], mt, file_format,
+                    target.rsplit("/", 1)[-1],
+                    source.rsplit("/", 1)[-1],
+                    mt,
+                    file_format,
                 ),
             )
             set_parm_if_exists(rop, "picture", out_file)
@@ -230,12 +248,28 @@ def transfer_maps(
 
         if methods["labs_maps_baker_available"]:
             return _transfer_via_labs(
-                hou, source, target, valid, output_dir, res, file_format, transfer_mode, search_distance,
+                hou,
+                source,
+                target,
+                valid,
+                output_dir,
+                res,
+                file_format,
+                transfer_mode,
+                search_distance,
             )
 
         if methods["bake_texture_rop_available"]:
             return _transfer_via_rop(
-                hou, source, target, valid, output_dir, res, file_format, transfer_mode, search_distance,
+                hou,
+                source,
+                target,
+                valid,
+                output_dir,
+                res,
+                file_format,
+                transfer_mode,
+                search_distance,
             )
 
         return skill_error(

@@ -7,16 +7,32 @@ common utilities for all bake scripts.
 from __future__ import annotations
 
 import os
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Tuple
 
 # Map-type vocabulary shared across bake_textures and transfer_maps.
 # Labs Maps Baker supports ~20+ types; Bake Texture ROP supports a subset.
 _MAP_TYPE_VOCABULARY = {
-    "normals", "cavity", "curvature", "diffuse", "roughness",
-    "metallic", "thickness", "world_position", "opacity",
-    "ambient_occlusion", "displacement", "height", "emission",
-    "scattering", "transmission", "basecolor", "specular",
-    "subsurface", "anisotropy", "coat", "sheen",
+    "normals",
+    "cavity",
+    "curvature",
+    "diffuse",
+    "roughness",
+    "metallic",
+    "thickness",
+    "world_position",
+    "opacity",
+    "ambient_occlusion",
+    "displacement",
+    "height",
+    "emission",
+    "scattering",
+    "transmission",
+    "basecolor",
+    "specular",
+    "subsurface",
+    "anisotropy",
+    "coat",
+    "sheen",
 }
 
 
@@ -96,11 +112,7 @@ def detect_bake_methods(hou: Any) -> dict:
         "bake_texture_rop_available": rop,
         "available_methods": methods,
         "recommended": "labs_maps_baker" if labs else ("bake_texture_rop" if rop else "cop_fallback"),
-        "recommendations": (
-            []
-            if labs
-            else ["Install sidefx_labs for Labs Maps Baker (richest map-type support)."]
-        ),
+        "recommendations": ([] if labs else ["Install sidefx_labs for Labs Maps Baker (richest map-type support)."]),
     }
 
 
@@ -211,8 +223,9 @@ def create_or_get_bake_rop(hou: Any, rop_path: str) -> Any:
     )
 
 
-def write_file_list(output_dir: str, prefix: str, file_format: str,
-                    object_names: List[str], map_types: List[str]) -> List[str]:
+def write_file_list(
+    output_dir: str, prefix: str, file_format: str, object_names: List[str], map_types: List[str]
+) -> List[str]:
     """Generate expected output file paths for a multi-map multi-object bake."""
     files = []
     for obj_name in object_names:

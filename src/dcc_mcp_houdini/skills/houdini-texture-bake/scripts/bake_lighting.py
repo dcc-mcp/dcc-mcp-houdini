@@ -20,13 +20,20 @@ from _texture_bake_common import (  # noqa: E402
     set_parm_if_exists,
 )
 
-
 _VALID_RENDERERS = ("mantra", "karma")
 
 
-def _bake_lighting_via_rop(hou, rop, objects: List[str], camera: Optional[str],
-                           output_path: str, resolution: List[int],
-                           samples: int, renderer: str, bake_shadows: bool) -> dict:
+def _bake_lighting_via_rop(
+    hou,
+    rop,
+    objects: List[str],
+    camera: Optional[str],
+    output_path: str,
+    resolution: List[int],
+    samples: int,
+    renderer: str,
+    bake_shadows: bool,
+) -> dict:
     """Configure and execute a Bake Texture ROP for lighting."""
     obj_str = " ".join(objects)
 
@@ -105,7 +112,15 @@ def bake_lighting(
 
         rop = create_or_get_bake_rop(hou, rop_path)
         return _bake_lighting_via_rop(
-            hou, rop, geo, camera, out, res, samples, renderer, bake_shadows,
+            hou,
+            rop,
+            geo,
+            camera,
+            out,
+            res,
+            samples,
+            renderer,
+            bake_shadows,
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to bake lighting")
