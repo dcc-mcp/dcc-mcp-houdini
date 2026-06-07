@@ -54,11 +54,11 @@ When adding or changing bundled skills, load the project skill:
 |-------|-------|
 | `houdini-scripting` | `execute_python`, `get_session_info` |
 
-### scene stage (default loaded)
-| Skill | Tools |
-|-------|-------|
-| `houdini-scene` | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` |
-| `houdini-scene-edit` | `new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box` |
+### scene stage (partial default — `houdini-scene` only)
+| Skill | Tools | Load |
+|-------|-------|------|
+| `houdini-scene` | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` | default |
+| `houdini-scene-edit` | `new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box` | on demand |
 
 ### authoring stage (load on demand)
 | Skill | Tools |
