@@ -70,8 +70,7 @@ def save_export_preset(
             if rop_node is None:
                 return skill_error(
                     "No ROP node found for source: {}".format(source_node_path),
-                    "Specify rop_node_path explicitly or ensure a ROP in /out "
-                    "references this source node.",
+                    "Specify rop_node_path explicitly or ensure a ROP in /out references this source node.",
                 )
         else:
             rop_node = find_rop_in_out(hou)
