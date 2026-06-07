@@ -6,7 +6,7 @@ description: >-
   triangulate, and convert. Each tool wires the new node into the network and
   returns its path for chaining. Use with houdini-geometry for inspection.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.7+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
