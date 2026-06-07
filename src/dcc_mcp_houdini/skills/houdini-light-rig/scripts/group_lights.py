@@ -15,7 +15,6 @@ if _SCRIPT_DIR not in sys.path:
 from _light_rig_common import (  # noqa: E402
     get_node,
     is_light_node,
-    node_summary,
 )
 
 
