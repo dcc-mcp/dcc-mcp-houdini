@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.4.1...v0.5.0) (2026-06-07)
+
+
+### Features
+
+* add houdini-texture-bake skill with 5 typed bake tools ([78c1fc0](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/78c1fc0ca239fedcd383fc31abb499e5858ebb86))
+
+
+### Bug Fixes
+
+* **ci:** apply ruff formatting to install_dcc_mcp_cli.py ([9817d70](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9817d704910d2075def7f7572373bc09d60876f3))
+* **ci:** fallback through recent releases when latest lacks CLI binary ([66c09d6](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/66c09d68ead7950656e9ef04dfca15e1c4ed2bf8))
+* **ci:** fix import sorting in test_agent_instruction_files.py ([279360d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/279360d4e20aef92d47ac146dc1ba1f05961f492))
+* lint errors in houdini-texture-bake skill scripts ([bb5d646](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bb5d64677a812d6d69aeacd5f7751ad0e2dda0b2))
+* review feedback — rebase, remove redundant baker_available, add tests ([38ac832](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/38ac8323e63dd2316406cb90c645aa8224949811))
+
 ## [0.4.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.4.0...v0.4.1) (2026-06-07)
 
 
