@@ -183,13 +183,7 @@ def bake_ambient_occlusion(
         if methods["labs_maps_baker_available"]:
             return _bake_ao_via_labs(hou, geo, out, res, samples, max_distance)
 
-        baker_available = any(
-            t in ("baker::2.0", "game_simple_baker", "bake_texture")
-            for t in hou.nodeType(hou.ropNodeTypeCategory()).installedTypes()
-            if hasattr(hou.nodeType(hou.ropNodeTypeCategory()), "installedTypes")
-        )
-
-        if methods["bake_texture_rop_available"] or baker_available:
+        if methods["bake_texture_rop_available"]:
             try:
                 rop = create_or_get_bake_rop(hou, rop_path)
                 return _bake_ao_via_rop(hou, rop, geo, out, res, samples, max_distance)
