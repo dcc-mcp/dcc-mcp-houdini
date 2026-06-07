@@ -11,6 +11,7 @@ from packaging.version import Version
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 PACKAGING_SCRIPT = ROOT / "packaging" / "assemble_houdini_package.py"
+README = ROOT / "README.md"
 SKILLS_DIR = ROOT / "src" / "dcc_mcp_houdini" / "skills"
 
 
@@ -30,6 +31,14 @@ def _extract_packaging_min_core_version() -> str:
     return m.group(1).strip()
 
 
+def _extract_readme_core_floor() -> str:
+    text = README.read_text(encoding="utf-8")
+    m = re.search(r"dcc-mcp-core\s*>=\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
+    if not m:
+        raise RuntimeError("Could not find dcc-mcp-core requirement in README.md")
+    return m.group(1).strip()
+
+
 def test_pyproject_and_packaging_core_floor_match() -> None:
     """pyproject.toml dep floor and packaging MIN_CORE_VERSION must be identical."""
     pyproject_floor = _extract_pyproject_core_floor()
@@ -37,6 +46,15 @@ def test_pyproject_and_packaging_core_floor_match() -> None:
     assert pyproject_floor == packaging_floor, (
         f"Mismatch: pyproject.toml requires >= {pyproject_floor}, "
         f"but packaging script pins MIN_CORE_VERSION = {packaging_floor}"
+    )
+
+
+def test_readme_core_floor_matches_pyproject() -> None:
+    """README dependency floor must stay aligned with pyproject.toml."""
+    pyproject_floor = _extract_pyproject_core_floor()
+    readme_floor = _extract_readme_core_floor()
+    assert readme_floor == pyproject_floor, (
+        f"Mismatch: README.md says >= {readme_floor}, but pyproject.toml requires >= {pyproject_floor}"
     )
 
 
