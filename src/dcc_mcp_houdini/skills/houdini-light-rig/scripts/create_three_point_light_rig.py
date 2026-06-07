@@ -16,13 +16,12 @@ from _light_rig_common import (  # noqa: E402
     LIGHT_TYPES,
     apply_transform,
     get_node,
-    node_summary,
     set_parm_if_exists,
 )
 
 
 def _create_rig_light(
-    parent: "hou.Node",
+    parent: "hou.Node",  # noqa: F821
     name: str,
     light_type: str,
     intensity: float,

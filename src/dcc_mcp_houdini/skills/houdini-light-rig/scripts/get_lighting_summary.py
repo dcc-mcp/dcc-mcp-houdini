@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
-
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -57,7 +55,7 @@ def get_lighting_summary(parent_path: str = "/obj") -> dict:
                     "path": child.path(),
                     "name": child.name(),
                     "light_count": len(rig_lights),
-                    "lights": [l["path"] for l in rig_lights],
+                    "lights": [lt["path"] for lt in rig_lights],
                 })
             elif is_light_node(child):
                 parms = get_light_parms(child)
@@ -65,8 +63,8 @@ def get_lighting_summary(parent_path: str = "/obj") -> dict:
                 lights.append(parms)
 
         # Collect standalone lights (not in a rig)
-        standalone = [l for l in lights if l.get("rig_parent") is None]
-        rigged = [l for l in lights if l.get("rig_parent") is not None]
+        standalone = [lt for lt in lights if lt.get("rig_parent") is None]
+        rigged = [lt for lt in lights if lt.get("rig_parent") is not None]
 
         totals = {
             "total_lights": len(lights),
@@ -77,9 +75,9 @@ def get_lighting_summary(parent_path: str = "/obj") -> dict:
 
         # Aggregate light types
         type_counts: dict = {}
-        for l in lights:
-            lt = l.get("type", "unknown")
-            type_counts[lt] = type_counts.get(lt, 0) + 1
+        for light in lights:
+            light_type = light.get("type", "unknown")
+            type_counts[light_type] = type_counts.get(light_type, 0) + 1
         totals["by_type"] = type_counts
 
         return skill_success(
