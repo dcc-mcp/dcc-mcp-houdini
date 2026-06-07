@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.4.0...v0.4.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* update version references to dcc-mcp-core 0.18.9 ([170bf4d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/170bf4d698864183ede6f95e58e05c61e386f439))
+
 ## [0.4.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.3...v0.4.0) (2026-06-07)
 
 
