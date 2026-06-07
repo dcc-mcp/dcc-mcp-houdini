@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.3...v0.4.0) (2026-06-07)
+
+
+### Features
+
+* add houdini-export-preset skill with 4 typed tools ([1ff5c0f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1ff5c0fe805079592feb0a18b83208215ef4bbf4))
+* add houdini-light-rig skill (3-point lighting, HDRI, area softbox) ([53b5104](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/53b5104c36f0d4bcf4543bea9644c8862bbc5dfd))
+
+
+### Bug Fixes
+
+* auto-format with ruff format in houdini-light-rig scripts ([74c1cbc](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/74c1cbc3ade72106c3b2b676e5d5f57190d1486f))
+* resolve Ruff lint errors and SKILL.md compatibility in houdini-light-rig ([6570d70](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6570d70275bb9295aeefa25ec34fec609a13d52a))
+* ruff format and dcc-mcp-core compatibility version in export-preset SKILL.md ([a13b92c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a13b92c61be2e822467f1ba0b81b4727b2abd4c1))
+
 ## [0.3.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.2...v0.3.3) (2026-06-07)
 
 
