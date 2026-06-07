@@ -21,18 +21,22 @@ from _texture_bake_common import (  # noqa: E402
     collect_geometry,
     create_or_get_bake_rop,
     detect_bake_methods,
-    node_summary,
     set_parm_if_exists,
     validate_map_types,
-    write_file_list,
 )
 
 _DEFAULT_MAP_TYPES = ["normals", "cavity", "curvature", "diffuse", "ambient_occlusion"]
 
 
-def _bake_via_labs(hou, objects: List[str], output_path: str,
-                   resolution: List[int], map_types: List[str],
-                   uv_layer: str, file_format: str) -> dict:
+def _bake_via_labs(
+    hou,
+    objects: List[str],
+    output_path: str,
+    resolution: List[int],
+    map_types: List[str],
+    uv_layer: str,
+    file_format: str,
+) -> dict:
     """Bake multi-map via Labs Maps Baker."""
     parent = hou.node("/out")
     if parent is None:
@@ -56,8 +60,9 @@ def _bake_via_labs(hou, objects: List[str], output_path: str,
         except TypeError:
             baker.render()
 
-        written = [f for f in _generate_expected_files(objects, output_path, map_types, file_format)
-                   if os.path.isfile(f)]
+        written = [
+            f for f in _generate_expected_files(objects, output_path, map_types, file_format) if os.path.isfile(f)
+        ]
 
         return skill_success(
             "Baked {} map type(s) via Labs Maps Baker".format(len(map_types)),
@@ -109,8 +114,7 @@ def _toggle_labs_maps(baker, map_types: List[str]) -> None:
                 break
 
 
-def _generate_expected_files(objects: List[str], output_base: str,
-                             map_types: List[str], file_format: str) -> List[str]:
+def _generate_expected_files(objects: List[str], output_base: str, map_types: List[str], file_format: str) -> List[str]:
     """Generate expected output file paths based on Labs Maps Baker naming."""
     base_no_ext = os.path.splitext(output_base)[0]
     files = []
@@ -121,10 +125,16 @@ def _generate_expected_files(objects: List[str], output_base: str,
     return files
 
 
-def _bake_via_rop(hou, objects: List[str], rop_path: str,
-                  output_path: str, resolution: List[int],
-                  map_types: List[str], uv_layer: str,
-                  file_format: str) -> dict:
+def _bake_via_rop(
+    hou,
+    objects: List[str],
+    rop_path: str,
+    output_path: str,
+    resolution: List[int],
+    map_types: List[str],
+    uv_layer: str,
+    file_format: str,
+) -> dict:
     """Bake multi-map via Bake Texture ROP (one ROP per map type)."""
     written = []
     obj_str = " ".join(objects)
@@ -204,7 +214,7 @@ def bake_textures(
     if invalid:
         return skill_error(
             "Invalid map types: {}".format(invalid),
-            "Supported types: {}".format(sorted(set(t for t in types))),
+            "Supported types: {}".format(sorted(set(types))),
         )
     if not valid:
         return skill_error("No valid map types provided", "Provide at least one valid map type")

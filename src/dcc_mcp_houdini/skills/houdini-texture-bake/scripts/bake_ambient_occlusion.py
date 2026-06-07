@@ -22,8 +22,9 @@ from _texture_bake_common import (  # noqa: E402
 )
 
 
-def _bake_ao_via_rop(hou, rop, objects: List[str], output_path: str,
-                     resolution: List[int], samples: int, max_distance: float) -> dict:
+def _bake_ao_via_rop(
+    hou, rop, objects: List[str], output_path: str, resolution: List[int], samples: int, max_distance: float
+) -> dict:
     """Configure and execute a Bake Texture ROP for ambient occlusion."""
     obj_str = " ".join(objects)
 
@@ -58,8 +59,9 @@ def _bake_ao_via_rop(hou, rop, objects: List[str], output_path: str,
     )
 
 
-def _bake_ao_via_labs(hou, objects: List[str], output_path: str,
-                      resolution: List[int], samples: int, max_distance: float) -> dict:
+def _bake_ao_via_labs(
+    hou, objects: List[str], output_path: str, resolution: List[int], samples: int, max_distance: float
+) -> dict:
     """Bake AO using Labs Maps Baker node."""
     parent = hou.node("/out")
     if parent is None:
@@ -100,8 +102,7 @@ def _bake_ao_via_labs(hou, objects: List[str], output_path: str,
             pass
 
 
-def _bake_ao_via_cop(hou, objects: List[str], output_path: str,
-                     resolution: List[int], samples: int) -> dict:
+def _bake_ao_via_cop(hou, objects: List[str], output_path: str, resolution: List[int], samples: int) -> dict:
     """Bake AO using a COP network as last-resort fallback.
 
     Creates an occlusion COP, attaches geometry, and renders a single frame.
@@ -178,14 +179,15 @@ def bake_ambient_occlusion(
 
         res = resolution or [1024, 1024]
         out = output_path or "$HIP/ao.$F4.exr"
-        methods_info = {k: v for k, v in methods.items() if k in ("labs_maps_baker_available", "bake_texture_rop_available", "available_methods", "recommendations")}
 
         if methods["labs_maps_baker_available"]:
             return _bake_ao_via_labs(hou, geo, out, res, samples, max_distance)
 
-        baker_available = any(t in ("baker::2.0", "game_simple_baker", "bake_texture")
-                             for t in hou.nodeType(hou.ropNodeTypeCategory()).installedTypes()
-                             if hasattr(hou.nodeType(hou.ropNodeTypeCategory()), "installedTypes"))
+        baker_available = any(
+            t in ("baker::2.0", "game_simple_baker", "bake_texture")
+            for t in hou.nodeType(hou.ropNodeTypeCategory()).installedTypes()
+            if hasattr(hou.nodeType(hou.ropNodeTypeCategory()), "installedTypes")
+        )
 
         if methods["bake_texture_rop_available"] or baker_available:
             try:
