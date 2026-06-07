@@ -1,0 +1,224 @@
+tools:
+  - name: bake_ambient_occlusion
+    description: >-
+      Bake ambient occlusion to a texture using Labs Maps Baker, Bake Texture
+      ROP, or COP-based fallback. Returns written_files, bake method used,
+      and available methods detected.
+    source_file: scripts/bake_ambient_occlusion.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 900
+    group: bake-ao
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        rop_path:
+          type: string
+          description: "ROP node path for the bake (e.g. /out/bake_ao). Created if missing."
+        objects:
+          type: array
+          items: {type: string}
+          description: "Geometry node paths to bake. Defaults to all renderable OBJ nodes."
+        output_path:
+          type: string
+          description: "Output image path. Defaults to $HIP/ao.$F4.exr."
+        resolution:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+          description: "[width, height]. Default: [1024, 1024]."
+        samples:
+          type: integer
+          default: 64
+          description: "AO ray samples."
+        max_distance:
+          type: number
+          default: 0.0
+          description: "Maximum ray distance (0 = unlimited)."
+
+  - name: bake_lighting
+    description: >-
+      Bake full scene lighting (diffuse + shadows) via Mantra or Karma
+      render-to-texture using a Bake Texture ROP. Async with 900s timeout.
+    source_file: scripts/bake_lighting.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 900
+    group: bake-lighting
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        rop_path:
+          type: string
+          description: "ROP node path (e.g. /out/bake_light). Created if missing."
+        camera:
+          type: string
+          description: "Camera path for lighting bake (e.g. /obj/rendercam)."
+        objects:
+          type: array
+          items: {type: string}
+          description: "Geometry to bake. Defaults to all renderable OBJ nodes."
+        output_path:
+          type: string
+          description: "Output path. Default: $HIP/lighting.$F4.exr."
+        resolution:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+        samples:
+          type: integer
+          default: 4
+          description: "Pixel samples."
+        renderer:
+          type: string
+          default: "mantra"
+          description: "Renderer: 'mantra' or 'karma'."
+        bake_shadows:
+          type: boolean
+          default: true
+
+  - name: bake_textures
+    description: >-
+      Bake multi-map textures (diffuse, normals, cavity, curvature, roughness,
+      metallic, etc.) via Labs Maps Baker or Bake Texture ROP. Async, 1800s
+      timeout for large batches.
+    source_file: scripts/bake_textures.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 1800
+    group: bake-textures
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rop_path]
+      properties:
+        rop_path:
+          type: string
+          description: "ROP node path (e.g. /out/bake_maps). Created if missing."
+        objects:
+          type: array
+          items: {type: string}
+          description: "Geometry to bake. Defaults to all renderable OBJ nodes."
+        output_path:
+          type: string
+          description: "Output base path (map type suffix appended)."
+        resolution:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+          description: "[width, height]."
+        map_types:
+          type: array
+          items: {type: string}
+          description: "Map types to bake: normals, cavity, curvature, diffuse, roughness, metallic, thickness, world_position, opacity, ambient_occlusion, etc."
+        uv_layer:
+          type: string
+          default: "uv"
+          description: "Name of the UV attribute to use for baking."
+        file_format:
+          type: string
+          default: "exr"
+
+  - name: list_bake_targets
+    description: >-
+      Scan the scene for bake-compatible geometry nodes. Reports node path,
+      type, primitive count, has_uvs status, UV layer names, and bake-ready
+      flag. Read-only, sync.
+    source_file: scripts/list_bake_targets.py
+    execution: sync
+    affinity: main
+    group: bake-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        node_type_filter:
+          type: string
+          default: "obj"
+          description: "Node type to scan: 'obj', 'sop', or 'all'."
+        require_uvs:
+          type: boolean
+          default: false
+          description: "Only return nodes that have UV attributes."
+
+  - name: transfer_maps
+    description: >-
+      Transfer texture maps (normals, displacement, diffuse, AO) from a
+      high-resolution source to a low-resolution target mesh using Labs Maps
+      Baker with high-res source input or raytrace/cage fallback. Async,
+      1200s timeout.
+    source_file: scripts/transfer_maps.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 1200
+    group: bake-transfer
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [source, target]
+      properties:
+        source:
+          type: string
+          description: "High-resolution source geometry path."
+        target:
+          type: string
+          description: "Low-resolution target geometry path (must have UVs)."
+        map_types:
+          type: array
+          items: {type: string}
+          description: "Map types: normals, displacement, diffuse, ambient_occlusion. Default: ['normals']."
+        output_dir:
+          type: string
+          default: "/tmp"
+          description: "Output directory for baked images."
+        resolution:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+        file_format:
+          type: string
+          default: "png"
+        transfer_mode:
+          type: string
+          default: "raytrace"
+          description: "Transfer mode: 'raytrace', 'cage', or 'projection'."
+        search_distance:
+          type: number
+          default: 0.1
+          description: "Ray search distance when transfer_mode is 'raytrace'."
