@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.2...v0.3.3) (2026-06-07)
+
+
+### Documentation
+
+* fix houdini-scene-edit load mode in AGENTS.md/README.md ([9f237d7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9f237d72248ff06b07d85236ce42e8fdbdd323e5))
+* update AGENTS.md/README.md/llms.txt with all 20 skills, add CLAUDE.md and GEMINI.md ([b11ba26](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b11ba2631050d550339306009e903832ebe4d6c5))
+* update AGENTS.md/README.md/llms.txt with all 20 skills, add CLAUDE.md/GEMINI.md ([#37](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/37)) ([b11ba26](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b11ba2631050d550339306009e903832ebe4d6c5))
+
 ## [0.3.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.1...v0.3.2) (2026-06-07)
 
 
