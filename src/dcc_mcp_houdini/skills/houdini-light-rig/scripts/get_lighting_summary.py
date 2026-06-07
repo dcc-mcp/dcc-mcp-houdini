@@ -52,12 +52,14 @@ def get_lighting_summary(parent_path: str = "/obj") -> dict:
                         parms["rig_parent"] = child.path()
                         rig_lights.append(parms)
                         lights.append(parms)
-                rigs.append({
-                    "path": child.path(),
-                    "name": child.name(),
-                    "light_count": len(rig_lights),
-                    "lights": [lt["path"] for lt in rig_lights],
-                })
+                rigs.append(
+                    {
+                        "path": child.path(),
+                        "name": child.name(),
+                        "light_count": len(rig_lights),
+                        "lights": [lt["path"] for lt in rig_lights],
+                    }
+                )
             elif is_light_node(child):
                 parms = get_light_parms(child)
                 parms["rig_parent"] = None
