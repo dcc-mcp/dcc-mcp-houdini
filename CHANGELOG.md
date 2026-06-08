@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.6.1...v0.6.2) (2026-06-08)
+
+
+### Bug Fixes
+
+* sync STAGE_SKILLS with 4 newly added skills ([2cae258](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2cae258875f881f443da292120d6606639421b7e))
+
 ## [0.6.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.6.0...v0.6.1) (2026-06-08)
 
 
