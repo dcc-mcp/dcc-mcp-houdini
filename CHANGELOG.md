@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.6.0...v0.6.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* sort imports in setup_dcc_mcp_houdini.py (I001 ruff) ([d92372a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d92372a2bcfe627b08b6ec600df9fbb0beb6bf7f))
+
 ## [0.6.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.5.0...v0.6.0) (2026-06-08)
 
 
