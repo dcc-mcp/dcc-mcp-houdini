@@ -28,9 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.18.9: Release Train anchor — marketplace shared crate,
-    # gateway election disabled for probe server, ADR-010 docs.
-    "dcc-mcp-core>=0.18.9,<1.0.0",
+    # 0.18.14: DccServerBase 4 seam controllers (PIP-688), shared registration pipeline.
+    "dcc-mcp-core>=0.18.14,<1.0.0",
 ]
 
 [project.optional-dependencies]
