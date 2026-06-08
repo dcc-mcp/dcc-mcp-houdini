@@ -5,7 +5,7 @@ description: >-
   with typed parameters. Use when loading .hda/.otl assets or executing an HDA
   node as part of automation. Not for generic node edits.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.18.9+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.18.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
