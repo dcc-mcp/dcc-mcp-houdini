@@ -7,7 +7,7 @@ description: >-
   Python for editing existing nodes. Not for creating nodes (use houdini-nodes)
   or scene lifecycle/selection (use houdini-scene-edit).
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.9+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
