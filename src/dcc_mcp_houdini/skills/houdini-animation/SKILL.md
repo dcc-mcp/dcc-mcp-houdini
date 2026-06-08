@@ -6,7 +6,7 @@ description: >-
   channels and expressions; export/import channel JSON; bake channels and
   trigger bounded simulation/cache renders. The canonical timeline API.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.9+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
