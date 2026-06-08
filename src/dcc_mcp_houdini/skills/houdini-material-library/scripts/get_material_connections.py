@@ -104,9 +104,7 @@ def get_material_connections(material_path: str, depth: int = 1) -> dict:
                     except Exception:  # noqa: BLE001
                         continue
                     if shop_val == material_path_normalized:
-                        assignments.append(
-                            {"object_path": child.path(), "object_name": child.name()}
-                        )
+                        assignments.append({"object_path": child.path(), "object_name": child.name()})
         except Exception:  # noqa: BLE001
             pass
 
