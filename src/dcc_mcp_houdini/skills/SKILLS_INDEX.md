@@ -6,7 +6,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 |-------|--------|----------------|
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
-| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-light-rig` | no |
+| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
 | `interchange` | `houdini-interchange`, `houdini-export-preset` | no |
 | `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
@@ -35,6 +35,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
 | Animate & bake | `load_skill("houdini-animation")` → `houdini_animation__set_timeline` → `houdini_animation__set_keyframe` → `houdini_animation__get_keyframes` → `houdini_animation__bake_channels` / `houdini_animation__cache_simulation` |
 | Lookdev & shader networks | `load_skill("houdini-lookdev")` → `houdini_lookdev__list_materials` → `houdini_lookdev__get_material_parms` → `houdini_lookdev__set_material_parms` → `houdini_lookdev__save_preset` / `houdini_lookdev__load_preset` |
+| Material library & presets | `load_skill("houdini-material-library")` → `houdini_material_library__list_material_presets` → `houdini_material_library__save_material_preset` / `houdini_material_library__load_material_preset` → `houdini_material_library__assign_texture` |
+| Inspect textures & colors | `load_skill("houdini-material-library")` → `houdini_material_library__list_images` → `houdini_material_library__list_color_spaces` → `houdini_material_library__reload_image` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | Manage export presets | `load_skill("houdini-export-preset")` → `houdini_export_preset__save_export_preset` → `houdini_export_preset__list_export_presets` → `houdini_export_preset__load_export_preset` |
