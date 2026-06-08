@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.5.0...v0.6.0) (2026-06-08)
+
+
+### Features
+
+* add houdini-material-library skill with 12 tools ([332df88](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/332df8838f68a85b0debe84d4426c07edfe88e87))
+
+
+### Bug Fixes
+
+* ruff format and dcc-mcp-core compatibility version for material-library skill ([81df931](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/81df9312cdd3b98f7d01637133fb92019dbf5b88))
+
 ## [0.5.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.4.1...v0.5.0) (2026-06-07)
 
 
