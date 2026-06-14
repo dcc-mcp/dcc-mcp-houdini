@@ -43,6 +43,9 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     "pipeline": (
         "houdini-render",
         "houdini-animation",
+        "houdini-chops",
+        "houdini-constraints",
+        "houdini-kinefx",
         "houdini-hda-automation",
         "houdini-pipeline",
         "houdini-dev",
