@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
 | `interchange` | `houdini-interchange`, `houdini-export-preset` | no |
-| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
+| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
 ## Common chains
 
@@ -44,4 +44,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Project + shot packaging | `load_skill("houdini-pipeline")` → `houdini_pipeline__set_project` → `houdini_pipeline__validate_scene` → `houdini_pipeline__collect_dependencies` → `houdini_pipeline__export_shot_package` |
 | Develop & debug tools | `load_skill("houdini-dev")` → `houdini_dev__attach_project` → `houdini_dev__reload_modules` → `houdini_dev__run_entrypoint` → `houdini_dev__introspect_hom` / `houdini_dev__start_debugpy` |
 | File-based automation | `load_skill("houdini-automation")` → `houdini_automation__run_python_file` |
+| Motion FX & CHOPs | `load_skill("houdini-chops")` → `houdini_chops__create_chop_network` → `houdini_chops__create_motionclip` → `houdini_chops__apply_filter` → `houdini_chops__get_channel_info` → `houdini_chops__export_to_keyframes` |
+| Audio-driven animation | `load_skill("houdini-chops")` → `houdini_chops__create_chop_network` → `houdini_chops__create_audio_driven` |
+| Constrain transforms | `load_skill("houdini-constraints")` → `houdini_constraints__create_parent_constraint` / `create_blend_constraint` / `create_position_constraint` / `create_orient_constraint` → `houdini_constraints__list_constraints` → `houdini_constraints__delete_constraint` |
+| KineFX character rig | `load_skill("houdini-kinefx")` → `houdini_kinefx__create_rig` → `houdini_kinefx__set_rig_pose` → `houdini_kinefx__capture_joints` → `houdini_kinefx__apply_mocap` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
