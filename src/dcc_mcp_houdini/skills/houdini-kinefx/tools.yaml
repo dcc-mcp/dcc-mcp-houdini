@@ -1,0 +1,174 @@
+tools:
+  - name: create_rig
+    description: >-
+      Create a KineFX skeleton rig with a joint chain and optional
+      auto-capture onto a mesh.
+    source_file: scripts/create_rig.py
+    execution: sync
+    affinity: main
+    group: rig
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path]
+      properties:
+        geo_path:
+          type: string
+          description: Path to the Geometry SOP container (e.g. /obj/geo1).
+        rig_name:
+          type: string
+          description: Name for the rig null/container node.
+          default: "rig1"
+        joint_chain:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: Joint name.
+              translate:
+                type: array
+                items: {type: number}
+                description: Joint position [x, y, z].
+          description: List of joint definitions.
+        auto_capture:
+          type: boolean
+          description: If true, wire a bonedeform for immediate skinning.
+          default: false
+        capture_mesh:
+          type: string
+          description: Name of the mesh SOP node to capture onto.
+  - name: set_rig_pose
+    description: >-
+      Set translation, rotation, and/or scale on one or all joints of a
+      KineFX rig.
+    source_file: scripts/set_rig_pose.py
+    execution: sync
+    affinity: main
+    group: pose
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rig_node]
+      properties:
+        rig_node:
+          type: string
+          description: Path to the rig SOP node.
+        joint_index:
+          type: integer
+          description: Zero-based joint point index.
+        joint_name:
+          type: string
+          description: Name attribute value of the joint to modify.
+        translate:
+          type: array
+          items: {type: number}
+          maxItems: 3
+          description: Translation [x, y, z] to set.
+        rotate:
+          type: array
+          items: {type: number}
+          maxItems: 3
+          description: Rotation [rx, ry, rz] in degrees.
+        scale:
+          type: array
+          items: {type: number}
+          maxItems: 3
+          description: Scale [sx, sy, sz] factors.
+  - name: capture_joints
+    description: >-
+      Capture skinning weights from a KineFX skeleton onto a target mesh
+      using captureproximity or bonecapture SOP.
+    source_file: scripts/capture_joints.py
+    execution: sync
+    affinity: main
+    group: capture
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path, mesh_name, rig_name]
+      properties:
+        geo_path:
+          type: string
+          description: Path to the Geometry SOP container.
+        mesh_name:
+          type: string
+          description: Name of the mesh SOP node to capture onto.
+        rig_name:
+          type: string
+          description: Name of the rig SOP node (skeleton source).
+        method:
+          type: string
+          description: Capture method.
+          enum: [proximity, bones, heat]
+          default: "proximity"
+        max_joints:
+          type: integer
+          description: Maximum influencing joints per point.
+          default: 4
+        falloff:
+          type: number
+          description: Falloff distance multiplier.
+          default: 1.0
+        output_name:
+          type: string
+          description: Name for the capture SOP node (auto-generated if omitted).
+  - name: apply_mocap
+    description: >-
+      Apply motion capture data (FBX, BVH, or KineFX .bclip/.clip) onto a
+      rig skeleton.
+    source_file: scripts/apply_mocap.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: mocap
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path, rig_name, mocap_file]
+      properties:
+        geo_path:
+          type: string
+          description: Path to the Geometry SOP container.
+        rig_name:
+          type: string
+          description: Name of the rig SOP node to animate.
+        mocap_file:
+          type: string
+          description: Path to the mocap file (.fbx, .bvh, .bclip, .clip).
+        start_frame:
+          type: number
+          description: Start frame offset for the mocap data.
+        scale:
+          type: number
+          description: Uniform scale applied to the mocap data.
+          default: 1.0
+        mocap_node_name:
+          type: string
+          description: Name for the mocap import SOP node.
+          default: "mocap1"
