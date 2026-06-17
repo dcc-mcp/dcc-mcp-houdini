@@ -72,9 +72,7 @@ def set_material_override(
             if not preset_info:
                 return skill_error(
                     "Unknown preset",
-                    "Preset '{}' not found. Available: {}".format(
-                        preset, ", ".join(OVERRIDE_PRESETS.keys())
-                    ),
+                    "Preset '{}' not found. Available: {}".format(preset, ", ".join(OVERRIDE_PRESETS.keys())),
                 )
             mat_path = "/mat/{}".format(preset)
             applied["preset"] = preset

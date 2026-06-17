@@ -66,19 +66,27 @@ def configure_aovs(
                     rv_node = node.createNode("rendervar", node_name=aov_name)
                     set_first_parm(rv_node, ("sourceName", "sourcename"), preset["source"])
                     set_first_parm(rv_node, ("sourceType", "sourcetype"), preset["type"])
-                    configured.append({
-                        "name": aov_name,
-                        "source": preset["source"],
-                        "type": preset["type"],
-                        "path": rv_node.path(),
-                    })
+                    configured.append(
+                        {
+                            "name": aov_name,
+                            "source": preset["source"],
+                            "type": preset["type"],
+                            "path": rv_node.path(),
+                        }
+                    )
         else:
             # Traditional ROP: attempt extra image planes
             for aov_name in aovs:
                 preset = AOV_PRESETS.get(aov_name.lower(), {"source": aov_name, "type": "raw"})
                 aov_key = "vm_numaux" if action == "add" else None
                 if aov_key and set_first_parm(node, (aov_key,), 1):
-                    configured.append({"name": aov_name, "action": "hint_enabled", "note": "AOV enabled via vm_numaux; configure in ROP UI for exact plane names"})
+                    configured.append(
+                        {
+                            "name": aov_name,
+                            "action": "hint_enabled",
+                            "note": "AOV enabled via vm_numaux; configure in ROP UI for exact plane names",
+                        }
+                    )
                 else:
                     unsupported.append(aov_name)
 

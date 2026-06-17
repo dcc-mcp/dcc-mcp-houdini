@@ -46,6 +46,7 @@ def render_with_husk(
 
         try:
             import hou
+
             usd_path = usd_file
             if not os.path.isabs(usd_path):
                 usd_path = os.path.abspath(usd_path)
@@ -105,6 +106,7 @@ def render_with_husk(
         # Check for frame-padded files
         if frame_range and not written_files:
             import glob
+
             base, ext = os.path.splitext(output_path)
             written_files = sorted(glob.glob("{}.*{}".format(base, ext)))
 
