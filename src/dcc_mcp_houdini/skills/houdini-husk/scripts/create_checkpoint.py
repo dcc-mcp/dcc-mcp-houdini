@@ -14,7 +14,6 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 
-
 def create_checkpoint(
     usd_file: str,
     checkpoint_path: str,
@@ -58,6 +57,7 @@ def create_checkpoint(
         # File-based checkpoint: copy USD as checkpoint
         if os.path.isfile(usd_file):
             import shutil
+
             os.makedirs(os.path.dirname(checkpoint_path) or ".", exist_ok=True)
             shutil.copy2(usd_file, checkpoint_path)
             return skill_success(

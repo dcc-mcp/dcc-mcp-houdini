@@ -25,8 +25,13 @@ OUTPUT_FORMATS = {
 }
 
 COLOR_SPACES = [
-    "ACES - ACEScg", "ACES - ACES2065-1", "ACES - sRGB", "Linear Rec.709",
-    "sRGB", "Raw", "OCIO",
+    "ACES - ACEScg",
+    "ACES - ACES2065-1",
+    "ACES - sRGB",
+    "Linear Rec.709",
+    "sRGB",
+    "Raw",
+    "OCIO",
 ]
 
 

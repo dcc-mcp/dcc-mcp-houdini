@@ -30,11 +30,13 @@ def manage_takes(
         if action == "list":
             take_list = []
             for t in takes.takes():
-                take_list.append({
-                    "name": t.name(),
-                    "is_current": t == current,
-                    "num_nodes": len(list(t.nodes())) if hasattr(t, "nodes") else -1,
-                })
+                take_list.append(
+                    {
+                        "name": t.name(),
+                        "is_current": t == current,
+                        "num_nodes": len(list(t.nodes())) if hasattr(t, "nodes") else -1,
+                    }
+                )
             return skill_success(
                 "Listed takes",
                 current_take=current.name(),
