@@ -5,14 +5,14 @@
 
 ### Features
 
-* add houdini-karma and houdini-husk skill packages (PIP-1298) ([2d52dba](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2d52dba7466d0d154b1bafc736d1d96012e9495b))
+* add houdini-karma and houdini-husk skill packages ([2d52dba](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2d52dba7466d0d154b1bafc736d1d96012e9495b))
 
 ## [0.7.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.6.2...v0.7.0) (2026-06-14)
 
 
 ### Features
 
-* add houdini-chops, houdini-constraints, and houdini-kinefx skills (PIP-1297) ([3e35afe](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3e35afeed9f8299505cef802cca7b7734fa4fa1f))
+* add houdini-chops, houdini-constraints, and houdini-kinefx skills ([3e35afe](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3e35afeed9f8299505cef802cca7b7734fa4fa1f))
 
 ## [0.6.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.6.1...v0.6.2) (2026-06-08)
 
