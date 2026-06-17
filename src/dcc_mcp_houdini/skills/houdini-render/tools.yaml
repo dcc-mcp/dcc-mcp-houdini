@@ -147,3 +147,105 @@ tools:
           items: {type: number}
           minItems: 2
           maxItems: 3
+  - name: create_render_layer
+    description: >-
+      Create a render layer (Render Product in Solaris /stage or merge in ROP
+      context) with optional AOVs. Supports Solaris and traditional networks.
+    source_file: scripts/create_render_layer.py
+    execution: sync
+    affinity: main
+    group: render_layer
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parent_path:
+          type: string
+          default: /stage
+        aovs:
+          type: array
+          items: {type: string}
+        purpose:
+          type: string
+          default: beauty
+  - name: configure_aovs
+    description: >-
+      Add or remove AOVs (diffuse, specular, normal, depth, motionvector, etc.)
+      on a ROP or Solaris render product. Supports 15+ preset AOV types.
+    source_file: scripts/configure_aovs.py
+    execution: sync
+    affinity: main
+    group: render
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rop_path, aovs]
+      properties:
+        rop_path:
+          type: string
+        aovs:
+          type: array
+          items: {type: string}
+        action:
+          type: string
+          enum: [add, remove]
+          default: add
+  - name: manage_takes
+    description: >-
+      Create, switch, delete, or list takes. Takes isolate parameter overrides
+      for render layer / lighting variant workflows.
+    source_file: scripts/manage_takes.py
+    execution: sync
+    affinity: main
+    group: render_layer
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [list, create, switch, delete]
+        take_name:
+          type: string
+  - name: get_render_stats
+    description: >-
+      Read render statistics (resolution, samples, renderer, output, frame
+      range) from a ROP node or the current Houdini session.
+    source_file: scripts/get_render_stats.py
+    execution: sync
+    affinity: main
+    group: render
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        rop_path:
+          type: string

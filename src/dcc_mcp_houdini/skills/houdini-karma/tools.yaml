@@ -1,0 +1,157 @@
+tools:
+  - name: configure_karma
+    description: >-
+      Configure Karma CPU/XPU render settings — engine, sampling (pixel, diffuse,
+      specular, transmission, volume), noise threshold, and denoising.
+    source_file: scripts/configure_karma.py
+    execution: sync
+    affinity: main
+    group: karma
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+        device:
+          type: string
+          enum: [cpu, xpu]
+          default: cpu
+        max_samples:
+          type: integer
+        pixel_samples:
+          type: integer
+        diffuse_samples:
+          type: integer
+        specular_samples:
+          type: integer
+        transmission_samples:
+          type: integer
+        volume_samples:
+          type: integer
+        noise_threshold:
+          type: number
+        denoise:
+          type: boolean
+  - name: set_material_override
+    description: >-
+      Set or clear a global material override on a Karma render node. Supports
+      preset materials (clay, gray, white, chrome, checker, normals, uv) and
+      custom material paths with optional color/roughness/metallic overrides.
+    source_file: scripts/set_material_override.py
+    execution: sync
+    affinity: main
+    group: material
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+        material_path:
+          type: string
+        preset:
+          type: string
+          enum: [clay, gray, white, chrome, checker, normals, uv]
+        color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+        roughness:
+          type: number
+        metallic:
+          type: number
+        clear:
+          type: boolean
+          default: false
+  - name: configure_light_mixer
+    description: >-
+      Enable and configure the Karma Light Mixer panel. Adjust per-light
+      intensity, exposure, and color for interactive lookdev.
+    source_file: scripts/configure_light_mixer.py
+    execution: sync
+    affinity: main
+    group: light_mixer
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+        lights:
+          type: array
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              intensity: {type: number}
+              exposure: {type: number}
+              color:
+                type: array
+                items: {type: number}
+                minItems: 3
+                maxItems: 3
+        enable:
+          type: boolean
+          default: true
+        auto_create:
+          type: boolean
+          default: false
+  - name: set_image_output
+    description: >-
+      Set Karma image output path, format (exr/png/jpg/tif with bit depth),
+      resolution, color space, and layer name.
+    source_file: scripts/set_image_output.py
+    execution: sync
+    affinity: main
+    group: output
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, output_path]
+      properties:
+        node_path:
+          type: string
+        output_path:
+          type: string
+        format:
+          type: string
+          enum: [exr, exr32, png, png16, jpg, tif, tif32]
+          default: exr
+        resolution:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+        color_space:
+          type: string
+        layer_name:
+          type: string
