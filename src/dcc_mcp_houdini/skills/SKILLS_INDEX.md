@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
 | `interchange` | `houdini-interchange`, `houdini-export-preset` | no |
-| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
+| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
 ## Common chains
 
@@ -45,3 +45,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Develop & debug tools | `load_skill("houdini-dev")` → `houdini_dev__attach_project` → `houdini_dev__reload_modules` → `houdini_dev__run_entrypoint` → `houdini_dev__introspect_hom` / `houdini_dev__start_debugpy` |
 | File-based automation | `load_skill("houdini-automation")` → `houdini_automation__run_python_file` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
+| Karma render setup | `load_skill("houdini-karma")` → `houdini_karma__configure_karma` → `houdini_karma__set_material_override` → `houdini_karma__configure_light_mixer` → `houdini_karma__set_image_output` |
+| Husk CLI render | `load_skill("houdini-husk")` → `houdini_husk__create_snapshot` → `houdini_husk__create_checkpoint` → `houdini_husk__set_husk_options` → `houdini_husk__render_with_husk` |
+| Render layers & AOVs | `load_skill("houdini-render")` → `houdini_render__create_render_layer` → `houdini_render__configure_aovs` → `houdini_render__get_render_stats` |
+| Takes management | `load_skill("houdini-render")` → `houdini_render__manage_takes(action="create")` → `houdini_render__manage_takes(action="switch")` → `houdini_render__manage_takes(action="list")` |
