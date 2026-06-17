@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
 | `interchange` | `houdini-interchange`, `houdini-export-preset` | no |
-| `pipeline` | `houdini-render`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
+| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
 ## Common chains
 
@@ -49,3 +49,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Constrain transforms | `load_skill("houdini-constraints")` → `houdini_constraints__create_parent_constraint` / `create_blend_constraint` / `create_position_constraint` / `create_orient_constraint` → `houdini_constraints__list_constraints` → `houdini_constraints__delete_constraint` |
 | KineFX character rig | `load_skill("houdini-kinefx")` → `houdini_kinefx__create_rig` → `houdini_kinefx__set_rig_pose` → `houdini_kinefx__capture_joints` → `houdini_kinefx__apply_mocap` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
+| Karma render setup | `load_skill("houdini-karma")` → `houdini_karma__configure_karma` → `houdini_karma__set_material_override` → `houdini_karma__configure_light_mixer` → `houdini_karma__set_image_output` |
+| Husk CLI render | `load_skill("houdini-husk")` → `houdini_husk__create_snapshot` → `houdini_husk__create_checkpoint` → `houdini_husk__set_husk_options` → `houdini_husk__render_with_husk` |
+| Render layers & AOVs | `load_skill("houdini-render")` → `houdini_render__create_render_layer` → `houdini_render__configure_aovs` → `houdini_render__get_render_stats` |
+| Takes management | `load_skill("houdini-render")` → `houdini_render__manage_takes(action="create")` → `houdini_render__manage_takes(action="switch")` → `houdini_render__manage_takes(action="list")` |
