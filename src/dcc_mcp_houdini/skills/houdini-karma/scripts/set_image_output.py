@@ -12,7 +12,7 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _karma_common import get_node, node_summary, set_first_parm, set_parm_if_exists  # noqa: E402
+from _karma_common import get_node, node_summary, set_first_parm  # noqa: E402
 
 OUTPUT_FORMATS = {
     "exr": {"ext": ".exr", "color_depth": "half", "description": "OpenEXR (half float)"},

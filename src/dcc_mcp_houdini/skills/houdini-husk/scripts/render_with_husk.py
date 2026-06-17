@@ -57,11 +57,6 @@ def render_with_husk(
                 lop = stage.createNode("usdimport")
                 lop.parm("file").set(usd_path)
 
-            # Find a Karma render product or create one
-            karma_nodes = [
-                n for n in stage.allSubChildren()
-                if "karma" in n.type().name().lower() or "renderproduct" in n.type().name().lower()
-            ]
             elapsed = round(time.time() - start, 3)
             return skill_success(
                 "Husk render via hython fallback",

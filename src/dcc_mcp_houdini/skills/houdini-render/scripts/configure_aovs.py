@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 

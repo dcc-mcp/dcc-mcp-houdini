@@ -51,7 +51,7 @@ def manage_takes(
                     "A take named '{}' already exists".format(take_name),
                     take_name=take_name,
                 )
-            new_take = takes.createTake(take_name)
+            takes.createTake(take_name)
             return skill_success(
                 "Created take",
                 take_name=take_name,
