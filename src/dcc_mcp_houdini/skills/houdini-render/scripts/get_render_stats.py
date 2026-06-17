@@ -41,7 +41,9 @@ def get_render_stats(
             # Samples
             pixel_samples = eval_first_parm(node, ("vm_samples", "pixelsamples"))
             if pixel_samples:
-                stats["pixel_samples"] = int(pixel_samples) if isinstance(pixel_samples, (int, float)) else pixel_samples
+                stats["pixel_samples"] = (
+                    int(pixel_samples) if isinstance(pixel_samples, (int, float)) else pixel_samples
+                )
 
             # Renderer
             renderer = eval_first_parm(node, ("renderer", "vm_renderer", "vm_engine"))
@@ -49,9 +51,17 @@ def get_render_stats(
                 stats["renderer"] = str(renderer)
 
             # Output
-            output = eval_first_parm(node, (
-                "picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage",
-            ))
+            output = eval_first_parm(
+                node,
+                (
+                    "picture",
+                    "vm_picture",
+                    "lopoutput",
+                    "sopoutput",
+                    "filename",
+                    "outputimage",
+                ),
+            )
             if output:
                 stats["output"] = str(output)
 
