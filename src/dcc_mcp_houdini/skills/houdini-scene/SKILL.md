@@ -6,7 +6,7 @@ description: >-
   details. Not for creating geometry, sims, or exports — use authoring or
   interchange skills.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.14+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.34+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
