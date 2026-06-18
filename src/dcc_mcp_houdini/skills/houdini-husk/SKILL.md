@@ -5,7 +5,7 @@ description: >-
   checkpoint/resume, scene snapshots, and husk option configuration. Pair with
   houdini-karma for renderer setup and houdini-render for viewport/ROP renders.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.14+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.34+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
