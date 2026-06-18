@@ -5,7 +5,7 @@ description: >-
   nodes through typed HOM operations. Use when building lookdev/material
   workflows. Not for generic node graph edits.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.18.14+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.18.34+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
