@@ -130,7 +130,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (29 packages, 189+ tools)
+## Bundled Skills (29 packages, 182 tools)
 
 Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
@@ -158,10 +158,10 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-materials` | `create_material`, `assign_material` |
 | `houdini-lookdev` | `list_materials`, `list_assignments`, `get_material_parms`, `set_material_parms`, `get_shader_connections`, `connect_shader`, `disconnect_shader`, `reset_material`, `save_preset`, `list_presets`, `load_preset`, `delete_preset` |
 | `houdini-hda` | `install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda` |
-| `houdini-chops` | `list_channels`, `get_channel_data`, `set_channel_data`, `export_channel_data`, `import_channel_data`, `evaluate_channels` |
-| `houdini-constraints` | `list_constraints`, `create_constraint`, `set_constraint_target`, `set_constraint_properties`, `remove_constraint`, `get_constraint_info` |
+| `houdini-chops` | `create_chop_network`, `create_motionclip`, `create_audio_driven`, `apply_filter`, `export_to_keyframes`, `get_channel_info` |
+| `houdini-constraints` | `create_parent_constraint`, `create_blend_constraint`, `create_position_constraint`, `create_orient_constraint`, `list_constraints`, `delete_constraint` |
 | `houdini-export-preset` | `list_export_presets`, `save_export_preset`, `load_export_preset`, `delete_export_preset` |
-| `houdini-kinefx` | `apply_solver`, `build_chain`, `constrain_chain`, `drive_with_targets` |
+| `houdini-kinefx` | `create_rig`, `set_rig_pose`, `capture_joints`, `apply_mocap` |
 | `houdini-light-rig` | `create_three_point_light_rig`, `create_area_softbox`, `create_hdri_world`, `list_light_rigs`, `set_light_rig_intensity`, `aim_light_at_object`, `group_lights`, `set_render_view_transform`, `get_lighting_summary` |
 | `houdini-material-library` | `save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management` |
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
