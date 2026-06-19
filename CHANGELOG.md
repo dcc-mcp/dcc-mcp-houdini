@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.8.0...v0.8.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* correct 3 skill tool tables in docs (NACK follow-up) ([25ba260](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/25ba2601796de6fd70ada9dc21bff2ce66d76e4b))
+
+
+### Documentation
+
+* sync bundled skills table with v0.8.0 ([aa5ef6b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/aa5ef6befeb72aee49eef465ecd41bfe373affe5))
+* sync bundled skills table with v0.8.0 ([5b0824e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/5b0824e1ec603abb8a076a3f37bc13c1d9e47bd8))
+* sync bundled skills table with v0.8.0 ([#69](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/69)) ([aa5ef6b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/aa5ef6befeb72aee49eef465ecd41bfe373affe5))
+
 ## [0.8.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.7.0...v0.8.0) (2026-06-17)
 
 
