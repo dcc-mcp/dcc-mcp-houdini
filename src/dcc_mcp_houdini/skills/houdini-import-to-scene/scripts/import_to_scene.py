@@ -50,25 +50,31 @@ def _apply_placement(
     warnings: list[ImportWarning] = []
 
     if placement.translate:
-        obj_node.setParms({
-            "tx": placement.translate[0] if len(placement.translate) > 0 else 0.0,
-            "ty": placement.translate[1] if len(placement.translate) > 1 else 0.0,
-            "tz": placement.translate[2] if len(placement.translate) > 2 else 0.0,
-        })
+        obj_node.setParms(
+            {
+                "tx": placement.translate[0] if len(placement.translate) > 0 else 0.0,
+                "ty": placement.translate[1] if len(placement.translate) > 1 else 0.0,
+                "tz": placement.translate[2] if len(placement.translate) > 2 else 0.0,
+            }
+        )
 
     if placement.rotate:
-        obj_node.setParms({
-            "rx": placement.rotate[0] if len(placement.rotate) > 0 else 0.0,
-            "ry": placement.rotate[1] if len(placement.rotate) > 1 else 0.0,
-            "rz": placement.rotate[2] if len(placement.rotate) > 2 else 0.0,
-        })
+        obj_node.setParms(
+            {
+                "rx": placement.rotate[0] if len(placement.rotate) > 0 else 0.0,
+                "ry": placement.rotate[1] if len(placement.rotate) > 1 else 0.0,
+                "rz": placement.rotate[2] if len(placement.rotate) > 2 else 0.0,
+            }
+        )
 
     if placement.scale:
-        obj_node.setParms({
-            "sx": placement.scale[0] if len(placement.scale) > 0 else 1.0,
-            "sy": placement.scale[1] if len(placement.scale) > 1 else 1.0,
-            "sz": placement.scale[2] if len(placement.scale) > 2 else 1.0,
-        })
+        obj_node.setParms(
+            {
+                "sx": placement.scale[0] if len(placement.scale) > 0 else 1.0,
+                "sy": placement.scale[1] if len(placement.scale) > 1 else 1.0,
+                "sz": placement.scale[2] if len(placement.scale) > 2 else 1.0,
+            }
+        )
 
     if placement.parent_name:
         parent = hou.node(placement.parent_name)
