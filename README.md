@@ -130,7 +130,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (29 packages, 182 tools)
+## Bundled Skills (29 packages, 173 tools)
 
 Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
@@ -170,6 +170,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | Skill | Tools |
 |-------|-------|
 | `houdini-interchange` | `probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd` |
+| `houdini-import-to-scene` | `import_to_scene` |
 
 ### pipeline (load on demand)
 | Skill | Tools |

@@ -7,7 +7,7 @@
 
 ## What This Project Does
 
-`dcc-mcp-houdini` embeds an MCP Streamable HTTP server directly inside SideFX Houdini. Gemini (via an MCP-compatible client or custom integration) can discover and invoke ~70+ Houdini tools over HTTP.
+`dcc-mcp-houdini` embeds an MCP Streamable HTTP server directly inside SideFX Houdini. Gemini (via an MCP-compatible client or custom integration) can discover and invoke 170+ Houdini tools across 29 skill packages over HTTP.
 
 ---
 
