@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.8.1...v0.9.0) (2026-06-20)
+
+
+### Features
+
+* add houdini-import-to-scene skill for cross-DCC asset import ([#71](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/71)) ([4b3360d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4b3360d9569479047f22cddd1c52ffafffc9e60a))
+
+
+### Documentation
+
+* sync skill counts, add missing houdini-import-to-scene, fix stage categorization ([948fcaf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/948fcafbcd8edb9ad7afcc0b59aef38a4c62269c))
+
 ## [0.8.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.8.0...v0.8.1) (2026-06-19)
 
 
