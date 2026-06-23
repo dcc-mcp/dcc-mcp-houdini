@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.9.0...v0.9.1) (2026-06-23)
+
+
+### Documentation
+
+* fix stage classification in llms.txt for 5 misplaced skills ([cd694f7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/cd694f79f57d17d8ba9308895599861d54f97e4f))
+* fix stage classification in llms.txt for 5 misplaced skills ([d06a88f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d06a88f2b7b16abba65d104e3b28e39ab136bcb2)), closes [#68](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/68)
+* fix stage classification in llms.txt for 5 misplaced skills ([#75](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/75)) ([cd694f7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/cd694f79f57d17d8ba9308895599861d54f97e4f))
+* sync skill/tool counts and staging tables with SKILLS_INDEX.md ([04b662c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/04b662c932bc8341edb6b6e1181ba0516c222f1b))
+
 ## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.8.1...v0.9.0) (2026-06-20)
 
 
