@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.3.0...v0.3.1) (2026-06-25)
+
+
+### Documentation
+
+* update example wheel URL from v0.1.0 to v0.9.1 ([78b022f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/78b022f4ac7e3362d70be3245b44c0c248716362))
+
 ## [0.3.0](https://github.com/loonghao/dcc-mcp-houdini/compare/v0.2.0...v0.3.0) (2026-05-30)
 
 
