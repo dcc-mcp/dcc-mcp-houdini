@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.10.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.9.0...v0.10.0) (2026-06-24)
+
+
+### Features
+
+* add dcc-mcp-houdini project with dev workflow ([fe752d3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fe752d3318683e54100a20c10360522d9d591a5e))
+* add Houdini animation, channel, and timeline skills ([b69fdab](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b69fdabd336670dc75e4f0ca9d9107288fa49315))
+* add Houdini interchange skill for USD/Alembic/FBX/OBJ/native caches ([f265310](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f2653101e687757a65860bce6ddcaedce6a47fec))
+* add Houdini lookdev and shader-network skill ([8f28dad](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8f28dad71d8f217bbf8e58e08357b1da5f552cc9))
+* add Houdini render, camera, light, and viewport capture skills ([36027ff](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/36027ff46d5ab9cc1a38c0bb2ebac65b1aa13562))
+* add Houdini SOP geometry inspection and mesh operation skills ([620a116](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/620a116850c9a54925f9410c9fd72eb7eb90586b))
+* add houdini-chops, houdini-constraints, and houdini-kinefx skills (PIP-1297) ([8b20120](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8b201202b639e0970cc1b78e8e2c19437ad592c7))
+* add houdini-dev skill (dev diagnostics + UI interaction) ([e2e3bd6](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e2e3bd6e42a7ed9355ba3eb8c7299e8815fa1f53))
+* add houdini-export-preset skill with 4 typed tools ([f4e50e3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f4e50e313ad386d6b18f9de4fada8ee4a2294655))
+* add houdini-hda-automation skill (HDA library/validation + PDG/ROP) ([54b783e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/54b783eaac4e45a908997248454088052e70a508))
+* add houdini-import-to-scene skill for cross-DCC asset import ([#71](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/71)) ([d8a3d60](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d8a3d60d7a5a5546924b7b917262bb0dfdbc4449))
+* add houdini-karma and houdini-husk skill packages (PIP-1298) ([e0ded64](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e0ded64837730294c6de3c9f5ecb05c98e233294))
+* add houdini-light-rig skill (3-point lighting, HDRI, area softbox) ([a44a621](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a44a621df5f14073bcf2a2553a2c71bc4f2792b1))
+* add houdini-material-library skill with 12 tools ([ed909eb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ed909eb97fd799f9e71b7604bfeac23e2c3f37eb))
+* add houdini-pipeline skill (project + shot/package automation) ([d8aefcb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d8aefcb359a37efe6c7dda38123a6aa0a53272a4))
+* add houdini-texture-bake skill with 5 typed bake tools ([b1b9988](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b1b9988e3b93741718288e19d72993a056e8819a))
+* add latest dcc-mcp-core integrations and agent install skill ([000e800](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/000e800e9c34cff2f617ce197973e3d976f227e0))
+* add PyPI backfill and Houdini material skills ([7ed343f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7ed343f2b9ca87ef081ce008db463e803835f03d))
+* complete Houdini adapter release foundation ([5ecd37b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/5ecd37b8adde742bb11a5a1836833e6f5670db6f))
+* **lint:** validate bundled skills with the dcc-mcp-cli runtime validator ([29ecb4a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/29ecb4a67c8ca164846dd5870d6e25e7d254d1cc))
+* **lint:** validate bundled skills with the dcc-mcp-cli runtime validator ([ed3a814](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ed3a8144a06bc3e766443a2619ebc4fbe7818e18))
+* **skills:** add Houdini parameters and node-graph skills ([#12](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/12)) ([237ba7d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/237ba7df230215d897b82399eac9b65e0acd6c73))
+* **skills:** add Houdini scene-edit and object-ops skills ([#11](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/11)) ([d08022d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d08022d814eb2cc7a5b56b752504de368a867212))
+
+
+### Bug Fixes
+
+* auto-format with ruff format in houdini-light-rig scripts ([b066326](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b0663261fe93dbddbcfd798c26df7e29613c3814))
+* **ci:** apply ruff formatting to install_dcc_mcp_cli.py ([ee032a7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ee032a725222f1780a73eb3837d35a342240f0f2))
+* **ci:** fallback through recent releases when latest lacks CLI binary ([bba8420](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bba8420344da534bf91498a4308c5c7391ec82c6))
+* **ci:** fix import sorting in test_agent_instruction_files.py ([da12590](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/da125908d18ee9887ac5bf3863a61a2a51400deb))
+* **ci:** isolate workflow_dispatch from push concurrency in release workflow ([3c19bc2](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3c19bc2498de51981429c008d6eafb6293d97ebf))
+* **ci:** isolate workflow_dispatch from push concurrency in release workflow ([aa24e8c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/aa24e8cd8b1d95505983d7b89bbba5c19660837d))
+* **ci:** remove github.token fallback from release-please token ([77d2789](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/77d2789898d6ee299d2831e475a8f91503b9792a))
+* correct 3 skill tool tables in docs (NACK follow-up) ([a55dea3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a55dea34f7f9908b184654b64c4e9979a56de9c1))
+* keep release runtime version managed ([00ba740](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/00ba74022201da2ab74730b59bef20a18744a2a9))
+* lint errors in houdini-texture-bake skill scripts ([7420186](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/74201865cc1a40d3bb219d0c1c59b4f8387055c1))
+* remove unused imports in _qt_inspector module and tests ([059dd61](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/059dd61a33088e854865c2f3478e1d29f5b7b373))
+* remove unused imports in _qt_inspector module and tests ([83c4531](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/83c45315282cbccbd5d9be8cd1173fa4a84c58c9))
+* remove unused imports in _qt_inspector module and tests ([6855c43](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6855c430c9674b19a136cb07016993c49e6601fc))
+* remove unused imports in _qt_inspector module and tests ([ecefebd](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ecefebd930641bb916a6a0790945f0dec44c50fc))
+* resolve Ruff lint errors and SKILL.md compatibility in houdini-light-rig ([adfb359](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/adfb3590d7589045ebfda281f4ba8ab6cb6cb69d))
+* review feedback — rebase, remove redundant baker_available, add tests ([1d4a60f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1d4a60fef771b5095ed4b22aee0b4c3df1f4d6a3))
+* ruff format and dcc-mcp-core compatibility version for material-library skill ([4b6de74](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4b6de74915eb6e10d7322a8e22d0ff3a6ead2401))
+* ruff format and dcc-mcp-core compatibility version in export-preset SKILL.md ([da52e70](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/da52e70478b516f7aa2ce3ad35d4c4db30693402))
+* sort imports in setup_dcc_mcp_houdini.py (I001 ruff) ([b61a760](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b61a76041904a12819726513a2980223a2f796ed))
+* sync STAGE_SKILLS with 4 newly added skills ([438aec8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/438aec8f60c1425f1e0053ae2d2150535e94e05b))
+* update dcc-mcp-core repo reference from loonghao to dcc-mcp org ([b36d1fa](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b36d1fa0cb0af5a3e9a9ba8c135d9ddc66ddd635))
+* update README and skill compatibility to core &gt;=0.18.7, add version consistency test ([4927e22](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4927e225957d53cdc1e88a4e080ff213cf938bf4))
+* update README and skill compatibility to core &gt;=0.18.7, add version consistency test ([c172482](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c17248287b1c83a65247567694e38169883d2bd2))
+* update version references to dcc-mcp-core 0.18.9 ([35db543](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/35db543c9b8261353b2fe641c1cc725fa184c94a))
+
+
+### Documentation
+
+* clarify release artifact install ([41cc439](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/41cc439bc2b959d77da2d166bd3319fe836b34e4))
+* fix houdini-scene-edit load mode in AGENTS.md/README.md ([0814ef7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0814ef7221a54e5f4ca222ea5894cad391eebca3))
+* sync bundled skills table with v0.8.0 ([6814fe3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6814fe32d36b6261ac61bd0e7a927b8a741b9249))
+* sync bundled skills table with v0.8.0 ([38e7655](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/38e7655503cf51726580f41a8a199cc4bb091e2c))
+* sync bundled skills table with v0.8.0 ([#69](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/69)) ([6814fe3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6814fe32d36b6261ac61bd0e7a927b8a741b9249))
+* sync skill counts, add missing houdini-import-to-scene, fix stage categorization ([13ac952](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/13ac9528b0ba8a1741a6d965b108fbaca13b89eb))
+* update AGENTS.md/README.md/llms.txt with all 20 skills, add CLAUDE.md and GEMINI.md ([e436aef](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e436aefb4fe9c5bbef1e2258f0d814284d1c3a19))
+* update AGENTS.md/README.md/llms.txt with all 20 skills, add CLAUDE.md and GEMINI.md ([e8e4613](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e8e4613c2e3c86f0b63f246c435923cc257dead9))
+* update AGENTS.md/README.md/llms.txt with all 20 skills, add CLAUDE.md/GEMINI.md ([#37](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/37)) ([e436aef](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e436aefb4fe9c5bbef1e2258f0d814284d1c3a19))
+* update example wheel URL from v0.1.0 to v0.9.1 ([8b82b51](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8b82b51b05a30ebc2c4300bbee91adbad9cea613))
+* update example wheel URL from v0.1.0 to v0.9.1 ([8b82b51](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8b82b51b05a30ebc2c4300bbee91adbad9cea613))
+* update example wheel URL from v0.1.0 to v0.9.1 ([7bde6af](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7bde6afee4701388a3f5543443e3c868a947c782))
+
 ## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.8.1...v0.9.0) (2026-06-20)
 
 
