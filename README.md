@@ -48,7 +48,7 @@ pip install dcc-mcp-houdini
 For an unreleased GitHub asset, install a release wheel directly:
 
 ```bash
-pip install https://github.com/loonghao/dcc-mcp-houdini/releases/download/v0.1.0/dcc_mcp_houdini-0.1.0-py3-none-any.whl
+pip install https://github.com/loonghao/dcc-mcp-houdini/releases/download/v0.9.1/dcc_mcp_houdini-0.9.1-py3-none-any.whl
 ```
 
 ### Houdini Quickinstall ZIP
