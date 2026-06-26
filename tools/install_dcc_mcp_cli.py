@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-REPO = "loonghao/dcc-mcp-core"
+REPO = "dcc-mcp/dcc-mcp-core"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_INSTALL_DIR = ROOT / ".tools-bin"
 
@@ -63,22 +63,72 @@ def _release_api_url(tag: Optional[str]) -> str:
     return f"https://api.github.com/repos/{REPO}/releases/latest"
 
 
-def _resolve_download_url(tag: Optional[str], asset_name: str) -> str:
-    api_url = _release_api_url(tag)
-    try:
-        with urllib.request.urlopen(_request(api_url), timeout=60) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:  # pragma: no cover - network failure path
-        raise SystemExit(f"failed to query {api_url}: HTTP {exc.code} {exc.reason}") from exc
-    except urllib.error.URLError as exc:  # pragma: no cover - network failure path
-        raise SystemExit(f"failed to query {api_url}: {exc.reason}") from exc
-
+def _find_asset_in_payload(payload: dict, asset_name: str) -> Optional[str]:
+    """Return the browser_download_url if *asset_name* is present in *payload*."""
     for asset in payload.get("assets", []):
         if asset.get("name") == asset_name:
             return asset["browser_download_url"]
+    return None
 
-    available = ", ".join(sorted(a.get("name", "?") for a in payload.get("assets", [])))
-    raise SystemExit(f"asset {asset_name!r} not found in release {payload.get('tag_name')!r}. available: {available}")
+
+def _resolve_download_url(tag: Optional[str], asset_name: str) -> str:
+    """Resolve the download URL, walking recent releases as fallback.
+
+    When *tag* is ``None`` (latest release), the latest release may have been
+    published but its binary assets are still building.  Fall back through
+    the most recent 10 releases so CI doesn't fail on a transient race.
+    """
+    # ── pinned tag: try exactly one release ──
+    if tag is not None:
+        api_url = _release_api_url(tag)
+        try:
+            with urllib.request.urlopen(_request(api_url), timeout=60) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:  # pragma: no cover - network failure path
+            raise SystemExit(f"failed to query {api_url}: HTTP {exc.code} {exc.reason}") from exc
+        except urllib.error.URLError as exc:  # pragma: no cover - network failure path
+            raise SystemExit(f"failed to query {api_url}: {exc.reason}") from exc
+
+        url = _find_asset_in_payload(payload, asset_name)
+        if url is not None:
+            return url
+
+        available = ", ".join(sorted(a.get("name", "?") for a in payload.get("assets", [])))
+        raise SystemExit(
+            f"asset {asset_name!r} not found in release {payload.get('tag_name')!r}. available: {available}"
+        )
+
+    # ── latest release with fallback walk ──
+    releases_url = f"https://api.github.com/repos/{REPO}/releases?per_page=10"
+    try:
+        with urllib.request.urlopen(_request(releases_url), timeout=60) as resp:
+            releases = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:  # pragma: no cover - network failure path
+        raise SystemExit(f"failed to query {releases_url}: HTTP {exc.code} {exc.reason}") from exc
+    except urllib.error.URLError as exc:  # pragma: no cover - network failure path
+        raise SystemExit(f"failed to query {releases_url}: {exc.reason}") from exc
+
+    if not releases:
+        raise SystemExit(f"no releases found for {REPO}")
+
+    for release in releases:
+        tag_name = release.get("tag_name", "?")
+        url = _find_asset_in_payload(release, asset_name)
+        if url is not None:
+            if tag_name != releases[0].get("tag_name", "?"):
+                print(
+                    f"latest release {releases[0].get('tag_name', '?')!r} missing {asset_name}; "
+                    f"falling back to {tag_name!r}"
+                )
+            return url
+
+    available_summary = "\n".join(
+        f"  {r.get('tag_name', '?')!r}: {', '.join(sorted(a.get('name', '?') for a in r.get('assets', [])))}"
+        for r in releases
+    )
+    raise SystemExit(
+        f"asset {asset_name!r} not found in any of the {len(releases)} most recent releases.\n{available_summary}"
+    )
 
 
 def _download(url: str, dest: pathlib.Path) -> None:

@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-
 DEFAULT_DIRECT_URL = "http://127.0.0.1:8765/mcp"
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:9765/mcp"
 
@@ -46,7 +45,16 @@ def _glob_install_roots() -> Iterable[Path]:
         apps = Path("/Applications/Houdini")
         if apps.is_dir():
             for houdini_dir in sorted(apps.glob("Houdini*"), reverse=True):
-                yield houdini_dir / "Frameworks" / "Houdini.framework" / "Versions" / "Current" / "Resources" / "bin" / name
+                yield (
+                    houdini_dir
+                    / "Frameworks"
+                    / "Houdini.framework"
+                    / "Versions"
+                    / "Current"
+                    / "Resources"
+                    / "bin"
+                    / name
+                )
                 yield houdini_dir / "bin" / name
     else:
         opt = Path("/opt")
