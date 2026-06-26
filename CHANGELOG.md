@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.10.0...v0.10.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* recover main from v0.10.0 ([bce408b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bce408b7ed9af338de6238f992c32bc0f4d112df))
+
+
+### Documentation
+
+* update example wheel URL from v0.1.0 to v0.9.1 ([78b022f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/78b022f4ac7e3362d70be3245b44c0c248716362))
+
 ## [0.10.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.9.0...v0.10.0) (2026-06-24)
 
 
