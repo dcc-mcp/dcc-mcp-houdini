@@ -1,0 +1,395 @@
+tools:
+  - name: create_three_point_light_rig
+    description: >-
+      Create a standard three-point (key/fill/rim) lighting rig under a null
+      group at /obj.  Each light is an hlight::2.0 node positioned at classic
+      three-point angles.  Returns the rig group, individual light paths, and
+      applied parameters.
+    source_file: scripts/create_three_point_light_rig.py
+    execution: sync
+    affinity: main
+    group: light-rig-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      properties:
+        name:
+          type: string
+          default: threePoint_rig
+          description: Base name for the rig null group and lights.
+        parent_path:
+          type: string
+          default: /obj
+          description: Parent network for the rig null node.
+        key_intensity:
+          type: number
+          default: 1.0
+          description: Key light intensity.
+        fill_intensity:
+          type: number
+          default: 0.5
+          description: Fill light intensity.
+        rim_intensity:
+          type: number
+          default: 0.75
+          description: Rim (back/hair) light intensity.
+        light_type:
+          type: string
+          enum: [point, distant, spot, sphere, grid, disk]
+          default: distant
+          description: hlight light_type for all three lights.
+        key_color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: RGB color for the key light. Defaults to warm white [1.0, 0.95, 0.85].
+        fill_color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: RGB color for the fill light. Defaults to cool white [0.85, 0.90, 1.0].
+        rim_color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: RGB color for the rim light. Defaults to neutral white [1.0, 1.0, 1.0].
+        key_position:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: World-space position override for the key light.
+        fill_position:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: World-space position override for the fill light.
+        rim_position:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: World-space position override for the rim light.
+    next-tools:
+      on-success:
+        - houdini_light_rig__aim_light_at_object
+        - houdini_light_rig__set_light_rig_intensity
+        - houdini_light_rig__get_lighting_summary
+
+  - name: aim_light_at_object
+    description: >-
+      Point a light at a target object using Houdini's lookatpath parameter.
+      Optionally set a look-at up-vector for finer control.  Returns the
+      light's updated configuration.
+    source_file: scripts/aim_light_at_object.py
+    execution: sync
+    affinity: main
+    group: light-rig-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [light_path, target_path]
+      properties:
+        light_path:
+          type: string
+          description: Path to the hlight node to aim.
+        target_path:
+          type: string
+          description: Path to the target node the light should point at.
+        up_vector:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          default: [0, 1, 0]
+          description: Up vector for the look-at constraint. Default [0,1,0].
+
+  - name: create_hdri_world
+    description: >-
+      Create an environment light (hlight::2.0, type=environment) with an
+      HDRI texture map for image-based lighting.  Configures intensity,
+      rotation, diffuse/specular contribution, and the environment map path.
+    source_file: scripts/create_hdri_world.py
+    execution: sync
+    affinity: main
+    group: light-rig-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [hdri_path]
+      properties:
+        hdri_path:
+          type: string
+          description: Absolute path to the .hdr or .exr environment map file.
+        name:
+          type: string
+          default: hdri_world
+          description: Name for the environment light node.
+        parent_path:
+          type: string
+          default: /obj
+          description: Parent network for the light node.
+        intensity:
+          type: number
+          default: 1.0
+          description: Light intensity multiplier.
+        rotation:
+          type: number
+          default: 0.0
+          description: Y-axis rotation in degrees for the HDRI orientation.
+        visible_in_diffuse:
+          type: boolean
+          default: true
+          description: Enable diffuse contribution from the environment light.
+        visible_in_specular:
+          type: boolean
+          default: true
+          description: Enable specular contribution from the environment light.
+    next-tools:
+      on-success:
+        - houdini_light_rig__set_light_rig_intensity
+        - houdini_light_rig__get_lighting_summary
+
+  - name: get_lighting_summary
+    description: >-
+      Scan the /obj network (or a specified parent) for all hlight nodes and
+      report their type, intensity, color, exposure, position, and rig
+      membership.  Read-only — no scene modification.
+    source_file: scripts/get_lighting_summary.py
+    execution: sync
+    affinity: main
+    group: light-rig-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: /obj
+          description: Network path to scan for light nodes.
+
+  - name: group_lights
+    description: >-
+      Group one or more existing hlight nodes under a new null rig node.
+      The null is created at the specified parent_path and the lights are
+      re-parented underneath.  Returns the rig group path and its light
+      members.
+    source_file: scripts/group_lights.py
+    execution: sync
+    affinity: main
+    group: light-rig-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [rig_name, light_paths]
+      properties:
+        rig_name:
+          type: string
+          description: Name for the rig null group node.
+        light_paths:
+          type: array
+          items: {type: string}
+          minItems: 1
+          description: Paths of hlight nodes to group under the rig.
+        parent_path:
+          type: string
+          default: /obj
+          description: Parent network where the rig null is created.
+
+  - name: list_light_rigs
+    description: >-
+      List all light rig groups (null nodes containing hlight children)
+      under /obj or a specified parent.  Reports rig name, path, light
+      count, and member light paths.  Read-only.
+    source_file: scripts/list_light_rigs.py
+    execution: sync
+    affinity: main
+    group: light-rig-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: /obj
+          description: Parent network to search for rig null groups.
+    next-tools:
+      on-success:
+        - houdini_light_rig__set_light_rig_intensity
+        - houdini_light_rig__get_lighting_summary
+
+  - name: set_light_rig_intensity
+    description: >-
+      Scale or set the intensity of all hlight nodes parented under a rig
+      null group.  Supports absolute set or multiplicative scale mode.
+      Reports the rig group, updated light count, and per-light intensity
+      values.
+    source_file: scripts/set_light_rig_intensity.py
+    execution: sync
+    affinity: main
+    group: light-rig-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rig_group, intensity]
+      properties:
+        rig_group:
+          type: string
+          description: Path to the rig null group node.
+        intensity:
+          type: number
+          description: New intensity value (absolute) or multiplier when multiply=True.
+        multiply:
+          type: boolean
+          default: false
+          description: If true, multiply each light's current intensity by the given value.
+
+  - name: set_render_view_transform
+    description: >-
+      Configure the OCIO view transform for the Houdini session's render
+      view.  Applies to the viewport and/or render output color management.
+      Detects the active OCIO config and validates the transform name.
+    source_file: scripts/set_render_view_transform.py
+    execution: sync
+    affinity: main
+    group: light-rig-edit
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [view_transform]
+      properties:
+        view_transform:
+          type: string
+          description: >-
+            OCIO view transform name, e.g. "ACES 1.0 SDR-video",
+            "sRGB", "Raw", "Un-tone-mapped".
+        display_device:
+          type: string
+          default: sRGB
+          description: OCIO display device name. Default "sRGB".
+        color_space:
+          type: string
+          description: >-
+            Optional OCIO color space to set for rendering
+            (e.g. "ACEScg", "scene_linear").
+
+  - name: create_area_softbox
+    description: >-
+      Create a grid or disk area light configured as a softbox with large
+      area size, soft quality, and controlled diffuse/specular contribution.
+      Suitable for studio-style soft lighting.
+    source_file: scripts/create_area_softbox.py
+    execution: sync
+    affinity: main
+    group: light-rig-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      properties:
+        name:
+          type: string
+          default: softbox
+          description: Name for the area light node.
+        parent_path:
+          type: string
+          default: /obj
+          description: Parent network for the light.
+        shape:
+          type: string
+          enum: [grid, disk, sphere, tube]
+          default: grid
+          description: Shape of the area light.
+        size:
+          type: array
+          items: {type: number}
+          minItems: 2
+          maxItems: 2
+          default: [5, 5]
+          description: Area size [width, height] for grid or [radius, radius] for disk/sphere.
+        intensity:
+          type: number
+          default: 2.0
+          description: Light intensity.
+        color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: RGB light color. Defaults to neutral white [1.0, 1.0, 1.0].
+        translate:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: World-space position.
+        rotate:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          description: World-space rotation in degrees.
+        exposure:
+          type: number
+          description: Exposure compensation.
+    next-tools:
+      on-success:
+        - houdini_light_rig__aim_light_at_object
+        - houdini_light_rig__get_lighting_summary

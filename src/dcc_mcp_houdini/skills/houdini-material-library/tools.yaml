@@ -1,0 +1,384 @@
+tools:
+  # ── Library Presets ────────────────────────────────────────────────
+  - name: save_material_preset
+    description: >-
+      Save a material/shader node's definition (type + all settable scalar
+      parameters) as a JSON preset file in a library directory.  Creates the
+      library directory if needed.
+    source_file: scripts/save_material_preset.py
+    execution: sync
+    affinity: main
+    group: library-presets
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path, preset_name]
+      properties:
+        material_path:
+          type: string
+          description: Material/shader node path to serialize (e.g. /mat/clay).
+        preset_name:
+          type: string
+          description: Name for the preset file (stem without .json extension).
+        library_dir:
+          type: string
+          description: >-
+            Directory where preset .json files are stored.  Defaults to
+            $DCC_MCP_HOUDINI_MATERIAL_LIBRARY_DIR or
+            ~/.dcc-mcp/houdini/material_library/.
+        attributes:
+          type: array
+          items: {type: string}
+          description: >-
+            Explicit list of parameter names to capture.  When omitted, all
+            settable scalar parameters are captured automatically.
+        overwrite:
+          type: boolean
+          default: true
+          description: If false and the preset file exists, return an error.
+
+  - name: load_material_preset
+    description: >-
+      Recreate a material from a JSON preset file and optionally assign it
+      to target objects.
+    source_file: scripts/load_material_preset.py
+    execution: sync
+    affinity: main
+    group: library-presets
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: Path to the .json preset file.
+        material_name:
+          type: string
+          description: >-
+            Override name for the created material node.  Defaults to the
+            name stored in the preset.
+        parent_path:
+          type: string
+          default: "/mat"
+          description: Material network to create the node under.
+        assign_to:
+          type: array
+          items: {type: string}
+          description: >-
+            Optional list of OBJ/SOP node paths to assign the material to
+            after creation.
+
+  - name: list_material_presets
+    description: >-
+      List all material preset JSON files in a library directory (read-only,
+      no Houdini scene access required).
+    source_file: scripts/list_material_presets.py
+    execution: sync
+    affinity: any
+    group: library-presets
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        library_dir:
+          type: string
+          description: >-
+            Directory to search for .json preset files.  Defaults to
+            $DCC_MCP_HOUDINI_MATERIAL_LIBRARY_DIR or
+            ~/.dcc-mcp/houdini/material_library/.
+
+  - name: delete_material_preset
+    description: >-
+      Delete a material preset JSON file from the library (no Houdini
+      scene access required).
+    source_file: scripts/delete_material_preset.py
+    execution: sync
+    affinity: any
+    group: library-presets
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [preset_name]
+      properties:
+        preset_name:
+          type: string
+          description: Name of the preset file to delete (stem without .json).
+        library_dir:
+          type: string
+          description: >-
+            Directory containing preset .json files.  Defaults to
+            $DCC_MCP_HOUDINI_MATERIAL_LIBRARY_DIR or
+            ~/.dcc-mcp/houdini/material_library/.
+
+  # ── Texture Management ─────────────────────────────────────────────
+  - name: assign_texture
+    description: >-
+      Assign a texture file to a material/shader parameter.  Creates or
+      updates a file-texture VOP node and wires it to the target parameter.
+      Supports principledshader, MaterialX, and Arnold shaders.
+    source_file: scripts/assign_texture.py
+    execution: sync
+    affinity: main
+    group: library-textures
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path, parameter_name, texture_path]
+      properties:
+        material_path:
+          type: string
+          description: Path to the material/shader node.
+        parameter_name:
+          type: string
+          description: >-
+            Name of the color/texture parameter to drive
+            (e.g. basecolor, baseColor, diffuse, base_color).
+        texture_path:
+          type: string
+          description: File path to the texture image on disk.
+        colorspace:
+          type: string
+          description: >-
+            OCIO color space for the texture (e.g. Utility - sRGB - Texture,
+            ACES - ACEScg).  Auto-detected from file extension when omitted.
+
+  - name: list_images
+    description: >-
+      List image/file-texture nodes in the scene (read-only).  Scans
+      material networks for nodes that reference image files on disk.
+    source_file: scripts/list_images.py
+    execution: sync
+    affinity: main
+    group: library-textures
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        parent_path:
+          type: string
+          default: "/mat"
+          description: >-
+            Material network to scan for image nodes.  Use "/" to scan the
+            entire scene (can be slow in large scenes).
+
+  - name: reload_image
+    description: >-
+      Reload one or more image texture nodes from disk.  Optionally reloads
+      all image nodes in a given material network.
+    source_file: scripts/reload_image.py
+    execution: sync
+    affinity: main
+    group: library-textures
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        node_path:
+          type: string
+          description: >-
+            Path to a single image/texture node to reload.  If omitted,
+            parent_path is used for a bulk reload.
+        parent_path:
+          type: string
+          default: "/mat"
+          description: >-
+            Material network to scan for image nodes when node_path is
+            not specified.
+        reload_all:
+          type: boolean
+          default: false
+          description: >-
+            When true, reloads every image node found under parent_path.
+
+  # ── Color Management ───────────────────────────────────────────────
+  - name: set_color_management
+    description: >-
+      Configure Houdini's OCIO color management: set the active config
+      path, the default color space, or the view transform.
+    source_file: scripts/set_color_management.py
+    execution: sync
+    affinity: main
+    group: library-color
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        ocio_config_path:
+          type: string
+          description: >-
+            Path to an OCIO config file (config.ocio).  Sets the OCIO
+            environment variable for the current Houdini session.
+        color_space:
+          type: string
+          description: >-
+            Default color space name to use (e.g. ACEScg, ACES2065-1,
+            sRGB).  Houdini's color picker and viewport will use this.
+        view_transform:
+          type: string
+          description: >-
+            View transform name (e.g. Un-tone-mapped, ACES 1.0 SDR-video).
+
+  - name: list_color_spaces
+    description: >-
+      List the available OCIO color spaces from Houdini's active
+      configuration (read-only).
+    source_file: scripts/list_color_spaces.py
+    execution: sync
+    affinity: main
+    group: library-color
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties:
+        filter:
+          type: string
+          description: >-
+            Optional substring to filter color space names
+            (e.g. "ACES" returns only ACES-family spaces).
+
+  # ── Material Attributes / Connections ──────────────────────────────
+  - name: set_material_attribute
+    description: >-
+      Set an attribute on a material/shader node.  Supports both scalar
+      values and tuple (color/vector) parameters with type coercion.
+    source_file: scripts/set_material_attribute.py
+    execution: sync
+    affinity: main
+    group: library-query
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path, attribute_name, value]
+      properties:
+        material_path:
+          type: string
+          description: Path to the material/shader node.
+        attribute_name:
+          type: string
+          description: Name of the parameter/attribute to set.
+        value:
+          description: >-
+            Value to set.  Scalars (float/int/str/bool) are coerced
+            automatically; lists/tuples set parameter tuples (e.g.
+            [0.8, 0.4, 0.2] for a color).
+
+  - name: get_material_connections
+    description: >-
+      Query a material/shader node's input and output connections, including
+      upstream texture nodes and downstream shader assignments (read-only).
+    source_file: scripts/get_material_connections.py
+    execution: sync
+    affinity: main
+    group: library-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path]
+      properties:
+        material_path:
+          type: string
+          description: Path to the material/shader node to inspect.
+        depth:
+          type: integer
+          default: 1
+          description: >-
+            How many levels of upstream connections to traverse
+            (1 = direct inputs, 2 = inputs of inputs, etc.).
+
+  - name: get_shader_assignment
+    description: >-
+      Query which renderable objects a material/shader is assigned to
+      (read-only).  Searches OBJ/SOP nodes for shop_materialpath
+      references to the given material.
+    source_file: scripts/get_shader_assignment.py
+    execution: sync
+    affinity: main
+    group: library-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path]
+      properties:
+        material_path:
+          type: string
+          description: >-
+            Path to the material/shader node to query assignments for.
+        search_root:
+          type: string
+          default: "/obj"
+          description: >-
+            Root path to search for assignments.  "/obj" covers most
+            standard scenes.  Use "/" for exhaustive (slower) search.
