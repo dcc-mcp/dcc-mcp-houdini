@@ -50,8 +50,8 @@ When adding or changing bundled skills, load the project skill:
 ## Bundled Skills
 
 ### bootstrap stage (default loaded)
-| Skill | Tools |
-|-------|-------|
+| Skill | Key tools |
+|-------|-----------|
 | `houdini-scripting` | `execute_python`, `get_session_info` |
 
 ### scene stage (partial default — `houdini-scene` only)
@@ -61,8 +61,8 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-scene-edit` | `new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box` | on demand |
 
 ### authoring stage (load on demand)
-| Skill | Tools |
-|-------|-------|
+| Skill | Key tools |
+|-------|-----------|
 | `houdini-nodes` | `create_node`, `set_node_parms`, `connect_nodes`, `cook_node`, `layout_children`, `delete_node` |
 | `houdini-object-ops` | `rename_node`, `duplicate_node`, `parent_node`, `set_node_flags`, `set_node_lock`, `get_transform`, `set_transform` |
 | `houdini-parameters` | `list_parms`, `get_parms`, `get_parm_templates`, `get_expression`, `set_parms`, `add_spare_parm`, `remove_spare_parm`, `set_expression`, `clear_expression` |
@@ -82,14 +82,14 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
 
 ### interchange stage (load on demand)
-| Skill | Tools |
-|-------|-------|
+| Skill | Key tools |
+|-------|-----------|
 | `houdini-interchange` | `probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd` |
 | `houdini-import-to-scene` | `import_to_scene` |
 
 ### pipeline stage (load on demand)
-| Skill | Tools |
-|-------|-------|
+| Skill | Key tools |
+|-------|-----------|
 | `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
 | `houdini-karma` | `configure_karma`, `set_material_override`, `configure_light_mixer`, `set_image_output` |
 | `houdini-husk` | `render_with_husk`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
