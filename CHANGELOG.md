@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.10.0...v0.10.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* recover main from v0.10.0 ([bce408b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bce408b7ed9af338de6238f992c32bc0f4d112df))
+
+
+### Documentation
+
+* **AGENTS.md:** rename Tools to Key tools in Bundled Skills tables ([#81](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/81)) ([ef15bea](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ef15bea0227d99abb817ff04bee9affbb2d199b9))
+* correct gateway port and bundled skill/tool counts ([#86](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/86)) ([d9756b5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d9756b5d6b74a316869a9847d4fad612eea171f2))
+* update example wheel URL from v0.1.0 to v0.9.1 ([78b022f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/78b022f4ac7e3362d70be3245b44c0c248716362))
+
 ## [0.10.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.9.0...v0.10.0) (2026-06-24)
 
 
