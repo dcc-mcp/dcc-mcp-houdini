@@ -32,7 +32,7 @@ server.list_skills()
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 
-## Bundled tools (29 skills, 170+ tools)
+## Bundled tools (30 skills, 180+ tools)
 
 ### bootstrap (default)
 - `houdini_scripting__execute_python`, `get_session_info`
