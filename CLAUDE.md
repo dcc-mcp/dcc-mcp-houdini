@@ -7,7 +7,7 @@
 
 ## What This Project Does
 
-`dcc-mcp-houdini` embeds an MCP Streamable HTTP server directly inside SideFX Houdini. Claude Desktop (or any Anthropic API client using MCP) can call 170+ Houdini tools across 29 skill packages over HTTP — scene inspection, node authoring, HDA execution, rendering, and more.
+`dcc-mcp-houdini` embeds an MCP Streamable HTTP server directly inside SideFX Houdini. Claude Desktop (or any Anthropic API client using MCP) can call 180+ Houdini tools across 30 skill packages over HTTP — scene inspection, node authoring, HDA execution, rendering, and more.
 
 ---
 

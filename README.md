@@ -15,8 +15,8 @@ skills-first Houdini automation tools to agents.
 
 ## Features
 
-- Embedded MCP Streamable HTTP server inside Houdini
-- Auto-gateway with first-wins port competition (port 8765)
+- Embedded MCP Streamable HTTP server inside Houdini (port 8765)
+- Auto-gateway with first-wins election (gateway port 9765)
 - Progressive skill loading (discover → load → unload)
 - Houdini Python (`hython`) and interactive UI-thread dispatch
 - Python 3.7+ package metadata for older Houdini runtimes
@@ -130,7 +130,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (29 packages, 173 tools)
+## Bundled Skills (30 packages, 183 tools)
 
 Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
