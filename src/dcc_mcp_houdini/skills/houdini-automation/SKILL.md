@@ -5,7 +5,7 @@ description: >-
   set timeline ranges, and build small node chains from structured specs. Use
   when orchestrating repeatable Houdini tasks. Not for inspecting a scene only.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.18.34+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

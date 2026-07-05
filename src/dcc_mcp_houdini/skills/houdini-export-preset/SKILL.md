@@ -7,7 +7,7 @@ description: >-
   settings across a team or project. Pair with houdini-interchange for
   one-shot exports or houdini-pipeline for shot packaging.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.18.34+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
