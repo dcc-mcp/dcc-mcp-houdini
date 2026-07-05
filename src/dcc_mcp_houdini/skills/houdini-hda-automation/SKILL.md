@@ -7,7 +7,7 @@ description: >-
   nodes, cook TOP/PDG networks, and execute ROP output-driver chains. Pair with
   houdini-hda for install/save and houdini-render for single-ROP captures.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.8+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

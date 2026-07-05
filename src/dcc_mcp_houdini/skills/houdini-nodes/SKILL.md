@@ -5,7 +5,7 @@ description: >-
   Houdini nodes through typed HOM operations. Use when building SOP/OBJ/ROP
   networks or automating graph edits. Not for arbitrary Python snippets.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.8+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

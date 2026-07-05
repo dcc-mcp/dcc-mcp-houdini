@@ -8,7 +8,7 @@ description: >-
   shot/package manifest (frame range, cameras, output nodes, caches, written
   files). No dependency on private production services.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.8+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

@@ -6,7 +6,7 @@ description: >-
   ImportToSceneResult. Use as the receiving end of the asset import pipeline
   after an asset-source skill resolves the descriptor.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.8+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.9+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
