@@ -210,7 +210,7 @@ dcc-mcp-houdini/
 ## Requirements
 
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
-- `dcc-mcp-core >= 0.18.34`
+- `dcc-mcp-core >= 0.19.8`
 - See `pyproject.toml` for full dependencies
 
 ## License

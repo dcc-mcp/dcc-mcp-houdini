@@ -5,7 +5,7 @@ description: >-
   and report active camera/view state through typed tools. Pair with
   houdini-render for viewport capture and ROP render execution.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.34+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.8+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

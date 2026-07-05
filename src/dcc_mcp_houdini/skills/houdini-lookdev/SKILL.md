@@ -7,7 +7,7 @@ description: >-
   assignments; and manage adapter-owned material presets. Pair with
   houdini-materials for material creation/assignment.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.18.34+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.8+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

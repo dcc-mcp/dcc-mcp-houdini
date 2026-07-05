@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.18.34: latest core features.
-    "dcc-mcp-core>=0.18.34,<1.0.0",
+    # 0.19.8: py37-lite pure-Python fallback for older Houdini runtimes.
+    "dcc-mcp-core>=0.19.8,<1.0.0",
 ]
 
 [project.optional-dependencies]
