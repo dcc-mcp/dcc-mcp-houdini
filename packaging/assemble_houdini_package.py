@@ -6,6 +6,7 @@ The output ZIP contains:
 * compatible ``dcc-mcp-core`` wheels from PyPI for the requested platform;
 * a Houdini package JSON template;
 * ``scripts/123.py`` autostart bootstrap;
+* ``toolbar/DCC-MCP.shelf`` with basic user-visible controls;
 * PowerShell and POSIX installer scripts.
 
 Install flow:
@@ -267,6 +268,91 @@ except Exception as exc:
 '''
 
 
+def _shelf_file() -> str:
+    return r"""<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <toolshelf name="DCC-MCP" label="DCC-MCP">
+    <memberTool name="dcc_mcp_houdini_start"/>
+    <memberTool name="dcc_mcp_houdini_stop"/>
+    <memberTool name="dcc_mcp_houdini_status"/>
+    <memberTool name="dcc_mcp_houdini_docs"/>
+  </toolshelf>
+  <tool name="dcc_mcp_houdini_start" label="Start MCP" icon="MISC_python" helpText="Start the DCC-MCP Houdini server.">
+    <script scriptType="python"><![CDATA[
+try:
+    import dcc_mcp_houdini
+
+    server = dcc_mcp_houdini.start_server(wait_ready=False)
+    message = "DCC-MCP Houdini server: {}".format(server.mcp_url)
+except Exception as exc:
+    message = "DCC-MCP Houdini start failed: {}".format(exc)
+
+try:
+    import hou
+
+    hou.ui.setStatusMessage(message)
+except Exception:
+    print(message)
+]]></script>
+  </tool>
+  <tool name="dcc_mcp_houdini_stop" label="Stop MCP" icon="MISC_python" helpText="Stop the DCC-MCP Houdini server.">
+    <script scriptType="python"><![CDATA[
+try:
+    import dcc_mcp_houdini
+
+    dcc_mcp_houdini.stop_server()
+    message = "DCC-MCP Houdini server stopped."
+except Exception as exc:
+    message = "DCC-MCP Houdini stop failed: {}".format(exc)
+
+try:
+    import hou
+
+    hou.ui.setStatusMessage(message)
+except Exception:
+    print(message)
+]]></script>
+  </tool>
+  <tool name="dcc_mcp_houdini_status" label="Status" icon="BUTTONS_info" helpText="Show the DCC-MCP Houdini server status.">
+    <script scriptType="python"><![CDATA[
+try:
+    import dcc_mcp_houdini
+
+    server = dcc_mcp_houdini.get_server()
+    if server is not None and getattr(server, "is_running", False):
+        message = "DCC-MCP Houdini server is running: {}".format(server.mcp_url)
+    else:
+        message = "DCC-MCP Houdini server is not running."
+except Exception as exc:
+    message = "DCC-MCP Houdini status failed: {}".format(exc)
+
+try:
+    import hou
+
+    hou.ui.setStatusMessage(message)
+except Exception:
+    print(message)
+]]></script>
+  </tool>
+  <tool name="dcc_mcp_houdini_docs" label="Docs" icon="BUTTONS_help" helpText="Open DCC-MCP Houdini documentation.">
+    <script scriptType="python"><![CDATA[
+import webbrowser
+
+url = "https://github.com/dcc-mcp/dcc-mcp-houdini"
+webbrowser.open(url)
+
+try:
+    import hou
+
+    hou.ui.setStatusMessage("Opened DCC-MCP Houdini docs: {}".format(url))
+except Exception:
+    print("Opened DCC-MCP Houdini docs: {}".format(url))
+]]></script>
+  </tool>
+</shelfDocument>
+"""
+
+
 def _install_ps1() -> str:
     return r"""param(
   [string]$HoudiniVersion = "20.5",
@@ -330,6 +416,7 @@ Install on Linux/macOS:
 The installer writes a Houdini package JSON into the user Houdini preferences
 folder and points it at this extracted package directory. On Houdini startup,
 scripts/123.py extracts bundled wheels into vendor/ and starts the MCP server.
+The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
 MCP URL defaults to http://127.0.0.1:8765/mcp.
@@ -428,9 +515,11 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
         wheels_dir = root / "wheels"
         packages_dir = root / "packages"
         scripts_dir = root / "scripts"
+        toolbar_dir = root / "toolbar"
         wheels_dir.mkdir(parents=True)
         packages_dir.mkdir(parents=True)
         scripts_dir.mkdir(parents=True)
+        toolbar_dir.mkdir(parents=True)
 
         shutil.copy2(str(adapter_wheel), str(wheels_dir / adapter_wheel.name))
         for core_wheel in download_core_wheels(core_version, platform, tmp_dir / "wheel-cache"):
@@ -439,6 +528,7 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
         (packages_dir / "dcc_mcp_houdini.json.template").write_text(_package_json_template(), encoding="utf-8")
         (scripts_dir / "dcc_mcp_houdini_bootstrap.py").write_text(_bootstrap_py(), encoding="utf-8")
         (scripts_dir / "123.py").write_text(_startup_py(), encoding="utf-8")
+        (toolbar_dir / "DCC-MCP.shelf").write_text(_shelf_file(), encoding="utf-8")
         (root / "install.ps1").write_text(_install_ps1(), encoding="utf-8")
         install_sh = root / "install.sh"
         install_sh.write_text(_install_sh(), encoding="utf-8")
