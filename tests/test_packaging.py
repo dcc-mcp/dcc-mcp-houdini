@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -44,14 +45,29 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert zip_path.is_file()
     with zipfile.ZipFile(zip_path) as zf:
         names = set(zf.namelist())
+        shelf_xml = zf.read("dcc_mcp_houdini/toolbar/DCC-MCP.shelf").decode("utf-8")
     assert "dcc_mcp_houdini/wheels/{}".format(adapter_wheel.name) in names
     for core_wheel in core_wheels:
         assert "dcc_mcp_houdini/wheels/{}".format(core_wheel.name) in names
     assert "dcc_mcp_houdini/scripts/123.py" in names
     assert "dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py" in names
+    assert "dcc_mcp_houdini/toolbar/DCC-MCP.shelf" in names
     assert "dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template" in names
     assert "dcc_mcp_houdini/install.ps1" in names
     assert "dcc_mcp_houdini/install.sh" in names
+
+    shelf = ET.fromstring(shelf_xml)
+    tool_names = {tool.attrib["name"] for tool in shelf.findall("tool")}
+    assert tool_names == {
+        "dcc_mcp_houdini_start",
+        "dcc_mcp_houdini_stop",
+        "dcc_mcp_houdini_status",
+        "dcc_mcp_houdini_docs",
+    }
+    assert "wait_ready=False" in shelf_xml
+    assert "get_server" in shelf_xml
+    assert "setStatusMessage" in shelf_xml
+    assert "displayMessage" not in shelf_xml
 
 
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
