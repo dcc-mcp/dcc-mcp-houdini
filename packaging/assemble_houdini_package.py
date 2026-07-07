@@ -151,6 +151,13 @@ def download_core_wheels(version: str, platform: str, dest_dir: Path) -> List[Pa
     return paths
 
 
+def _wheel_version(filename: str, distribution: str) -> Optional[str]:
+    match = re.match(r"^{}-(?P<version>[^-]+)-.+\.whl$".format(re.escape(distribution)), filename)
+    if not match:
+        return None
+    return match.group("version")
+
+
 def find_adapter_wheel(dist_dir: Path, version: str) -> Path:
     wheels = sorted(dist_dir.glob("dcc_mcp_houdini-{}-*.whl".format(version)))
     if not wheels:
@@ -310,6 +317,8 @@ def _readme(version: str, core_version: str, platform: str) -> str:
 Version: {version}
 dcc-mcp-core wheels: {core_version}
 Platform: {platform}
+Core bundle policy: latest non-prerelease dcc-mcp-core >= {min_core_version},<1.0.0 at assembly time.
+Old-core pin: none.
 
 Install on Windows:
   powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
@@ -324,7 +333,82 @@ scripts/123.py extracts bundled wheels into vendor/ and starts the MCP server.
 
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
 MCP URL defaults to http://127.0.0.1:8765/mcp.
-""".format(version=version, core_version=core_version, platform=platform)
+""".format(version=version, core_version=core_version, platform=platform, min_core_version=MIN_CORE_VERSION)
+
+
+def verify_quickinstall_zip(
+    zip_path: Path,
+    platform: str,
+    expected_core_version: Optional[str] = None,
+) -> Dict[str, object]:
+    if platform not in PLATFORMS:
+        raise ValueError("Unsupported platform {!r}; expected {}".format(platform, ", ".join(PLATFORMS)))
+    if expected_core_version is None:
+        expected_core_version = resolve_core_version()
+
+    adapter_version = get_package_version()
+    with zipfile.ZipFile(str(zip_path)) as zf:
+        names = zf.namelist()
+
+    required_suffixes = [
+        "/scripts/123.py",
+        "/scripts/dcc_mcp_houdini_bootstrap.py",
+        "/packages/dcc_mcp_houdini.json.template",
+        "/README.txt",
+    ]
+    for suffix in required_suffixes:
+        if not any(name.endswith(suffix) for name in names):
+            raise RuntimeError("quickinstall zip missing {}".format(suffix))
+
+    wheel_names = [Path(name).name for name in names if "/wheels/" in name and name.endswith(".whl")]
+    adapter_wheels = [name for name in wheel_names if _wheel_version(name, "dcc_mcp_houdini")]
+    core_wheels = [name for name in wheel_names if _wheel_version(name, "dcc_mcp_core")]
+    if not adapter_wheels:
+        raise RuntimeError("quickinstall zip missing dcc-mcp-houdini wheel")
+    if not core_wheels:
+        raise RuntimeError("quickinstall zip missing dcc-mcp-core wheel")
+
+    adapter_versions = sorted({str(_wheel_version(name, "dcc_mcp_houdini")) for name in adapter_wheels})
+    core_versions = sorted({str(_wheel_version(name, "dcc_mcp_core")) for name in core_wheels})
+    if adapter_versions != [adapter_version]:
+        raise RuntimeError(
+            "Adapter wheel drift: expected dcc-mcp-houdini {}, found {}".format(
+                adapter_version,
+                ", ".join(adapter_versions),
+            )
+        )
+    if core_versions != [expected_core_version]:
+        raise RuntimeError(
+            "Bundled core drift: expected dcc-mcp-core {}, found {}".format(
+                expected_core_version,
+                ", ".join(core_versions),
+            )
+        )
+
+    wrong_platform = [name for name in core_wheels if not _wheel_matches_platform(name, platform)]
+    if wrong_platform:
+        raise RuntimeError("Core wheels do not match platform {}: {}".format(platform, ", ".join(wrong_platform)))
+
+    return {
+        "platform": platform,
+        "adapter": adapter_version,
+        "core": expected_core_version,
+        "server": adapter_version,
+        "cli": adapter_version,
+        "core_wheels": sorted(core_wheels),
+    }
+
+
+def print_version_matrix(matrix: Dict[str, object]) -> None:
+    print("Quickinstall version matrix:")
+    print("  platform: {}".format(matrix["platform"]))
+    print("  adapter: dcc-mcp-houdini {}".format(matrix["adapter"]))
+    print("  core: dcc-mcp-core {}".format(matrix["core"]))
+    print("  server: dcc-mcp-houdini {}".format(matrix["server"]))
+    print("  CLI: dcc-mcp-houdini {}".format(matrix["cli"]))
+    print("  core wheels:")
+    for wheel in matrix["core_wheels"]:
+        print("    - {}".format(wheel))
 
 
 def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
@@ -375,7 +459,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--platform", choices=PLATFORMS, required=True)
     parser.add_argument("--dist-dir", type=Path, default=PACKAGE_ROOT / "dist")
     parser.add_argument("--output-dir", type=Path, default=PACKAGE_ROOT / "dist_houdini")
+    parser.add_argument(
+        "--verify-zip", type=Path, help="Verify an existing quickinstall ZIP and print its version matrix."
+    )
+    parser.add_argument(
+        "--expected-core-version", help="Expected bundled dcc-mcp-core version; defaults to latest compatible."
+    )
     args = parser.parse_args(argv)
+
+    if args.verify_zip is not None:
+        matrix = verify_quickinstall_zip(args.verify_zip, args.platform, args.expected_core_version)
+        print_version_matrix(matrix)
+        return 0
 
     zip_path = assemble(args.platform, args.dist_dir, args.output_dir)
     print("Created {}".format(zip_path))

@@ -111,25 +111,12 @@ jobs:
         run: python -m build
       - name: Assemble quickinstall ZIP
         run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini
-      - name: Verify quickinstall ZIP
+      - name: Verify quickinstall version matrix
         env:
           PLATFORM: ${{ matrix.platform }}
         run: |
-          python - <<'PY'
-          import glob
-          import os
-          import zipfile
-
-          zips = sorted(glob.glob(f"dist_houdini/dcc_mcp_houdini_quickinstall_{os.environ['PLATFORM']}_v*.zip"))
-          assert zips, "quickinstall zip missing"
-          with zipfile.ZipFile(zips[-1]) as zf:
-              names = zf.namelist()
-          assert any(n.endswith("/scripts/123.py") for n in names), names[:40]
-          assert any(n.endswith("/scripts/dcc_mcp_houdini_bootstrap.py") for n in names), names[:40]
-          assert any(n.endswith("/packages/dcc_mcp_houdini.json.template") for n in names), names[:40]
-          assert any("/wheels/dcc_mcp_houdini-" in n and n.endswith(".whl") for n in names), names[:40]
-          assert any("/wheels/dcc_mcp_core-" in n and n.endswith(".whl") for n in names), names[:40]
-          PY
+          zip_path="$(ls dist_houdini/dcc_mcp_houdini_quickinstall_${PLATFORM}_v*.zip | tail -n 1)"
+          python packaging/assemble_houdini_package.py --platform "$PLATFORM" --verify-zip "$zip_path"
       - name: Upload quickinstall artifact
         uses: actions/upload-artifact@v7
         with:

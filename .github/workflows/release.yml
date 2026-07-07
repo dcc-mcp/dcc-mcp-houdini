@@ -140,6 +140,12 @@ jobs:
         run: python -m build
       - name: Assemble quickinstall ZIP
         run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini
+      - name: Verify quickinstall version matrix
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          zip_path="$(ls dist_houdini/dcc_mcp_houdini_quickinstall_${PLATFORM}_v*.zip | tail -n 1)"
+          python packaging/assemble_houdini_package.py --platform "$PLATFORM" --verify-zip "$zip_path"
       - name: Upload quickinstall artifact
         uses: actions/upload-artifact@v7
         with:

@@ -20,6 +20,16 @@ def _load_packaging_script():
     return module
 
 
+def _write_quickinstall_zip(zip_path: Path, *wheel_names: str) -> None:
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
+        zf.writestr("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py", "")
+        zf.writestr("dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template", "")
+        zf.writestr("dcc_mcp_houdini/README.txt", "")
+        for wheel_name in wheel_names:
+            zf.writestr("dcc_mcp_houdini/wheels/{}".format(wheel_name), "")
+
+
 @pytest.mark.packaging
 def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     pkg = _load_packaging_script()
@@ -52,6 +62,38 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert "dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template" in names
     assert "dcc_mcp_houdini/install.ps1" in names
     assert "dcc_mcp_houdini/install.sh" in names
+
+
+def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+
+    zip_path = tmp_path / "dcc_mcp_houdini_quickinstall_win64_v0.10.1.zip"
+    _write_quickinstall_zip(
+        zip_path,
+        "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.19.7-cp38-abi3-win_amd64.whl",
+    )
+
+    with pytest.raises(RuntimeError, match="Bundled core drift"):
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+
+
+def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+
+    zip_path = tmp_path / "dcc_mcp_houdini_quickinstall_win64_v0.10.1.zip"
+    _write_quickinstall_zip(
+        zip_path,
+        "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.19.15-cp38-abi3-win_amd64.whl",
+    )
+
+    matrix = pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+
+    assert matrix["adapter"] == pkg.get_package_version()
+    assert matrix["core"] == "0.19.15"
+    assert matrix["server"] == pkg.get_package_version()
+    assert matrix["cli"] == pkg.get_package_version()
 
 
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
