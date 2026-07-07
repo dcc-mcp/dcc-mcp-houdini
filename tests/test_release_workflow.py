@@ -14,6 +14,11 @@ def _release_workflow() -> dict:
     return yaml.load(text, Loader=yaml.BaseLoader)
 
 
+def _ci_workflow() -> dict:
+    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    return yaml.load(text, Loader=yaml.BaseLoader)
+
+
 def test_release_workflow_can_backfill_pypi_for_existing_tag() -> None:
     workflow = _release_workflow()
 
@@ -41,3 +46,11 @@ def test_release_please_updates_runtime_version_file() -> None:
 
     assert "src/dcc_mcp_houdini/__version__.py" in extra_files
     assert "x-release-please-version" in version_file.read_text(encoding="utf-8")
+
+
+def test_quickinstall_jobs_verify_version_matrix() -> None:
+    for workflow in (_ci_workflow(), _release_workflow()):
+        steps = workflow["jobs"]["quickinstall"]["steps"]
+        verify_steps = [step for step in steps if step.get("name") == "Verify quickinstall version matrix"]
+        assert verify_steps, "quickinstall job should verify artifact version matrix"
+        assert "--verify-zip" in verify_steps[0]["run"]
