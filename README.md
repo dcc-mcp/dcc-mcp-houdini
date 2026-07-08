@@ -211,7 +211,7 @@ dcc-mcp-houdini/
 
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
 - `dcc-mcp-core >= 0.19.9`
-- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.19.9,<1.0.0` at assembly time; no old-core pin is active.
+- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.19.9,<1.0.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
 - See `pyproject.toml` for full dependencies
 
 ## License

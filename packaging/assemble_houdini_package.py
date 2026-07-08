@@ -85,6 +85,25 @@ def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
     return str(sorted(compatible)[-1])
 
 
+def validate_core_version(version: str, min_version: str = MIN_CORE_VERSION) -> str:
+    parsed = Version(version)
+    if parsed.is_prerelease or parsed < Version(min_version) or parsed >= Version("1.0.0"):
+        raise RuntimeError(
+            "Requested {} version {!r} is outside the supported range >= {},<1.0.0".format(
+                CORE_PACKAGE,
+                version,
+                min_version,
+            )
+        )
+    return str(parsed)
+
+
+def select_core_version(core_version: Optional[str] = None) -> str:
+    if core_version:
+        return validate_core_version(core_version)
+    return resolve_core_version()
+
+
 def _wheel_matches_platform(filename: str, platform: str) -> bool:
     if not filename.endswith(".whl"):
         return False
@@ -396,14 +415,18 @@ echo "Start Houdini $HOUDINI_VERSION; MCP defaults to http://127.0.0.1:8765/mcp"
 """
 
 
-def _readme(version: str, core_version: str, platform: str) -> str:
+def _readme(version: str, core_version: str, platform: str, explicit_core_version: bool = False) -> str:
+    if explicit_core_version:
+        core_policy = "explicit validated dcc-mcp-core {}.".format(core_version)
+    else:
+        core_policy = "latest non-prerelease dcc-mcp-core >= {},<1.0.0 at assembly time.".format(MIN_CORE_VERSION)
     return """dcc-mcp-houdini quick install package
 ======================================
 
 Version: {version}
 dcc-mcp-core wheels: {core_version}
 Platform: {platform}
-Core bundle policy: latest non-prerelease dcc-mcp-core >= {min_core_version},<1.0.0 at assembly time.
+Core bundle policy: {core_policy}
 Old-core pin: none.
 
 Install on Windows:
@@ -420,7 +443,7 @@ The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
 MCP URL defaults to http://127.0.0.1:8765/mcp.
-""".format(version=version, core_version=core_version, platform=platform, min_core_version=MIN_CORE_VERSION)
+""".format(version=version, core_version=core_version, platform=platform, core_policy=core_policy)
 
 
 def verify_quickinstall_zip(
@@ -431,7 +454,9 @@ def verify_quickinstall_zip(
     if platform not in PLATFORMS:
         raise ValueError("Unsupported platform {!r}; expected {}".format(platform, ", ".join(PLATFORMS)))
     if expected_core_version is None:
-        expected_core_version = resolve_core_version()
+        expected_core_version = select_core_version()
+    else:
+        expected_core_version = validate_core_version(expected_core_version)
 
     adapter_version = get_package_version()
     with zipfile.ZipFile(str(zip_path)) as zf:
@@ -498,13 +523,14 @@ def print_version_matrix(matrix: Dict[str, object]) -> None:
         print("    - {}".format(wheel))
 
 
-def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
+def assemble(platform: str, dist_dir: Path, output_dir: Path, core_version: Optional[str] = None) -> Path:
     if platform not in PLATFORMS:
         raise ValueError("Unsupported platform {!r}; expected {}".format(platform, ", ".join(PLATFORMS)))
     assert_versions_aligned()
     version = get_package_version()
     adapter_wheel = find_adapter_wheel(dist_dir, version)
-    core_version = resolve_core_version()
+    explicit_core_version = core_version is not None
+    core_version = select_core_version(core_version)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     zip_path = output_dir / "dcc_mcp_houdini_quickinstall_{}_v{}.zip".format(platform, version)
@@ -533,7 +559,10 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path) -> Path:
         install_sh = root / "install.sh"
         install_sh.write_text(_install_sh(), encoding="utf-8")
         install_sh.chmod(0o755)
-        (root / "README.txt").write_text(_readme(version, core_version, platform), encoding="utf-8")
+        (root / "README.txt").write_text(
+            _readme(version, core_version, platform, explicit_core_version),
+            encoding="utf-8",
+        )
 
         if zip_path.exists():
             zip_path.unlink()
@@ -555,14 +584,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--expected-core-version", help="Expected bundled dcc-mcp-core version; defaults to latest compatible."
     )
+    parser.add_argument(
+        "--core-version", help="Bundle this validated dcc-mcp-core version instead of resolving latest."
+    )
     args = parser.parse_args(argv)
 
     if args.verify_zip is not None:
-        matrix = verify_quickinstall_zip(args.verify_zip, args.platform, args.expected_core_version)
+        matrix = verify_quickinstall_zip(
+            args.verify_zip, args.platform, args.expected_core_version or args.core_version
+        )
         print_version_matrix(matrix)
         return 0
 
-    zip_path = assemble(args.platform, args.dist_dir, args.output_dir)
+    zip_path = assemble(args.platform, args.dist_dir, args.output_dir, args.core_version)
     print("Created {}".format(zip_path))
     return 0
 

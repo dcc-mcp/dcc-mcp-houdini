@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: false
+      core_version:
+        description: "Validated dcc-mcp-core version to bundle in quickinstall assets. Leave empty to resolve latest compatible from PyPI."
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}${{ inputs.tag_name && format('-{0}', inputs.tag_name) || '' }}
@@ -139,13 +143,25 @@ jobs:
       - name: Build wheel
         run: python -m build
       - name: Assemble quickinstall ZIP
-        run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini
+        env:
+          CORE_VERSION: ${{ inputs.core_version }}
+        run: |
+          args=()
+          if [ -n "$CORE_VERSION" ]; then
+            args+=(--core-version "$CORE_VERSION")
+          fi
+          python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini "${args[@]}"
       - name: Verify quickinstall version matrix
         env:
           PLATFORM: ${{ matrix.platform }}
+          CORE_VERSION: ${{ inputs.core_version }}
         run: |
           zip_path="$(ls dist_houdini/dcc_mcp_houdini_quickinstall_${PLATFORM}_v*.zip | tail -n 1)"
-          python packaging/assemble_houdini_package.py --platform "$PLATFORM" --verify-zip "$zip_path"
+          args=(--platform "$PLATFORM" --verify-zip "$zip_path")
+          if [ -n "$CORE_VERSION" ]; then
+            args+=(--expected-core-version "$CORE_VERSION")
+          fi
+          python packaging/assemble_houdini_package.py "${args[@]}"
       - name: Upload quickinstall artifact
         uses: actions/upload-artifact@v7
         with:

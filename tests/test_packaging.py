@@ -80,6 +80,42 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert "displayMessage" not in shelf_xml
 
 
+@pytest.mark.packaging
+def test_assemble_houdini_package_can_pin_validated_core(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pkg = _load_packaging_script()
+
+    version = pkg.get_package_version()
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    adapter_wheel = dist_dir / "dcc_mcp_houdini-{}-py3-none-any.whl".format(version)
+    adapter_wheel.write_bytes(b"adapter")
+    core_wheel = tmp_path / "dcc_mcp_core-0.19.17-cp38-abi3-win_amd64.whl"
+    core_wheel.write_bytes(b"core")
+
+    def fail_resolve(min_version=pkg.MIN_CORE_VERSION):
+        raise AssertionError("explicit core version should skip PyPI latest resolution")
+
+    def download_core_wheels(version_arg, platform, dest_dir):
+        assert version_arg == "0.19.17"
+        assert platform == "win64"
+        return [core_wheel]
+
+    monkeypatch.setattr(pkg, "resolve_core_version", fail_resolve)
+    monkeypatch.setattr(pkg, "download_core_wheels", download_core_wheels)
+
+    zip_path = pkg.assemble("win64", dist_dir, tmp_path / "out", core_version="0.19.17")
+
+    with zipfile.ZipFile(zip_path) as zf:
+        names = set(zf.namelist())
+        readme = zf.read("dcc_mcp_houdini/README.txt").decode("utf-8")
+    assert "dcc_mcp_houdini/wheels/{}".format(core_wheel.name) in names
+    assert "dcc-mcp-core wheels: 0.19.17" in readme
+    assert "Core bundle policy: explicit validated dcc-mcp-core 0.19.17." in readme
+
+
 def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> None:
     pkg = _load_packaging_script()
 

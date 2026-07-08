@@ -54,3 +54,18 @@ def test_quickinstall_jobs_verify_version_matrix() -> None:
         verify_steps = [step for step in steps if step.get("name") == "Verify quickinstall version matrix"]
         assert verify_steps, "quickinstall job should verify artifact version matrix"
         assert "--verify-zip" in verify_steps[0]["run"]
+
+
+def test_release_quickinstall_can_pin_validated_core_version() -> None:
+    workflow = _release_workflow()
+
+    inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+    assert inputs["core_version"]["default"] == ""
+
+    steps = workflow["jobs"]["quickinstall"]["steps"]
+    assemble_steps = [step for step in steps if step.get("name") == "Assemble quickinstall ZIP"]
+    verify_steps = [step for step in steps if step.get("name") == "Verify quickinstall version matrix"]
+    assert assemble_steps, "quickinstall job should assemble release artifacts"
+    assert verify_steps, "quickinstall job should verify release artifacts"
+    assert "--core-version" in assemble_steps[0]["run"]
+    assert "--expected-core-version" in verify_steps[0]["run"]
