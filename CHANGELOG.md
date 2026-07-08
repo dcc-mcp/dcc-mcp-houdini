@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.0...v0.11.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* allow validated core pin for Houdini quickinstall ([17398a5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/17398a5d805de260f00f11b35f7bf819bda1106e))
+
 ## [0.11.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.10.1...v0.11.0) (2026-07-08)
 
 
