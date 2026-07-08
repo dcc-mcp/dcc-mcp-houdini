@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.10.1...v0.11.0) (2026-07-08)
+
+
+### Features
+
+* add Houdini quickinstall shelf controls ([718a687](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/718a6879c9639c8633f6141a51db1fffb35d84b3))
+
 ## [0.10.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.10.0...v0.10.1) (2026-06-30)
 
 
