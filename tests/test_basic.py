@@ -42,6 +42,31 @@ def test_server_options_to_core() -> None:
     assert core_opts.port == 9000
 
 
+def test_file_registry_registration_survives_disabled_failover(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disabling failover must not disable FileRegistry self-registration."""
+    monkeypatch.setenv("DCC_MCP_GATEWAY_PORT", "19876")
+
+    from dcc_mcp_houdini.server import HoudiniMcpServer
+
+    server = HoudiniMcpServer(port=0, enable_gateway_failover=False, job_storage_path="")
+    try:
+        assert server._enable_gateway_failover is False
+        assert server._config.gateway_port == 19876
+    finally:
+        server.stop()
+
+
+def test_explicit_zero_gateway_port_disables_registration() -> None:
+    """gateway_port=0 remains the explicit opt-out for FileRegistry registration."""
+    from dcc_mcp_houdini.server import HoudiniMcpServer
+
+    server = HoudiniMcpServer(port=0, gateway_port=0, enable_gateway_failover=False, job_storage_path="")
+    try:
+        assert server._config.gateway_port == 0
+    finally:
+        server.stop()
+
+
 @pytest.mark.skip(reason="Requires Houdini environment")
 def test_server_creation() -> None:
     """Test HoudiniMcpServer creation (requires Houdini)."""

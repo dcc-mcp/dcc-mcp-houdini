@@ -177,9 +177,10 @@ class HoudiniMcpServer(DccServerBase):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[%s] Workflow enable failed: %s", _DCC_NAME, exc)
 
-        if options.gateway_port == 0 or (
-            options.gateway_port is None and not _env.resolve_enable_gateway_failover(options.enable_gateway_failover)
-        ):
+        # FileRegistry self-registration is controlled by gateway_port in core.
+        # Keep explicit gateway_port=0 as the opt-out, but do not let the
+        # failover flag suppress registration for live discovery.
+        if options.gateway_port == 0:
             self._config.gateway_port = 0
 
         from dcc_mcp_houdini._readiness import install_readiness
