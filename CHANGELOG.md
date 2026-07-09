@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.1...v0.11.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* keep Houdini registry registration enabled ([d672351](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d672351e9f1b501e3fd9f05ead0074022c7d1e29))
+
 ## [0.11.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.0...v0.11.1) (2026-07-08)
 
 
