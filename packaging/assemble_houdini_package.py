@@ -255,7 +255,13 @@ def bootstrap_and_start() -> object:
     port = int(os.environ.get("DCC_MCP_HOUDINI_PORT", "8765"))
     gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
     gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
-    return dcc_mcp_houdini.start_server(port=port, gateway_port=gateway_port, wait_ready=False)
+    registry_dir = os.environ.get("DCC_MCP_REGISTRY_DIR") or None
+    return dcc_mcp_houdini.start_server(
+        port=port,
+        gateway_port=gateway_port,
+        registry_dir=registry_dir,
+        wait_ready=False,
+    )
 '''
 
 

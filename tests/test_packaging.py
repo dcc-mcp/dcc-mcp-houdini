@@ -56,6 +56,7 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     with zipfile.ZipFile(zip_path) as zf:
         names = set(zf.namelist())
         shelf_xml = zf.read("dcc_mcp_houdini/toolbar/DCC-MCP.shelf").decode("utf-8")
+        bootstrap = zf.read("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py").decode("utf-8")
     assert "dcc_mcp_houdini/wheels/{}".format(adapter_wheel.name) in names
     for core_wheel in core_wheels:
         assert "dcc_mcp_houdini/wheels/{}".format(core_wheel.name) in names
@@ -75,6 +76,8 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
         "dcc_mcp_houdini_docs",
     }
     assert "wait_ready=False" in shelf_xml
+    assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
+    assert "registry_dir=registry_dir" in bootstrap
     assert "get_server" in shelf_xml
     assert "setStatusMessage" in shelf_xml
     assert "displayMessage" not in shelf_xml
