@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.2...v0.11.3) (2026-07-11)
+
+
+### Bug Fixes
+
+* support standalone main-thread execution ([481ecda](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/481ecda7dbffce07aa0bd9b72a218c35de90b83d))
+
 ## [0.11.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.1...v0.11.2) (2026-07-09)
 
 
