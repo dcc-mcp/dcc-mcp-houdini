@@ -17,21 +17,21 @@ def create_execution_stack():
     """Create the dispatcher + optional host adapter for the current environment.
 
     Returns:
-        ``(dispatcher, host)`` where *host* is a started :class:`HoudiniHost`
-        in interactive mode, or ``None`` in headless ``hython``.
+        ``(dispatcher, host)`` where *host* is a started :class:`HoudiniHost`.
+        Interactive Houdini uses its UI event loop; headless ``hython`` uses
+        the host adapter's blocking queue pump.
     """
     try:
         import hou  # noqa: PLC0415
 
-        if hou.isUIAvailable():
-            from dcc_mcp_core.host import BlockingDispatcher
-
-            blocking = BlockingDispatcher()
-            dispatcher = HoudiniCallableDispatcher(blocking)
-            host = HoudiniHost(blocking)
-            host.start()
-            return dispatcher, host
+        _ = hou.isUIAvailable()
     except ImportError:
         pass
 
-    return HoudiniStandaloneDispatcher(), None
+    from dcc_mcp_core.host import BlockingDispatcher
+
+    blocking = BlockingDispatcher()
+    dispatcher = HoudiniCallableDispatcher(blocking)
+    host = HoudiniHost(blocking)
+    host.start()
+    return dispatcher, host

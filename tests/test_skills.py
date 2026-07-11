@@ -90,7 +90,7 @@ class TestGetSessionInfoSkill:
         mock_hou.applicationVersion.return_value = (20, 5, 0)
         mock_hou.applicationVersionString.return_value = "20.5.0"
         mock_hou.isUIAvailable.return_value = True
-        mock_hou.hipFile.hasFile.return_value = True
+        mock_hou.hipFile.isNewFile.return_value = False
         mock_hou.hipFile.name.return_value = "/tmp/test.hip"
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
@@ -106,9 +106,9 @@ class TestGetSceneInfoSkill:
         mod = _load_script("houdini-scene", "get_scene_info.py")
         mock_hou = MagicMock()
         mock_hou.node.return_value = MagicMock(children=lambda: [1, 2, 3])
-        mock_hou.hipFile.hasFile.return_value = False
+        mock_hou.hipFile.isNewFile.return_value = True
         mock_hou.hipFile.name.return_value = ""
-        mock_hou.playbar.frame.return_value = 1
+        mock_hou.frame.return_value = 1
         mock_hou.playbar.playbackRange.return_value = (1, 240)
 
         with patch.dict(sys.modules, {"hou": mock_hou}):

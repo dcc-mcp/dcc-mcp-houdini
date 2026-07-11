@@ -31,7 +31,7 @@ def save_hip_file(file_path: Optional[str] = None) -> dict:
             hou.hipFile.save(file_name=resolved)
         else:
             hou.hipFile.save()
-            resolved = hou.hipFile.name() if hou.hipFile.hasFile() else None
+            resolved = hou.hipFile.name() if not hou.hipFile.isNewFile() else None
         return skill_success("Saved Houdini hip file", hip_file=resolved)
     except Exception as exc:
         return skill_exception(exc, message="Failed to save Houdini hip file")

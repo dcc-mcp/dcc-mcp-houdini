@@ -95,7 +95,13 @@ class ReadinessBinder:
 
         server._server.set_readiness_probe(self.probe)
         self.published_to_server = True
-        self.mark_dispatcher_ready()
+        bridge = getattr(server, "_execution_bridge", None)
+        host_dispatcher = bridge.resolve_host_dispatcher() if bridge is not None else None
+        execution_ready = host_dispatcher is not None
+        self.mark_dispatcher_ready(
+            host_execution_bridge_ready=execution_ready,
+            main_thread_executor_ready=execution_ready,
+        )
 
         dispatcher = getattr(server, "_houdini_dispatcher", None)
         if dispatcher is None:
@@ -108,9 +114,19 @@ class ReadinessBinder:
         self.dcc_scheduled = bool(self.probe_scheduler(dispatcher, self.mark_dcc_ready))
         return self.dcc_scheduled
 
-    def mark_dispatcher_ready(self, value: bool = True) -> None:
+    def mark_dispatcher_ready(
+        self,
+        value: bool = True,
+        *,
+        host_execution_bridge_ready: Optional[bool] = None,
+        main_thread_executor_ready: Optional[bool] = None,
+    ) -> None:
         """Flip the ``dispatcher`` bit."""
         self.probe.set_dispatcher_ready(value)
+        if host_execution_bridge_ready is not None:
+            self.probe.set_host_execution_bridge_ready(host_execution_bridge_ready)
+        if main_thread_executor_ready is not None:
+            self.probe.set_main_thread_executor_ready(main_thread_executor_ready)
 
     def mark_dcc_ready(self, value: bool = True) -> None:
         """Flip the ``dcc`` bit."""

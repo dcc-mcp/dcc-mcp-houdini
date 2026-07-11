@@ -15,9 +15,9 @@ def get_scene_info() -> dict:
         playback = hou.playbar
         return skill_success(
             "Retrieved Houdini scene information",
-            hip_file=hou.hipFile.name() if hou.hipFile.hasFile() else None,
-            hip_has_file=bool(hou.hipFile.hasFile()),
-            frame=playback.frame(),
+            hip_file=hou.hipFile.name() if not hou.hipFile.isNewFile() else None,
+            hip_has_file=not hou.hipFile.isNewFile(),
+            frame=hou.frame(),
             start_frame=playback.playbackRange()[0],
             end_frame=playback.playbackRange()[1],
             obj_node_count=node_count,
