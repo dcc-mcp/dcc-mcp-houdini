@@ -60,6 +60,26 @@ class HoudiniCallableDispatcher:
         return bool(self._dispatcher.is_shutdown())
 
 
+class HoudiniInlineCallableDispatcher:
+    """Execute after the HTTP layer has already hopped to the host queue."""
+
+    def dispatch_callable(
+        self,
+        func: Callable[..., Any],
+        *args: Any,
+        affinity: str = "main",
+        context: Any = None,
+        action_name: str = "",
+        skill_name: Optional[str] = None,
+        execution: str = "sync",
+        timeout_hint_secs: Optional[int] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run inline without posting a second job to the same queue."""
+        _ = (affinity, context, action_name, skill_name, execution, timeout_hint_secs)
+        return func(*args, **kwargs)
+
+
 class HoudiniHost(HostAdapter):
     """Drive a dcc-mcp-core dispatcher from Houdini's main thread.
 

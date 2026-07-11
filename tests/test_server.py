@@ -12,6 +12,7 @@ def test_minimal_mode_config() -> None:
 
     cfg = build_minimal_mode_config()
     assert tuple(cfg.skills) == MINIMAL_SKILLS
+    assert cfg.deactivate_groups == {}
 
 
 def test_resolve_minimal_mode_default() -> None:
@@ -22,20 +23,30 @@ def test_resolve_minimal_mode_default() -> None:
 
 
 def test_houdini_server_options_port() -> None:
+    from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniInlineCallableDispatcher
     from dcc_mcp_houdini.server import HoudiniServerOptions
 
-    opts = HoudiniServerOptions(port=9001)
+    dispatcher = HoudiniCallableDispatcher()
+    opts = HoudiniServerOptions(port=9001, dispatcher=dispatcher)
     core = opts.to_core_options()
+    bridge = core.execution.mode.bridge
     assert core.port == 9001
+    assert isinstance(bridge.dispatcher, HoudiniInlineCallableDispatcher)
+    assert bridge.host_dispatcher is dispatcher.host_dispatcher
 
 
 def test_create_execution_stack_without_hou() -> None:
     from dcc_mcp_houdini.dispatcher import create_execution_stack
-    from dcc_mcp_houdini.dispatcher.standalone import HoudiniStandaloneDispatcher
+    from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniHost
 
     dispatcher, host = create_execution_stack()
-    assert isinstance(dispatcher, HoudiniStandaloneDispatcher)
-    assert host is None
+    try:
+        assert isinstance(dispatcher, HoudiniCallableDispatcher)
+        assert isinstance(host, HoudiniHost)
+        assert host.is_running
+        assert dispatcher.host_dispatcher is not None
+    finally:
+        host.stop()
 
 
 def test_wait_until_ready_uses_urllib(monkeypatch: pytest.MonkeyPatch) -> None:

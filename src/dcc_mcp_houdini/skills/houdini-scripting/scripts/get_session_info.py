@@ -19,7 +19,7 @@ def get_session_info() -> dict:
             "python_executable": sys.executable,
             "platform": sys.platform,
             "ui_available": bool(hou.isUIAvailable()),
-            "hip_file": hou.hipFile.name() if hou.hipFile.hasFile() else None,
+            "hip_file": hou.hipFile.name() if not hou.hipFile.isNewFile() else None,
         }
         return skill_success(
             "Houdini session info retrieved",

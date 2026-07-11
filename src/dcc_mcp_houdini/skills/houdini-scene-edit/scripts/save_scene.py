@@ -22,7 +22,7 @@ def save_scene(file_path: Optional[str] = None) -> dict:
         if file_path:
             hou.hipFile.save(file_name=file_path)
         else:
-            if not hou.hipFile.hasFile():
+            if hou.hipFile.isNewFile():
                 return skill_error(
                     "Scene has never been saved",
                     "No hip path is set; pass file_path to choose a destination",

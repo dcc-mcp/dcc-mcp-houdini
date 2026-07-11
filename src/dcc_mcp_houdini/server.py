@@ -79,8 +79,13 @@ class HoudiniServerOptions:
         execution_bridge = self.execution_bridge
         if execution_bridge is None and dispatcher is not None:
             host_dispatcher = _host_dispatcher_from(dispatcher)
+            bridge_dispatcher = dispatcher
+            if host_dispatcher is not None:
+                from dcc_mcp_houdini.host import HoudiniInlineCallableDispatcher
+
+                bridge_dispatcher = HoudiniInlineCallableDispatcher()
             execution_bridge = HostExecutionBridge(
-                dispatcher=dispatcher,
+                dispatcher=bridge_dispatcher,
                 host_dispatcher=host_dispatcher,
                 default_thread_affinity="main",
             )
