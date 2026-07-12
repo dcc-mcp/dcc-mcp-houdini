@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.4](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.3...v0.11.4) (2026-07-12)
+
+
+### Documentation
+
+* add six dcc particle showcase ([#97](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/97)) ([70e89ac](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/70e89acb134c2a3388429f18bfac87e8e809217e))
+
 ## [0.11.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.2...v0.11.3) (2026-07-11)
 
 
