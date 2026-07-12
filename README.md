@@ -13,6 +13,18 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
+## Six-DCC production showcase
+
+![Procedural Houdini portal particles in the six-DCC showcase](docs/showcase/six-dcc-portal-particles.png)
+
+This image is a real Blender render of a Houdini-authored animated effect.
+In the tested six-instance workflow, Maya supplied the animated IK/FK rig,
+3ds Max baked and re-exported the character, Houdini 21 generated 420
+procedural particle instances and a 48-frame Alembic cache, and a second
+Houdini GUI instance re-imported that cache before Blender assembled the final
+shot. The rock asset came from the no-token `dcc-asset-polyhaven` marketplace
+skill and is CC0-1.0.
+
 ## Features
 
 - Embedded MCP Streamable HTTP server inside Houdini (port 8765)
