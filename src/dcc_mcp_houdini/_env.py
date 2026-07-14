@@ -17,9 +17,7 @@ DEFAULT_CORE_LOG_LEVEL = "WARN"
 def configure_core_logging() -> None:
     """Keep dcc-mcp-core's default HTTP tracing out of Houdini's console."""
     log_level = (
-        os.environ.get(CORE_LOG_LEVEL_ENV)
-        or os.environ.get(LEGACY_CORE_LOG_LEVEL_ENV)
-        or DEFAULT_CORE_LOG_LEVEL
+        os.environ.get(CORE_LOG_LEVEL_ENV) or os.environ.get(LEGACY_CORE_LOG_LEVEL_ENV) or DEFAULT_CORE_LOG_LEVEL
     )
     os.environ.setdefault(CORE_LOG_LEVEL_ENV, log_level)
     os.environ.setdefault(LEGACY_CORE_LOG_LEVEL_ENV, log_level)
