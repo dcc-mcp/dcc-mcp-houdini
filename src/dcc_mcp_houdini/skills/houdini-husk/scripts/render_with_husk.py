@@ -15,7 +15,13 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _husk_common import build_husk_command, find_husk, find_hython  # noqa: E402
+from _husk_common import (  # noqa: E402
+    build_husk_command,
+    find_husk,
+    find_hython,
+    husk_subprocess_environment,
+    resolve_husk_renderer,
+)
 
 
 def render_with_husk(
@@ -80,6 +86,7 @@ def render_with_husk(
         )
 
     try:
+        resolved_renderer = resolve_husk_renderer(renderer)
         cmd = build_husk_command(
             usd_file=usd_file,
             output_path=output_path,
@@ -97,6 +104,7 @@ def render_with_husk(
             capture_output=True,
             text=True,
             timeout=3600,  # 1 hour timeout
+            env=husk_subprocess_environment(),
         )
         elapsed = round(time.time() - start, 3)
 
@@ -110,17 +118,30 @@ def render_with_husk(
             base, ext = os.path.splitext(output_path)
             written_files = sorted(glob.glob("{}.*{}".format(base, ext)))
 
+        context = {
+            "usd_file": usd_file,
+            "output_path": output_path,
+            "renderer": resolved_renderer,
+            "requested_renderer": renderer,
+            "elapsed_secs": elapsed,
+            "returncode": result.returncode,
+            "written_files": written_files,
+            "stdout": result.stdout[-2000:] if result.stdout else "",
+            "stderr": result.stderr[-2000:] if result.stderr else "",
+            "command": " ".join(cmd),
+        }
+        if result.returncode != 0:
+            details = context["stderr"] or context["stdout"] or f"husk exited with code {result.returncode}"
+            return skill_error(
+                "Husk render failed",
+                details,
+                prompt="Inspect the renderer delegate and Houdini search-path diagnostics.",
+                **context,
+            )
+
         return skill_success(
-            "Husk render completed" if result.returncode == 0 else "Husk render finished with errors",
-            usd_file=usd_file,
-            output_path=output_path,
-            renderer=renderer,
-            elapsed_secs=elapsed,
-            returncode=result.returncode,
-            written_files=written_files,
-            stdout=result.stdout[-2000:] if result.stdout else "",
-            stderr=result.stderr[-2000:] if result.stderr else "",
-            command=" ".join(cmd),
+            "Husk render completed",
+            **context,
         )
     except subprocess.TimeoutExpired:
         elapsed = round(time.time() - start, 3)

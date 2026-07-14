@@ -6,6 +6,28 @@ import os
 import shutil
 from typing import Any, Optional, Sequence
 
+_RENDERER_ALIASES = {
+    "karma": "BRAY_HdKarma",
+    "karma_cpu": "BRAY_HdKarma",
+    "karma_xpu": "BRAY_HdKarmaXPU",
+}
+
+
+def resolve_husk_renderer(renderer: str) -> str:
+    """Resolve user-facing renderer aliases to Hydra delegate identifiers."""
+    return _RENDERER_ALIASES.get(renderer.casefold(), renderer)
+
+
+def husk_subprocess_environment(base: Optional[dict] = None) -> dict:
+    """Return a child environment with Houdini's default search paths enabled."""
+    environment = dict(os.environ if base is None else base)
+    for name in ("HOUDINI_PATH", "HOUDINI_SCRIPT_PATH"):
+        parts = [part for part in environment.get(name, "").split(os.pathsep) if part]
+        if "&" not in parts:
+            parts.append("&")
+        environment[name] = os.pathsep.join(parts)
+    return environment
+
 
 def get_node(hou: Any, node_path: str) -> Any:
     """Return a Houdini node or raise a useful error."""
@@ -92,7 +114,7 @@ def build_husk_command(
     cmd = ["husk"]
 
     if renderer:
-        cmd.extend(["--renderer", renderer])
+        cmd.extend(["--renderer", resolve_husk_renderer(renderer)])
 
     if resolution and len(resolution) >= 2:
         cmd.extend(["--res", str(int(resolution[0])), str(int(resolution[1]))])
