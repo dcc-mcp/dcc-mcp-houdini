@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.5](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.4...v0.11.5) (2026-07-14)
+
+
+### Bug Fixes
+
+* enforce Husk render contracts ([b14df92](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b14df925eee180cd1cbf2eec16dfe899387dd44a))
+* silence Houdini HTTP logs ([fe95fdb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fe95fdbb72a2e62afbb2098954daf2940ce3e23e))
+
 ## [0.11.4](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.3...v0.11.4) (2026-07-12)
 
 
