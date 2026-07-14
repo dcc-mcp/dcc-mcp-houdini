@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,27 @@ def test_minimal_mode_config() -> None:
     cfg = build_minimal_mode_config()
     assert tuple(cfg.skills) == MINIMAL_SKILLS
     assert cfg.deactivate_groups == {}
+
+
+def test_configure_core_logging_defaults_to_warn(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dcc_mcp_houdini._env import configure_core_logging
+
+    monkeypatch.delenv("MCP_LOG_LEVEL", raising=False)
+    configure_core_logging()
+
+    assert "WARN" == os.environ["MCP_LOG_LEVEL"]
+    assert "WARN" == os.environ["DCC_MCP_LOG_LEVEL"]
+
+
+def test_configure_core_logging_preserves_user_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dcc_mcp_houdini._env import configure_core_logging
+
+    monkeypatch.delenv("MCP_LOG_LEVEL", raising=False)
+    monkeypatch.setenv("DCC_MCP_LOG_LEVEL", "DEBUG")
+    configure_core_logging()
+
+    assert "DEBUG" == os.environ["DCC_MCP_LOG_LEVEL"]
+    assert "DEBUG" == os.environ["MCP_LOG_LEVEL"]
 
 
 def test_resolve_minimal_mode_default() -> None:

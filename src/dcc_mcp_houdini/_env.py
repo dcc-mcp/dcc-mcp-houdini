@@ -9,6 +9,24 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+CORE_LOG_LEVEL_ENV = "DCC_MCP_LOG_LEVEL"
+LEGACY_CORE_LOG_LEVEL_ENV = "MCP_LOG_LEVEL"
+DEFAULT_CORE_LOG_LEVEL = "WARN"
+
+
+def configure_core_logging() -> None:
+    """Keep dcc-mcp-core's default HTTP tracing out of Houdini's console."""
+    log_level = (
+        os.environ.get(CORE_LOG_LEVEL_ENV)
+        or os.environ.get(LEGACY_CORE_LOG_LEVEL_ENV)
+        or DEFAULT_CORE_LOG_LEVEL
+    )
+    os.environ.setdefault(CORE_LOG_LEVEL_ENV, log_level)
+    os.environ.setdefault(LEGACY_CORE_LOG_LEVEL_ENV, log_level)
+
+
+configure_core_logging()
+
 ENV_METRICS = "DCC_MCP_HOUDINI_METRICS"
 ENV_JOB_STORAGE = "DCC_MCP_HOUDINI_JOB_STORAGE_PATH"
 ENV_ENABLE_WORKFLOWS = "DCC_MCP_HOUDINI_ENABLE_WORKFLOWS"
