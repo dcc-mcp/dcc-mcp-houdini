@@ -278,15 +278,18 @@ class TestRenderExecution:
         )
         process = MagicMock(pid=4321)
 
-        with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
-            mod.tempfile, "gettempdir", return_value=str(tmp_path)
-        ), patch.object(mod.subprocess, "Popen", return_value=process) as popen:
+        with patch.dict(mod.os.environ, {"PARENT_ONLY": "keep"}, clear=True), patch.object(
+            mod.sys, "executable", str(tmp_path / "houdini.exe")
+        ), patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod.subprocess, "Popen", return_value=process
+        ) as popen:
             job = mod.launch_background_render(
                 mock_hou,
                 "/stage/karma",
                 [1, 9, 4],
                 str(tmp_path / "beauty.$F4.exr"),
             )
+            assert "DCC_MCP_BACKGROUND_RENDER" not in mod.os.environ
 
         status = json.loads((tmp_path / "dcc-mcp-houdini-render-jobs" / job["job_id"] / "status.json").read_text())
         assert job["pid"] == 4321
@@ -297,6 +300,8 @@ class TestRenderExecution:
         }
         assert popen.call_args.kwargs["cwd"].endswith(job["job_id"])
         assert popen.call_args.args[0][0] == str(hython)
+        assert popen.call_args.kwargs["env"]["PARENT_ONLY"] == "keep"
+        assert popen.call_args.kwargs["env"]["DCC_MCP_BACKGROUND_RENDER"] == "1"
 
     def test_background_worker_reports_only_updated_requested_outputs(self, tmp_path: Path) -> None:
         stale = tmp_path / "beauty.0001.exr"

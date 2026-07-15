@@ -75,6 +75,8 @@ def launch_background_render(
         }
     )
     _write_json(status_path, status)
+    child_env = dict(os.environ)
+    child_env["DCC_MCP_BACKGROUND_RENDER"] = "1"
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         process = subprocess.Popen(  # noqa: S603
@@ -83,6 +85,7 @@ def launch_background_render(
             stdout=stdout,
             stderr=stderr,
             cwd=str(job_dir),
+            env=child_env,
             creationflags=creationflags,
             close_fds=True,
         )

@@ -84,6 +84,11 @@ The package writes a Houdini package JSON into the user preferences folder.
 On startup, `scripts/123.py` extracts bundled wheels into `vendor/` and starts
 the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
 
+Isolated background ROP workers receive `DCC_MCP_BACKGROUND_RENDER=1` in their
+child environment. Package and custom `123.py`/`456.py` startup hooks must skip
+MCP adapter autostart when that marker is present; the parent Houdini environment
+is not modified.
+
 ## Usage
 
 ```python
