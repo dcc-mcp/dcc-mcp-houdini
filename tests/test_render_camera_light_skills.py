@@ -212,7 +212,7 @@ class TestRenderExecution:
         mod = _load_script("houdini-render", "_background_render.py")
         hip = tmp_path / "scene.hip"
         hip.write_bytes(b"hip")
-        hython = tmp_path / "hython.exe"
+        hython = tmp_path / ("hython.exe" if mod.os.name == "nt" else "hython")
         hython.write_bytes(b"exe")
         mock_hou = MagicMock()
         mock_hou.hipFile.path.return_value = str(hip)
