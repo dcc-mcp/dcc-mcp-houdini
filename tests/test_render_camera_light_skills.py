@@ -43,30 +43,39 @@ def _scalar_parm(value):
     return parm
 
 
-def _run_render_worker(tmp_path, frame_range, expected_outputs, snapshot, render, stderr_text=""):
+def _run_render_worker(
+    tmp_path,
+    frame_range,
+    expected_outputs,
+    snapshot,
+    render,
+    stderr_text="",
+    pattern=None,
+    include_launch_snapshot=True,
+):
     mod = _load_render_worker()
-    pattern = str(tmp_path / "beauty.$F4.exr")
+    pattern = pattern or str(tmp_path / "beauty.$F4.exr")
     stdout = tmp_path / "stdout.log"
     stderr = tmp_path / "stderr.log"
     stdout.write_text("", encoding="utf-8")
     stderr.write_text(stderr_text, encoding="utf-8")
     status_path = tmp_path / "status.json"
-    status_path.write_text(
-        json.dumps(
+    status = {"state": "queued", "stdout_path": str(stdout), "stderr_path": str(stderr)}
+    if include_launch_snapshot:
+        status.update(
             {
-                "state": "queued",
-                "stdout_path": str(stdout),
-                "stderr_path": str(stderr),
                 "expected_outputs": [str(path) for path in expected_outputs],
                 "output_snapshot": snapshot,
             }
-        ),
-        encoding="utf-8",
-    )
+        )
+    status_path.write_text(json.dumps(status), encoding="utf-8")
     rop = _node("/stage/karma", "karma", "usdrender_rop")
     rop.errors.return_value = []
     mock_hou = MagicMock()
     mock_hou.node.return_value = rop
+    mock_hou.text.expandStringAtFrame.side_effect = lambda value, frame: value.replace(
+        "$F4", "{:04d}".format(int(frame))
+    )
     argv = [
         "_render_worker.py",
         "scene.hip",
@@ -308,6 +317,26 @@ class TestRenderExecution:
         )
         assert status["state"] == "completed"
         assert status["written_files"] == [str(tmp_path / "beauty.0005.exr")]
+
+    def test_background_worker_recovers_from_cached_launcher_without_snapshot(self, tmp_path: Path) -> None:
+        output = tmp_path / "karma_beauty.1080.exr"
+        pattern = "{}/karma_beauty.$F4.exr".format(tmp_path.as_posix())
+
+        def render(_rop, _frame_range):
+            output.write_bytes(b"new frame")
+            return [1080.0, 1080.0], "execute"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1080, 1080, 1],
+            [],
+            {},
+            render,
+            pattern=pattern,
+            include_launch_snapshot=False,
+        )
+        assert status["state"] == "completed"
+        assert status["written_files"] == [output.as_posix()]
 
     def test_background_worker_fails_when_only_stale_output_exists(self, tmp_path: Path) -> None:
         stale = tmp_path / "beauty.0001.exr"

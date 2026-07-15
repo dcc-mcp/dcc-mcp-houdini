@@ -15,31 +15,13 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _render_common import expanded_outputs, output_snapshot
+from _render_common import output_snapshot, requested_outputs
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     pending = path.with_suffix(".tmp")
     pending.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(str(pending), str(path))
-
-
-def _requested_outputs(hou: Any, pattern: Optional[str], frame_range: Optional[list[float]]) -> list[str]:
-    if not pattern:
-        return []
-    if not frame_range:
-        return expanded_outputs(pattern)
-    start, end = float(frame_range[0]), float(frame_range[1])
-    step = float(frame_range[2]) if len(frame_range) > 2 else 1.0
-    if step == 0 or (end - start) * step < 0:
-        raise ValueError("frame_range step must move from start toward end")
-    frame = start
-    tolerance = abs(step) * 1e-9
-    outputs = []
-    while (step > 0 and frame <= end + tolerance) or (step < 0 and frame >= end - tolerance):
-        outputs.append(hou.text.expandStringAtFrame(pattern, frame))
-        frame += step
-    return list(dict.fromkeys(outputs))
 
 
 def launch_background_render(
@@ -74,7 +56,7 @@ def launch_background_render(
         str(status_path),
         json.dumps(output_pattern),
     ]
-    expected_outputs = _requested_outputs(hou, output_pattern, frame_range)
+    expected_outputs = requested_outputs(hou, output_pattern, frame_range)
     initial = {
         "job_id": job_id,
         "state": "queued",
