@@ -147,6 +147,29 @@ tools:
           items: {type: number}
           minItems: 2
           maxItems: 3
+        background:
+          type: boolean
+          default: false
+          description: Launch an isolated hython job and return immediately, keeping the Houdini UI responsive.
+  - name: get_render_job
+    description: Read status, elapsed time, and written files for a background ROP render job.
+    source_file: scripts/get_render_job.py
+    execution: sync
+    affinity: any
+    group: render
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
   - name: create_render_layer
     description: >-
       Create a render layer (Render Product in Solaris /stage or merge in ROP

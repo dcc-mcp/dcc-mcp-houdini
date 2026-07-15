@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -32,6 +33,7 @@ def _node(path: str, name: str, type_name: str = "geo") -> MagicMock:
 def _scalar_parm(value):
     parm = MagicMock()
     parm.eval.return_value = value
+    parm.unexpandedString.return_value = value
     return parm
 
 
@@ -206,6 +208,48 @@ class TestRenderSettings:
 
 
 class TestRenderExecution:
+    def test_background_render_launches_isolated_hython(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"hip")
+        hython = tmp_path / "hython.exe"
+        hython.write_bytes(b"exe")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        process = MagicMock(pid=4321)
+
+        with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
+            mod.tempfile, "gettempdir", return_value=str(tmp_path)
+        ), patch.object(mod.subprocess, "Popen", return_value=process) as popen:
+            job = mod.launch_background_render(mock_hou, "/stage/karma", [1, 2, 1], "beauty.$F4.exr")
+
+        status = json.loads((tmp_path / "dcc-mcp-houdini-render-jobs" / job["job_id"] / "status.json").read_text())
+        assert job["pid"] == 4321
+        assert status["state"] == "queued"
+        assert "pid" not in status
+        assert popen.call_args.kwargs["cwd"].endswith(job["job_id"])
+        assert popen.call_args.args[0][0] == str(hython)
+
+    def test_render_rop_background_returns_job_without_rendering_in_ui(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "beauty.$F4.exr"))
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        job = {"job_id": "a" * 32, "state": "running", "pid": 1234}
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            with patch.object(mod, "launch_background_render", return_value=job) as launch:
+                result = mod.render_rop("/out/mantra1", frame_range=[1, 9, 4], background=True)
+
+        assert result["success"] is True
+        assert result["context"]["background"] is True
+        assert result["context"]["job_id"] == "a" * 32
+        launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 9, 4], str(tmp_path / "beauty.$F4.exr"))
+        rop.render.assert_not_called()
+
     def test_render_rop_reports_written_and_elapsed(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.exr"
@@ -225,3 +269,35 @@ class TestRenderExecution:
         assert result["context"]["rendered"] is True
         assert result["context"]["written_files"] == [str(out)]
         assert "elapsed_secs" in result["context"]
+
+    def test_render_rop_uses_solaris_execute_and_outputimage(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        out = tmp_path / "karma.0001.exr"
+        output = _scalar_parm(str(out).replace("0001", "$F4"))
+        output.eval.return_value = str(out)
+        execute = MagicMock()
+        execute.pressButton.side_effect = lambda: out.write_bytes(b"exr")
+        frame_parms = [MagicMock(), MagicMock(), MagicMock()]
+        rop = _node("/stage/karma_rop", "karma_rop", "usdrender_rop")
+        rop.parmTuple.side_effect = lambda n: tuple(frame_parms) if n == "f" else None
+        rop.parm.side_effect = lambda n: {
+            "outputimage": output,
+            "lopoutput": _scalar_parm("__render__.usd"),
+            "execute": execute,
+        }.get(n)
+        rop.errors.return_value = []
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.render_rop("/stage/karma_rop", frame_range=[1, 1], background=False)
+
+        assert result["success"] is True
+        assert result["context"]["execution_mode"] == "execute"
+        assert result["context"]["output_pattern"].endswith("karma.$F4.exr")
+        assert result["context"]["written_files"] == [str(out)]
+        execute.pressButton.assert_called_once_with()
+        rop.render.assert_not_called()
+        for parm, value in zip(frame_parms, (1.0, 1.0, 1.0)):
+            parm.deleteAllKeyframes.assert_called_once_with()
+            parm.set.assert_called_once_with(value)

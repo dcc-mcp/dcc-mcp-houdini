@@ -31,8 +31,9 @@ agent can detect and skip cleanly when rendering is unavailable.
 - **`viewport`:** `capture_viewport` (single frame), `flipbook` (range). Both
   clamp resolution to 4096 and return `written_files` / `skipped` / `warnings`.
 - **`render`:** `get_render_settings` (read-only), `set_render_settings`
-  (reports `unsupported` fields per ROP type), `render_rop` (async, long
-  timeout, reports `elapsed_secs` + `written_files`), `configure_aovs` (add/remove
+  (reports `unsupported` fields per ROP type), `render_rop` (foreground or
+  isolated `hython` background job), `get_render_job` (polls status without
+  blocking the UI), `configure_aovs` (add/remove
   AOVs with 15+ presets), `get_render_stats` (read resolution/samples/renderer/output).
 - **`render_layer`:** `create_render_layer` (Solaris RenderProduct or ROP merge),
   `manage_takes` (create/switch/delete/list takes for render layer variants).
@@ -59,6 +60,9 @@ agent can detect and skip cleanly when rendering is unavailable.
 2. `manage_takes(action="switch", take_name="lighting_variant_a")`
 3. `manage_takes(action="list")` → review all takes
 
-`render_rop` is `async` with a 30-minute timeout hint; output-path and
+Use `render_rop(..., background=true)` for production renders, then poll
+`get_render_job(job_id)`. The main thread only validates the ROP and launches
+the isolated process; Mantra/Karma work never occupies Houdini's event loop.
+Foreground `render_rop` retains the 30-minute timeout hint; output-path and
 resolution parameter writes are defensive (candidate names) so Mantra, Karma,
 and ROP geometry/USD drivers are all tolerated.
