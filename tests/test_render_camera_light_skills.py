@@ -22,6 +22,12 @@ def _load_script(skill_name: str, script_name: str) -> ModuleType:
     return module
 
 
+def _load_render_worker() -> ModuleType:
+    scripts = _SKILLS_ROOT / "houdini-render" / "scripts"
+    with patch.object(sys, "path", [str(scripts), *sys.path]):
+        return _load_script("houdini-render", "_render_worker.py")
+
+
 def _node(path: str, name: str, type_name: str = "geo") -> MagicMock:
     node = MagicMock()
     node.path.return_value = path
@@ -35,6 +41,45 @@ def _scalar_parm(value):
     parm.eval.return_value = value
     parm.unexpandedString.return_value = value
     return parm
+
+
+def _run_render_worker(tmp_path, frame_range, expected_outputs, snapshot, render, stderr_text=""):
+    mod = _load_render_worker()
+    pattern = str(tmp_path / "beauty.$F4.exr")
+    stdout = tmp_path / "stdout.log"
+    stderr = tmp_path / "stderr.log"
+    stdout.write_text("", encoding="utf-8")
+    stderr.write_text(stderr_text, encoding="utf-8")
+    status_path = tmp_path / "status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "state": "queued",
+                "stdout_path": str(stdout),
+                "stderr_path": str(stderr),
+                "expected_outputs": [str(path) for path in expected_outputs],
+                "output_snapshot": snapshot,
+            }
+        ),
+        encoding="utf-8",
+    )
+    rop = _node("/stage/karma", "karma", "usdrender_rop")
+    rop.errors.return_value = []
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = rop
+    argv = [
+        "_render_worker.py",
+        "scene.hip",
+        "/stage/karma",
+        json.dumps(frame_range),
+        str(status_path),
+        json.dumps(pattern),
+    ]
+    with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod.sys, "argv", argv), patch.object(
+        mod, "render_node", side_effect=render
+    ):
+        mod.main()
+    return json.loads(status_path.read_text(encoding="utf-8"))
 
 
 class TestCameraSkills:
@@ -212,23 +257,87 @@ class TestRenderExecution:
         mod = _load_script("houdini-render", "_background_render.py")
         hip = tmp_path / "scene.hip"
         hip.write_bytes(b"hip")
+        requested = tmp_path / "beauty.0001.exr"
+        requested.write_bytes(b"old")
+        (tmp_path / "beauty.0002.exr").write_bytes(b"outside requested range")
         hython = tmp_path / ("hython.exe" if mod.os.name == "nt" else "hython")
         hython.write_bytes(b"exe")
         mock_hou = MagicMock()
         mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.text.expandStringAtFrame.side_effect = lambda pattern, frame: pattern.replace(
+            "$F4", "{:04d}".format(int(frame))
+        )
         process = MagicMock(pid=4321)
 
         with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
             mod.tempfile, "gettempdir", return_value=str(tmp_path)
         ), patch.object(mod.subprocess, "Popen", return_value=process) as popen:
-            job = mod.launch_background_render(mock_hou, "/stage/karma", [1, 2, 1], "beauty.$F4.exr")
+            job = mod.launch_background_render(
+                mock_hou,
+                "/stage/karma",
+                [1, 9, 4],
+                str(tmp_path / "beauty.$F4.exr"),
+            )
 
         status = json.loads((tmp_path / "dcc-mcp-houdini-render-jobs" / job["job_id"] / "status.json").read_text())
         assert job["pid"] == 4321
         assert status["state"] == "queued"
         assert "pid" not in status
+        assert status["output_snapshot"] == {
+            str(requested): {"mtime_ns": requested.stat().st_mtime_ns, "size": requested.stat().st_size}
+        }
         assert popen.call_args.kwargs["cwd"].endswith(job["job_id"])
         assert popen.call_args.args[0][0] == str(hython)
+
+    def test_background_worker_reports_only_updated_requested_outputs(self, tmp_path: Path) -> None:
+        stale = tmp_path / "beauty.0001.exr"
+        stale.write_bytes(b"stale")
+        outside = tmp_path / "beauty.0002.exr"
+
+        def render(_rop, _frame_range):
+            outside.write_bytes(b"new but not requested")
+            (tmp_path / "beauty.0005.exr").write_bytes(b"new requested frame")
+            return [1.0, 9.0], "execute"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1, 9, 4],
+            [tmp_path / "beauty.0001.exr", tmp_path / "beauty.0005.exr", tmp_path / "beauty.0009.exr"],
+            {str(stale): {"mtime_ns": stale.stat().st_mtime_ns, "size": stale.stat().st_size}},
+            render,
+        )
+        assert status["state"] == "completed"
+        assert status["written_files"] == [str(tmp_path / "beauty.0005.exr")]
+
+    def test_background_worker_fails_when_only_stale_output_exists(self, tmp_path: Path) -> None:
+        stale = tmp_path / "beauty.0001.exr"
+        stale.write_bytes(b"stale")
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [stale],
+            {str(stale): {"mtime_ns": stale.stat().st_mtime_ns, "size": stale.stat().st_size}},
+            lambda _rop, _frame_range: ([1.0, 1.0], "execute"),
+        )
+        assert status["state"] == "failed"
+        assert status["written_files"] == []
+        assert "no new or updated output" in status["error"].lower()
+
+    def test_background_worker_fails_on_rop_cook_error_log(self, tmp_path: Path) -> None:
+        def render(_rop, _frame_range):
+            (tmp_path / "beauty.0001.exr").write_bytes(b"new")
+            return [1.0, 1.0], "execute"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [tmp_path / "beauty.0001.exr"],
+            {},
+            render,
+            stderr_text="Error: ROP cook error",
+        )
+        assert status["state"] == "failed"
+        assert "rop cook error" in status["error"].lower()
 
     def test_render_rop_background_returns_job_without_rendering_in_ui(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")

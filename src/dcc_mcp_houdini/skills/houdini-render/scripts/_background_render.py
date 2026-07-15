@@ -11,11 +11,35 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from _render_common import expanded_outputs, output_snapshot
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     pending = path.with_suffix(".tmp")
     pending.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(str(pending), str(path))
+
+
+def _requested_outputs(hou: Any, pattern: Optional[str], frame_range: Optional[list[float]]) -> list[str]:
+    if not pattern:
+        return []
+    if not frame_range:
+        return expanded_outputs(pattern)
+    start, end = float(frame_range[0]), float(frame_range[1])
+    step = float(frame_range[2]) if len(frame_range) > 2 else 1.0
+    if step == 0 or (end - start) * step < 0:
+        raise ValueError("frame_range step must move from start toward end")
+    frame = start
+    tolerance = abs(step) * 1e-9
+    outputs = []
+    while (step > 0 and frame <= end + tolerance) or (step < 0 and frame >= end - tolerance):
+        outputs.append(hou.text.expandStringAtFrame(pattern, frame))
+        frame += step
+    return list(dict.fromkeys(outputs))
 
 
 def launch_background_render(
@@ -50,6 +74,7 @@ def launch_background_render(
         str(status_path),
         json.dumps(output_pattern),
     ]
+    expected_outputs = _requested_outputs(hou, output_pattern, frame_range)
     initial = {
         "job_id": job_id,
         "state": "queued",
@@ -60,7 +85,14 @@ def launch_background_render(
         "stdout_path": str(stdout_path),
         "stderr_path": str(stderr_path),
     }
-    _write_json(status_path, initial)
+    status = dict(initial)
+    status.update(
+        {
+            "expected_outputs": expected_outputs,
+            "output_snapshot": output_snapshot(expected_outputs),
+        }
+    )
+    _write_json(status_path, status)
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         process = subprocess.Popen(  # noqa: S603
