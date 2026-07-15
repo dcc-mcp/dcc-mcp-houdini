@@ -2009,6 +2009,13 @@ class TestRenderExecution:
         launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 720, 1], str(tmp_path / "beauty.$F4.exr"))
         rop.render.assert_not_called()
 
+    def test_expand_outputs_accepts_single_value_parm_tuple(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        out = tmp_path / "beauty.0001.exr"
+        out.write_bytes(b"exr")
+
+        assert mod._expand_outputs([str(out)]) == [str(out)]
+
     def test_render_rop_reports_written_and_elapsed(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.exr"
@@ -2089,3 +2096,21 @@ class TestRenderExecution:
         for parm, value in zip(frame_parms, (1.0, 1.0, 1.0)):
             parm.deleteAllKeyframes.assert_called_once_with()
             parm.set.assert_called_once_with(value)
+
+    def test_render_rop_forwards_explicit_frame_range_to_hom(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        out = tmp_path / "beauty.0001.exr"
+        picture = _scalar_parm(str(out))
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        rop.render.side_effect = lambda **_kwargs: out.write_bytes(b"exr")
+        rop.errors.return_value = []
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.render_rop("/out/mantra1", frame_range=[1, 1, 1])
+
+        assert result["success"] is True
+        rop.render.assert_called_once_with(verbose=False, frame_range=(1.0, 1.0, 1.0))
