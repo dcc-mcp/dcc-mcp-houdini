@@ -78,6 +78,7 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert "wait_ready=False" in shelf_xml
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
+    assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
     assert "get_server" in shelf_xml
     assert "setStatusMessage" in shelf_xml
     assert "displayMessage" not in shelf_xml

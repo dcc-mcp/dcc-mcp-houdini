@@ -241,6 +241,8 @@ def ensure_vendor(root: Path) -> Path:
 
 
 def bootstrap_and_start() -> object:
+    if os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1":
+        return None
     root = _package_root()
     vendor = ensure_vendor(root)
     vendor_str = str(vendor)
@@ -448,6 +450,8 @@ scripts/123.py extracts bundled wheels into vendor/ and starts the MCP server.
 The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
+Background render children set DCC_MCP_BACKGROUND_RENDER=1; startup hooks must
+not start another MCP adapter when this child-only marker is present.
 MCP URL defaults to http://127.0.0.1:8765/mcp.
 """.format(version=version, core_version=core_version, platform=platform, core_policy=core_policy)
 
