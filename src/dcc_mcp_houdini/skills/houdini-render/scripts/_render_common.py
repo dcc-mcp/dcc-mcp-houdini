@@ -143,6 +143,25 @@ def expanded_outputs(pattern: Optional[str]) -> list:
     return [pattern] if os.path.isfile(pattern) else []
 
 
+def requested_outputs(hou: Any, pattern: Optional[str], frame_range: Optional[Sequence[float]]) -> list:
+    """Expand the output paths for the exact requested frame range."""
+    if not pattern:
+        return []
+    if not frame_range:
+        return expanded_outputs(pattern)
+    start, end = float(frame_range[0]), float(frame_range[1])
+    step = float(frame_range[2]) if len(frame_range) > 2 else 1.0
+    if step == 0 or (end - start) * step < 0:
+        raise ValueError("frame_range step must move from start toward end")
+    frame = start
+    tolerance = abs(step) * 1e-9
+    outputs = []
+    while (step > 0 and frame <= end + tolerance) or (step < 0 and frame >= end - tolerance):
+        outputs.append(hou.text.expandStringAtFrame(pattern, frame))
+        frame += step
+    return list(dict.fromkeys(outputs))
+
+
 def output_snapshot(paths: Sequence[str]) -> dict:
     """Return JSON-safe file signatures for existing output paths."""
     snapshot = {}

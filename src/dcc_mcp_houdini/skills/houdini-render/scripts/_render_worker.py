@@ -9,7 +9,7 @@ import time
 import traceback
 from pathlib import Path
 
-from _render_common import expanded_outputs, render_node, updated_outputs
+from _render_common import expanded_outputs, output_snapshot, render_node, requested_outputs, updated_outputs
 
 
 def write_status(path: Path, payload: dict) -> None:
@@ -52,11 +52,21 @@ def main() -> None:
         rop = hou.node(rop_path)
         if rop is None:
             raise ValueError("ROP node not found: {}".format(rop_path))
+        expected_outputs = (
+            status["expected_outputs"]
+            if frame_range and "expected_outputs" in status
+            else requested_outputs(hou, output_pattern, frame_range)
+        )
+        before = status.get("output_snapshot")
+        if before is None:
+            before = output_snapshot(expected_outputs)
+        status.update({"expected_outputs": expected_outputs, "output_snapshot": before})
+        write_status(status_path, status)
         _, execution_mode = render_node(rop, frame_range)
         rop_errors = [str(error) for error in rop.errors()] if hasattr(rop, "errors") else []
         logged_cook_errors = _cook_errors(status)
-        candidates = status.get("expected_outputs", []) if frame_range else expanded_outputs(output_pattern)
-        written_files = updated_outputs(candidates, status.get("output_snapshot", {}))
+        candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
+        written_files = updated_outputs(candidates, before)
         if logged_cook_errors:
             raise RuntimeError("ROP cook error: {}".format("; ".join(logged_cook_errors[:3])))
         if rop_errors:
