@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import glob
-import os
 import sys
 import time
 from pathlib import Path
@@ -15,30 +13,16 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _render_common import (  # noqa: E402
-    apply_frame_range,
-    eval_first_parm,
-    get_node,
-    node_summary,
-)
+from _background_render import launch_background_render  # noqa: E402
+from _render_common import eval_first_parm, expanded_outputs, get_node, node_summary, render_node  # noqa: E402
 
-_OUTPUT_PARMS = ("picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage")
-
-
-def _expand_outputs(pattern: Optional[str]) -> list:
-    if not pattern:
-        return []
-    globbed = pattern
-    for token in ("$F4", "$F3", "$F2", "$F"):
-        globbed = globbed.replace(token, "*")
-    if "*" in globbed:
-        return sorted(glob.glob(globbed))
-    return [pattern] if os.path.isfile(pattern) else []
+_OUTPUT_PARMS = ("outputimage", "picture", "vm_picture", "sopoutput", "filename", "lopoutput")
 
 
 def render_rop(
     rop_path: str,
     frame_range: Optional[List[float]] = None,
+    background: bool = False,
 ) -> dict:
     """Render the ROP at *rop_path*, returning written files and elapsed time."""
     try:
@@ -48,32 +32,43 @@ def render_rop(
 
     try:
         rop = get_node(hou, rop_path)
-        if not hasattr(rop, "render"):
+        is_solaris = rop.type().name().split("::", 1)[0] == "usdrender_rop"
+        if (is_solaris and rop.parm("execute") is None) or (
+            not is_solaris and not callable(getattr(rop, "render", None))
+        ):
             return skill_error(
                 "Not a render node",
-                "Node has no render(); expected a ROP/output driver",
+                "Node has no supported render action; expected a ROP/output driver",
                 node_path=rop.path(),
             )
-        applied_range = apply_frame_range(rop, frame_range) if frame_range else None
-        output_pattern = eval_first_parm(rop, _OUTPUT_PARMS)
+        output_pattern = eval_first_parm(rop, _OUTPUT_PARMS, preserve_string=True)
+        if background:
+            job = launch_background_render(hou, rop.path(), frame_range, output_pattern)
+            return skill_success(
+                "Started background ROP render",
+                rop=node_summary(rop),
+                background=True,
+                **job,
+            )
         warnings: List[str] = []
         start = time.time()
         rendered = True
         try:
-            rop.render(verbose=False)
-        except TypeError:
-            rop.render()
+            applied_range, execution_mode = render_node(rop, frame_range)
         except Exception as render_exc:  # noqa: BLE001
             rendered = False
+            applied_range = None
+            execution_mode = None
             warnings.append("Render failed: {}".format(render_exc))
         elapsed = round(time.time() - start, 3)
         if hasattr(rop, "errors"):
             warnings.extend(list(rop.errors()))
-        written = _expand_outputs(output_pattern)
+        written = expanded_outputs(output_pattern)
         return skill_success(
             "Rendered ROP",
             rop=node_summary(rop),
             rendered=rendered,
+            execution_mode=execution_mode,
             elapsed_secs=elapsed,
             frame_range=applied_range,
             output_pattern=output_pattern,

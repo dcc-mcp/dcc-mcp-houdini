@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import glob
 import os
+import re
 from typing import Any, Optional, Sequence
 
 MAX_DIMENSION = 4096
@@ -56,16 +58,21 @@ def set_first_parm(node: Any, names: Sequence[str], value: Any) -> Optional[str]
     return None
 
 
-def eval_first_parm(node: Any, names: Sequence[str]):
+def eval_first_parm(node: Any, names: Sequence[str], preserve_string: bool = False):
     """Eval the first existing parm/parm-tuple in *names*, else None."""
     for name in names:
+        parm = node.parm(name)
+        if preserve_string and parm is not None:
+            try:
+                return parm.unexpandedString()
+            except Exception:  # noqa: BLE001
+                continue
         parm_tuple = node.parmTuple(name)
         if parm_tuple is not None:
             try:
                 return list(parm_tuple.eval())
             except Exception:  # noqa: BLE001
                 continue
-        parm = node.parm(name)
         if parm is not None:
             try:
                 return parm.eval()
@@ -80,12 +87,60 @@ def apply_frame_range(node: Any, frame_range: Optional[Sequence[float]]) -> Opti
         return None
     start, end = float(frame_range[0]), float(frame_range[1])
     step = float(frame_range[2]) if len(frame_range) > 2 else 1.0
-    set_parm_if_exists(node, "trange", 1)
-    if not set_parm_if_exists(node, "f", [start, end, step]):
-        set_parm_if_exists(node, "f1", start)
-        set_parm_if_exists(node, "f2", end)
-        set_parm_if_exists(node, "f3", step)
+    trange = node.parm("trange")
+    if trange is not None:
+        trange.deleteAllKeyframes()
+        trange.set(1)
+    frame_tuple = node.parmTuple("f")
+    if frame_tuple is not None:
+        for parm, value in zip(frame_tuple, (start, end, step)):
+            parm.deleteAllKeyframes()
+            parm.set(value)
+    else:
+        for name, value in zip(("f1", "f2", "f3"), (start, end, step)):
+            parm = node.parm(name)
+            if parm is not None:
+                parm.deleteAllKeyframes()
+                parm.set(value)
     return [start, end]
+
+
+def render_node(node: Any, frame_range: Optional[Sequence[float]] = None) -> tuple:
+    """Execute a render using the host contract for the node type."""
+    applied_range = apply_frame_range(node, frame_range)
+    type_name = node.type().name().split("::", 1)[0]
+    if type_name == "usdrender_rop":
+        execute = node.parm("execute")
+        if execute is None:
+            raise ValueError("Solaris USD Render node has no execute button")
+        execute.pressButton()
+        return applied_range, "execute"
+
+    render = getattr(node, "render", None)
+    if not callable(render):
+        raise ValueError("Node has no render(); expected a ROP/output driver")
+    kwargs = {}
+    if frame_range:
+        kwargs["frame_range"] = (
+            float(frame_range[0]),
+            float(frame_range[1]),
+            float(frame_range[2]) if len(frame_range) > 2 else 1.0,
+        )
+    try:
+        render(verbose=False, **kwargs)
+    except TypeError:
+        render(**kwargs)
+    return applied_range, "render"
+
+
+def expanded_outputs(pattern: Optional[str]) -> list:
+    """Return existing files matching a Houdini frame-token output pattern."""
+    if not pattern:
+        return []
+    globbed = re.sub(r"\$F\d*", "*", pattern)
+    if "*" in globbed:
+        return sorted(glob.glob(globbed))
+    return [pattern] if os.path.isfile(pattern) else []
 
 
 def node_summary(node: Any) -> dict:
