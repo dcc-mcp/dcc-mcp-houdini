@@ -9,13 +9,29 @@ import time
 import traceback
 from pathlib import Path
 
-from _render_common import expanded_outputs, render_node
+from _render_common import expanded_outputs, render_node, updated_outputs
 
 
 def write_status(path: Path, payload: dict) -> None:
     pending = path.with_suffix(".tmp")
     pending.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(str(pending), str(path))
+
+
+def _cook_errors(status: dict) -> list:
+    """Return cook-error lines emitted by this job."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    lines = []
+    for key in ("stdout_path", "stderr_path"):
+        path = Path(status.get(key, ""))
+        if path.is_file():
+            lines.extend(
+                line.strip()
+                for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+                if "cook error" in line.lower()
+            )
+    return lines
 
 
 def main() -> None:
@@ -29,19 +45,31 @@ def main() -> None:
     started = time.time()
     status.update({"state": "running", "pid": os.getpid(), "started_at": started})
     write_status(status_path, status)
+    written_files = []
+    rop_errors = []
     try:
         hou.hipFile.load(hip_path, suppress_save_prompt=True)
         rop = hou.node(rop_path)
         if rop is None:
             raise ValueError("ROP node not found: {}".format(rop_path))
         _, execution_mode = render_node(rop, frame_range)
+        rop_errors = [str(error) for error in rop.errors()] if hasattr(rop, "errors") else []
+        logged_cook_errors = _cook_errors(status)
+        candidates = status.get("expected_outputs", []) if frame_range else expanded_outputs(output_pattern)
+        written_files = updated_outputs(candidates, status.get("output_snapshot", {}))
+        if logged_cook_errors:
+            raise RuntimeError("ROP cook error: {}".format("; ".join(logged_cook_errors[:3])))
+        if rop_errors:
+            raise RuntimeError("ROP errors: {}".format("; ".join(rop_errors)))
+        if not written_files:
+            raise RuntimeError("Render produced no new or updated output for the requested frame range")
         status.update(
             {
                 "state": "completed",
                 "execution_mode": execution_mode,
                 "elapsed_secs": round(time.time() - started, 3),
-                "written_files": expanded_outputs(output_pattern),
-                "warnings": list(rop.errors()) if hasattr(rop, "errors") else [],
+                "written_files": written_files,
+                "warnings": [],
             }
         )
     except Exception as exc:  # noqa: BLE001
@@ -51,6 +79,8 @@ def main() -> None:
                 "elapsed_secs": round(time.time() - started, 3),
                 "error": str(exc),
                 "traceback": traceback.format_exc(),
+                "written_files": written_files,
+                "warnings": rop_errors,
             }
         )
     finally:

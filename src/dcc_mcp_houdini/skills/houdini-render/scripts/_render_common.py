@@ -143,6 +143,25 @@ def expanded_outputs(pattern: Optional[str]) -> list:
     return [pattern] if os.path.isfile(pattern) else []
 
 
+def output_snapshot(paths: Sequence[str]) -> dict:
+    """Return JSON-safe file signatures for existing output paths."""
+    snapshot = {}
+    for output in paths:
+        try:
+            stat = os.stat(output)
+        except OSError:
+            continue
+        if os.path.isfile(output):
+            snapshot[output] = {"mtime_ns": stat.st_mtime_ns, "size": stat.st_size}
+    return snapshot
+
+
+def updated_outputs(paths: Sequence[str], before: dict) -> list:
+    """Return outputs created or updated since *before*."""
+    current = output_snapshot(paths)
+    return sorted(output for output, signature in current.items() if signature != before.get(output))
+
+
 def node_summary(node: Any) -> dict:
     """Return a small, JSON-safe node summary."""
     type_obj = node.type()
