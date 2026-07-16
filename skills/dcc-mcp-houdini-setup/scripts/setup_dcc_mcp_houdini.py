@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-DEFAULT_DIRECT_URL = "http://127.0.0.1:8765/mcp"
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:9765/mcp"
 
 
@@ -192,8 +191,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mcp-url",
-        default=DEFAULT_DIRECT_URL,
-        help="MCP URL to write into generated host config. Default: direct autostart URL.",
+        default=DEFAULT_GATEWAY_URL,
+        help="MCP URL to write into generated host config. Default: stable local gateway.",
     )
     parser.add_argument(
         "--server-name",

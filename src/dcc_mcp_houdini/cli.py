@@ -13,7 +13,7 @@ from dcc_mcp_houdini import start_server, stop_server
 def main(argv: Optional[list[str]] = None) -> int:
     """Run the Houdini MCP server."""
     parser = argparse.ArgumentParser(description="Houdini MCP Server")
-    parser.add_argument("--port", type=int, default=8765, help="Port to listen on")
+    parser.add_argument("--port", type=int, default=None, help="Instance port (default: operating-system assigned)")
     parser.add_argument("--gateway-port", type=int, default=None, help="Gateway port")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args(argv)

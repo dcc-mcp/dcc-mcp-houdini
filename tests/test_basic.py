@@ -26,7 +26,7 @@ def test_server_options() -> None:
     from dcc_mcp_houdini.server import HoudiniServerOptions
 
     opts = HoudiniServerOptions()
-    assert opts.port == 8765
+    assert opts.port is None
     assert opts.server_name == "dcc-mcp-houdini"
     assert opts.gateway_port is None
 
@@ -40,6 +40,15 @@ def test_server_options_to_core() -> None:
 
     assert core_opts is not None
     assert core_opts.port == 9000
+
+
+def test_server_options_preserve_explicit_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit dynamic-port request must not be replaced by the environment."""
+    monkeypatch.setenv("DCC_MCP_HOUDINI_PORT", "18765")
+
+    from dcc_mcp_houdini.server import HoudiniServerOptions
+
+    assert HoudiniServerOptions(port=0).to_core_options().port == 0
 
 
 def test_file_registry_registration_survives_disabled_failover(monkeypatch: pytest.MonkeyPatch) -> None:

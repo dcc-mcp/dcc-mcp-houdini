@@ -10,9 +10,8 @@ from __future__ import annotations
 import dcc_mcp_houdini
 
 print("Starting dcc-mcp-houdini server...")
-server = dcc_mcp_houdini.start_server(port=8765)
+server = dcc_mcp_houdini.start_server()
 
-print(f"Server started on port {server.port}")
 print(f"MCP endpoint: {server.mcp_url}")
 print(f"Loaded skills: {server.loaded_skill_count()}")
 

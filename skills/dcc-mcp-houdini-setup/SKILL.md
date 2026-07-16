@@ -83,7 +83,7 @@ port by default. Configure the MCP host with:
 {
   "mcpServers": {
     "houdini": {
-      "url": "http://127.0.0.1:8765/mcp"
+      "url": "http://127.0.0.1:9765/mcp"
     }
   }
 }
@@ -104,15 +104,15 @@ with Houdini. The recommended path is the bundled Houdini package:
    or a `dcc_mcp_houdini.json` package file pointing at the package root).
 2. The package adds `scripts/` to `HOUDINI_PATH`; on startup `123.py` extracts
    bundled wheels into `vendor/` and starts the MCP server.
-3. Start Houdini and watch the console / shell for:
-   `dcc-mcp-houdini MCP server started: http://127.0.0.1:8765/mcp`.
+3. Start Houdini and watch the console / shell for the exact OS-assigned
+   instance URL. Agents normally connect through the stable gateway on `9765`.
 
 To run from a manual `hython` session instead of the package autostart:
 
 ```python
 import dcc_mcp_houdini
 server = dcc_mcp_houdini.start_server()
-print(server.mcp_url)  # http://127.0.0.1:8765/mcp
+print(server.mcp_url)  # Exact direct endpoint selected by the OS
 ```
 
 Set `DCC_MCP_HOUDINI_AUTOSTART=0` to disable package autostart.
@@ -144,8 +144,8 @@ Expected behavior:
   `bin/hython` path, then pass `--hython`.
 - Pip bootstrap fails: run `hython -m ensurepip --upgrade`, then repeat install.
 - MCP connection refused: Houdini is not running, autostart is disabled
-  (`DCC_MCP_HOUDINI_AUTOSTART=0`), or the host points at `9765` while the
-  session is on the direct `8765` port.
+  (`DCC_MCP_HOUDINI_AUTOSTART=0`), or the stable gateway on `9765` is not
+  running. Use `dcc-mcp-cli list` to inspect direct URLs.
 - Tool missing: call `dcc_capability_manifest` or `search_skills`, then
   `load_skill("<skill-name>")`.
 - Autostart silent: check the Houdini console for a

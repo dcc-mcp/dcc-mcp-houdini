@@ -4,16 +4,19 @@
 
 ```python
 import dcc_mcp_houdini
-server = dcc_mcp_houdini.start_server(port=8765)
-server.mcp_url  # http://127.0.0.1:8765/mcp
+server = dcc_mcp_houdini.start_server()
+server.mcp_url  # exact OS-assigned instance URL
 dcc_mcp_houdini.stop_server()
 ```
 
 ## MCP host config
 
 ```json
-{"mcpServers": {"houdini": {"url": "http://127.0.0.1:8765/mcp"}}}
+{"mcpServers": {"houdini": {"url": "http://127.0.0.1:9765/mcp"}}}
 ```
+
+The gateway is stable; use `dcc-mcp-cli list` to inspect the transient direct
+URL for every registered Houdini instance.
 
 ## Progressive loading
 

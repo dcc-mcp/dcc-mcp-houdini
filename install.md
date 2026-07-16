@@ -50,13 +50,12 @@ The recommended path is the bundled Houdini package:
 2. The package adds `scripts/` to `HOUDINI_PATH`; on startup `123.py` extracts
    bundled wheels into `vendor/` and starts the MCP server unless
    `DCC_MCP_HOUDINI_AUTOSTART=0`.
-3. Start Houdini and watch the console for:
-   `dcc-mcp-houdini MCP server started: http://127.0.0.1:8765/mcp`.
+3. Start Houdini and watch the console for the exact OS-assigned instance URL.
 
-Autostart mode exposes MCP at:
+Agents should connect through the stable local gateway:
 
 ```text
-http://127.0.0.1:8765/mcp
+http://127.0.0.1:9765/mcp
 ```
 
 Multi-instance auto-gateway mode (`DCC_MCP_GATEWAY_PORT=9765`) uses:
@@ -70,7 +69,7 @@ You can also start the server manually from an `hython` session:
 ```python
 import dcc_mcp_houdini
 server = dcc_mcp_houdini.start_server()
-print(server.mcp_url)  # http://127.0.0.1:8765/mcp
+print(server.mcp_url)  # Exact direct endpoint selected by the OS
 ```
 
 ## MCP Config
@@ -81,7 +80,7 @@ Use this JSON for Cursor, Claude Desktop, or any MCP Streamable HTTP host:
 {
   "mcpServers": {
     "houdini": {
-      "url": "http://127.0.0.1:8765/mcp"
+      "url": "http://127.0.0.1:9765/mcp"
     }
   }
 }

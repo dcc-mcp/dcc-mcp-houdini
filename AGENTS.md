@@ -7,7 +7,7 @@
 ```python
 import dcc_mcp_houdini
 server = dcc_mcp_houdini.start_server()
-# MCP URL: http://127.0.0.1:8765/mcp
+print(server.mcp_url)  # OS-assigned instance endpoint
 ```
 
 ## Skills-First Workflow
@@ -105,7 +105,7 @@ When adding or changing bundled skills, load the project skill:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DCC_MCP_HOUDINI_PORT` | `8765` | MCP HTTP port |
+| `DCC_MCP_HOUDINI_PORT` | `0` | MCP instance port (`0` lets the OS choose) |
 | `DCC_MCP_GATEWAY_PORT` | `9765` | Gateway election |
 | `DCC_MCP_MINIMAL` | `1` | Progressive loading |
 | `DCC_MCP_HOUDINI_AUTOSTART` | `1` | Auto-start via `123.py` |
