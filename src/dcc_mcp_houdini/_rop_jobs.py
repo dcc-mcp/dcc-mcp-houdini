@@ -14,6 +14,7 @@ from dcc_mcp_houdini import _isolated_jobs
 
 _SUMMARY_WARNING_LIMIT = 10
 _SUMMARY_TEXT_LIMIT = 500
+_STDERR_TAIL_BYTES = 256 * 1024
 
 
 def _hython_executable() -> Path:
@@ -101,15 +102,18 @@ def _with_progress(status: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(status)
     expected = list(result.get("expected_outputs") or [])
     before = dict(result.get("output_snapshot") or {})
-    completed = 0
+    observed_written_files = []
     for output in expected:
         signature = _file_signature(output)
         if signature is not None and signature != before.get(output):
-            completed += 1
+            observed_written_files.append(output)
+    completed = len(observed_written_files)
     total = len(expected)
     result["completed"] = completed
     result["total"] = total
     result["progress"] = float(completed) / total if total else None
+    if result.get("state") not in _isolated_jobs._TERMINAL_STATES or "written_files" not in result:
+        result["written_files"] = observed_written_files
 
     started_at = result.get("started_at")
     if started_at is not None:
@@ -129,17 +133,61 @@ def _with_progress(status: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _stderr_tail(status: Dict[str, Any]) -> str:
+    """Read at most the bounded tail of the worker's stderr stream."""
+    stderr_path = status.get("stderr_path")
+    if not stderr_path:
+        return ""
+
+    try:
+        with Path(str(stderr_path)).open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            offset = max(0, size - _STDERR_TAIL_BYTES)
+            stream.seek(offset)
+            payload = stream.read(_STDERR_TAIL_BYTES)
+    except OSError:
+        return ""
+    if offset:
+        newline = payload.find(b"\n")
+        payload = payload[newline + 1 :] if newline >= 0 else b""
+    return payload.decode("utf-8", errors="replace")
+
+
+def _warning_lines(status: Dict[str, Any]) -> List[Any]:
+    """Merge worker warnings with unique, non-empty stderr diagnostics."""
+    raw_warnings = status.get("warnings", []) or []
+    status_warnings = list(raw_warnings) if isinstance(raw_warnings, (list, tuple)) else [raw_warnings]
+    warnings = []
+    seen = set()
+    for warning in status_warnings:
+        normalized = " ".join(str(warning).splitlines())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            warnings.append(warning)
+    # Houdini render diagnostics are not consistently prefixed with "Warning";
+    # stderr is the worker's dedicated diagnostic stream, so retain every line.
+    for raw_line in _stderr_tail(status).splitlines():
+        warning = " ".join(raw_line.splitlines())
+        if warning and warning not in seen:
+            seen.add(warning)
+            warnings.append(warning)
+    return warnings
+
+
 def read_render_job(job_id: str, include_details: bool = False) -> Dict[str, Any]:
     result = _with_progress(_isolated_jobs.read_job(job_id))
+    warnings = _warning_lines(result)
+    result["warning_count"] = len(warnings)
+    if include_details:
+        result["warnings"] = warnings
     if not include_details:
         result.pop("expected_outputs", None)
         result.pop("output_snapshot", None)
         written_files = list(result.pop("written_files", []) or [])
         result["written_file_count"] = len(written_files)
         result["recent_written_files"] = written_files[-10:]
-        raw_warnings = result.pop("warnings", []) or []
-        warnings = list(raw_warnings) if isinstance(raw_warnings, (list, tuple)) else [raw_warnings]
-        result["warning_count"] = len(warnings)
+        result.pop("warnings", None)
         result["recent_warnings"] = [
             " ".join(str(warning).splitlines())[:_SUMMARY_TEXT_LIMIT] for warning in warnings[-_SUMMARY_WARNING_LIMIT:]
         ]
