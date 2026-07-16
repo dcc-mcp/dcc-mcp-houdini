@@ -48,12 +48,6 @@ def frame_view(
                 warnings=["No Scene Viewer pane is open"],
             )
         viewport = viewer.curViewport()
-        if camera_path:
-            cam = get_node(hou, camera_path)
-            try:
-                viewport.setCamera(cam)
-            except Exception as cam_exc:  # noqa: BLE001
-                warnings.append("Could not set camera: {}".format(cam_exc))
         framed = False
         if node_path:
             node = get_node(hou, node_path)
@@ -63,16 +57,36 @@ def frame_view(
                 framed = True
             except Exception as frame_exc:  # noqa: BLE001
                 warnings.append("Could not frame node: {}".format(frame_exc))
-        else:
+        elif not camera_path:
             try:
                 viewport.frameAll()
                 framed = True
             except Exception as frame_exc:  # noqa: BLE001
                 warnings.append("Could not frame view: {}".format(frame_exc))
+
+        # Apply the camera last. Framing operations change the viewport view and
+        # can disconnect a camera that was selected first.
+        active_camera = None
+        if camera_path:
+            cam = get_node(hou, camera_path)
+            try:
+                viewport.setCamera(cam)
+                active = viewport.camera()
+                active_camera = active.path() if active is not None else None
+                framed = framed or active_camera == camera_path
+                if active_camera != camera_path:
+                    warnings.append("Viewport did not activate camera: {}".format(camera_path))
+                try:
+                    viewport.draw()
+                except Exception:  # noqa: BLE001
+                    pass
+            except Exception as cam_exc:  # noqa: BLE001
+                warnings.append("Could not set camera: {}".format(cam_exc))
         return skill_success(
             "Framed view",
             framed=framed,
             camera_path=camera_path,
+            active_camera=active_camera,
             node_path=node_path,
             warnings=warnings,
         )

@@ -199,6 +199,27 @@ class TestViewSkills:
         assert result["success"] is True
         assert result["context"]["ui_available"] is False
 
+    def test_frame_view_camera_only_preserves_camera_view(self) -> None:
+        mod = _load_script("houdini-camera-light", "frame_view.py")
+        cam = _node("/obj/shotcam", "shotcam", "cam")
+        viewport = MagicMock()
+        viewport.camera.return_value = cam
+        viewer = MagicMock()
+        viewer.curViewport.return_value = viewport
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        mock_hou.node.return_value = cam
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.frame_view(camera_path="/obj/shotcam")
+
+        assert result["success"] is True
+        assert result["context"]["framed"] is True
+        assert result["context"]["active_camera"] == "/obj/shotcam"
+        viewport.setCamera.assert_called_once_with(cam)
+        viewport.frameAll.assert_not_called()
+
 
 class TestViewportCapture:
     def test_capture_viewport_headless_skips(self, tmp_path: Path) -> None:
@@ -232,6 +253,51 @@ class TestViewportCapture:
         assert result["context"]["written_files"] == [str(out)]
         # resolution clamped to MAX_DIMENSION
         assert result["context"]["resolution"] == [4096, 720]
+
+    def test_flipbook_applies_increment_and_camera(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "flipbook.py")
+        out = tmp_path / "frame.$F4.jpg"
+        written = tmp_path / "frame.0001.jpg"
+        settings = MagicMock()
+        cam = _node("/obj/shotcam", "shotcam", "cam")
+        viewport = MagicMock()
+        viewport.camera.return_value = cam
+        viewer = MagicMock()
+        viewer.curViewport.return_value = viewport
+        viewer.flipbookSettings.return_value.stash.return_value = settings
+        viewer.flipbook.side_effect = lambda vp, s: written.write_bytes(b"img")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        mock_hou.node.return_value = cam
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.flipbook(
+                str(out),
+                frame_range=[1, 10, 3],
+                camera_path="/obj/shotcam",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["frame_range"] == [1.0, 10.0, 3.0]
+        assert result["context"]["camera_path"] == "/obj/shotcam"
+        settings.frameRange.assert_called_once_with((1.0, 10.0))
+        settings.frameIncrement.assert_called_once_with(3.0)
+        viewport.setCamera.assert_called_once_with(cam)
+        viewer.flipbook.assert_called_once_with(viewport, settings)
+
+    def test_flipbook_rejects_non_positive_increment(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "flipbook.py")
+        mock_hou = MagicMock()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.flipbook(
+                str(tmp_path / "frame.$F4.jpg"),
+                frame_range=[1, 10, 0],
+            )
+
+        assert result["success"] is False
+        assert "increment" in result["error"].lower()
 
 
 class TestRenderSettings:

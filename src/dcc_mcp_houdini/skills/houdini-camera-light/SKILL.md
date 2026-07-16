@@ -24,6 +24,8 @@ Typed camera and light authoring for agents. All tools are `affinity: main`.
 View tools (`frame_view`, `get_view_state`) are UI-aware: in a headless
 `hython` session they return a structured `warnings` payload with
 `framed: false` / `ui_available: false` instead of failing.
+When both a node and camera are supplied, `frame_view` frames the node first
+and activates the camera last so the returned `active_camera` is authoritative.
 
 ## Tool groups
 
