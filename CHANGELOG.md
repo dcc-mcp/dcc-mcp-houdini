@@ -14,6 +14,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.15.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.14.0...v0.15.0) (2026-07-16)
+
+
+### Features
+
+* make node-chain builds atomic ([#111](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/111)) ([f94d9d3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f94d9d3953f6da2b48c9fb5745202964fe564c62))
+
 ## [0.14.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.13.0...v0.14.0) (2026-07-16)
 
 
