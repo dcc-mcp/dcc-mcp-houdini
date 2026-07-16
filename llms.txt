@@ -28,7 +28,7 @@ server.list_skills()
 ## Public exports
 
 - `HoudiniMcpServer`, `start_server`, `stop_server`, `get_server`
-- `HoudiniHost`, `HoudiniCallableDispatcher`, `create_execution_stack`
+- `HoudiniUiDispatcher`, `HoudiniUiPump`, `HoudiniHost`, `HoudiniCallableDispatcher`, `create_execution_stack`
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 

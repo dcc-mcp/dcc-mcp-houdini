@@ -8,7 +8,7 @@ description: >-
   objects/signatures/node-type categories, and inspect or trigger safe UI
   actions (headless-safe). Not for scene editing — use domain skills first.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.9+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.33+"
 allowed-tools: Bash Read
 metadata:
   dcc-mcp:

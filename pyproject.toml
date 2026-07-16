@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.19.9: py37-lite pure-Python fallback for older Houdini runtimes.
-    "dcc-mcp-core>=0.19.9,<1.0.0",
+    # 0.19.33: HostExecutionBridge routes HostUiDispatcherBase to HTTP calls.
+    "dcc-mcp-core>=0.19.33,<1.0.0",
 ]
 
 [project.optional-dependencies]

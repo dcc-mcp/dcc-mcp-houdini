@@ -36,7 +36,7 @@ server = dcc_mcp_houdini.start_server()
 
 Houdini `hou.*` APIs require the UI thread. The adapter wires:
 
-- `BlockingDispatcher` + `HoudiniHost` → `hou.ui.addEventLoopCallback`
+- `HostUiDispatcherBase` + `HostPumpController` + `HoudiniUiPump` → one throttled `hou.ui.addEventLoopCallback` with an 8 ms queue budget
 - Headless `hython` → inline / standalone dispatcher
 
 ## Skill authoring

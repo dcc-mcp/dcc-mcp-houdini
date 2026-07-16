@@ -57,18 +57,29 @@ def test_houdini_server_options_port() -> None:
     assert bridge.host_dispatcher is dispatcher.host_dispatcher
 
 
+def test_houdini_ui_dispatcher_bridge_attaches_http_queue() -> None:
+    from dcc_mcp_houdini.host import HoudiniUiDispatcher
+    from dcc_mcp_houdini.server import HoudiniServerOptions
+
+    dispatcher = HoudiniUiDispatcher()
+    bridge = HoudiniServerOptions(dispatcher=dispatcher).to_core_options().execution.mode.bridge
+    host_dispatcher = bridge.resolve_host_dispatcher()
+
+    assert bridge.dispatcher is dispatcher
+    assert host_dispatcher is not None
+    handle = host_dispatcher.post(lambda: "http-main")
+    assert dispatcher.pending_count() == 1
+    assert dispatcher.drain_queue(8) == (1, 0)
+    assert handle.wait(0) == "http-main"
+
+
 def test_create_execution_stack_without_hou() -> None:
     from dcc_mcp_houdini.dispatcher import create_execution_stack
-    from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniHost
+    from dcc_mcp_houdini.dispatcher.standalone import HoudiniStandaloneDispatcher
 
     dispatcher, host = create_execution_stack()
-    try:
-        assert isinstance(dispatcher, HoudiniCallableDispatcher)
-        assert isinstance(host, HoudiniHost)
-        assert host.is_running
-        assert dispatcher.host_dispatcher is not None
-    finally:
-        host.stop()
+    assert isinstance(dispatcher, HoudiniStandaloneDispatcher)
+    assert host is None
 
 
 def test_wait_until_ready_uses_urllib(monkeypatch: pytest.MonkeyPatch) -> None:
