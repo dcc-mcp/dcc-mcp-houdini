@@ -1,0 +1,142 @@
+tools:
+  - name: list_stage_prims
+    description: >-
+      List prims below a root path on the composed USD Stage of a LOP node.
+      Traversal and output are bounded by max_depth and limit.
+    source_file: scripts/list_stage_prims.py
+    execution: sync
+    affinity: main
+    group: usd-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [list usd prims, inspect stage tree, solaris prim inventory, lops stage]
+    produces: [usd_stage_report]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute Houdini path of the LOP node whose composed Stage is inspected.
+        root_path:
+          type: string
+          default: "/"
+          description: Absolute USD prim path below which descendants are listed.
+        max_depth:
+          type: integer
+          minimum: 1
+          maximum: 16
+          default: 3
+          description: Maximum descendant depth relative to root_path.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 200
+          description: Maximum number of prim records returned.
+    next-tools:
+      on-success:
+        - houdini_usd_lops__get_prim_info
+      on-failure:
+        - houdini_scene__get_node_info
+  - name: get_prim_info
+    description: >-
+      Inspect one USD prim on a LOP Stage, including type, active state,
+      computed visibility, world transform, world bounds, and bound material.
+    source_file: scripts/get_prim_info.py
+    execution: sync
+    affinity: main
+    group: usd-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [usd prim info, prim visibility, world bounds, world transform, material binding]
+    produces: [usd_stage_report]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path, prim_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute Houdini path of the LOP node whose composed Stage is inspected.
+        prim_path:
+          type: string
+          description: Absolute USD prim path to inspect.
+        time_code:
+          type: number
+          description: Optional USD time code. Omit to use the default time code.
+    next-tools:
+      on-success:
+        - houdini_usd_lops__get_prim_attributes
+      on-failure:
+        - houdini_usd_lops__list_stage_prims
+  - name: get_prim_attributes
+    description: >-
+      Read attributes from one USD prim at an optional time code. Name matching
+      and explicit count, item, and character limits keep payloads bounded.
+    source_file: scripts/get_prim_attributes.py
+    execution: sync
+    affinity: main
+    group: usd-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [usd prim attributes, primvars, inspect usd values, filtered attributes]
+    produces: [usd_stage_report]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path, prim_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute Houdini path of the LOP node whose composed Stage is inspected.
+        prim_path:
+          type: string
+          description: Absolute USD prim path whose attributes are read.
+        name_filter:
+          type: string
+          maxLength: 128
+          description: Optional case-insensitive substring matched against attribute names.
+        time_code:
+          type: number
+          description: Optional USD time code. Omit to use the default time code.
+        max_attributes:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of matching attributes returned.
+        max_value_items:
+          type: integer
+          minimum: 1
+          maximum: 256
+          default: 64
+          description: Maximum sequence or mapping items retained in each attribute value.
+        max_value_chars:
+          type: integer
+          minimum: 64
+          maximum: 4096
+          default: 1024
+          description: Maximum serialized characters retained for each attribute value.
+    next-tools:
+      on-failure:
+        - houdini_usd_lops__get_prim_info

@@ -7,7 +7,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
-| `interchange` | `houdini-interchange`, `houdini-export-preset`, `houdini-import-to-scene` | no |
+| `interchange` | `houdini-interchange`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake` | no |
 
 ## Common chains
@@ -40,6 +40,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
 | Cross-DCC asset import | `load_skill("houdini-import-to-scene")` → `houdini_import_to_scene__import_to_scene` (uses AssetDescriptor contract from dcc-mcp-core) |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
+| Inspect a Solaris USD Stage | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_prim_info` / `houdini_usd_lops__get_prim_attributes` |
 | Manage export presets | `load_skill("houdini-export-preset")` → `houdini_export_preset__save_export_preset` → `houdini_export_preset__list_export_presets` → `houdini_export_preset__load_export_preset` |
 | Automate HDA + PDG/ROP | `load_skill("houdini-hda-automation")` → `houdini_hda_automation__scan_hda_libraries` → `houdini_hda_automation__inspect_hda_definition` → `houdini_hda_automation__instantiate_hda` → `houdini_hda_automation__validate_hda` → `houdini_hda_automation__cook_top_network` / `houdini_hda_automation__execute_rop_chain` |
 | Project + shot packaging | `load_skill("houdini-pipeline")` → `houdini_pipeline__set_project` → `houdini_pipeline__validate_scene` → `houdini_pipeline__collect_dependencies` → `houdini_pipeline__export_shot_package` |

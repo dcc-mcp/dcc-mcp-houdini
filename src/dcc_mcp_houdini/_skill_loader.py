@@ -39,6 +39,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     "interchange": (
         "houdini-interchange",
         "houdini-export-preset",
+        "houdini-usd-lops",
     ),
     "pipeline": (
         "houdini-render",
