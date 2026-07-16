@@ -12,7 +12,7 @@ metadata:
     dcc: houdini
     layer: pipeline
     stage: pipeline
-    version: "1.0.0"
+    version: "1.1.0"
     tags: [houdini, automation, hip, timeline, pipeline, scripts]
     search-hint: "run python file, save hip, load hip, timeline, build node chain"
     search-aliases: [run script file, save hip, open hip, load scene, set frame range, timeline, build node chain, automate houdini]
@@ -44,3 +44,16 @@ metadata:
 
 Higher-level repeatable automation for Houdini sessions. Prefer `run_python_file`
 for reviewed scripts on disk, and `build_node_chain` for compact graph recipes.
+
+`build_node_chain` is a structured atomic mutation surface, not an arbitrary
+code executor. It validates the parent, every node type/name/reference, and all
+connection references/port indices before opening an undo group. Use
+`dry_run=true` to inspect `validated` and predicted `affected_paths` with zero
+scene mutation.
+
+On execution, the complete recipe uses one named Houdini undo group. Results
+include `transaction_id`, `undo_label`, validation evidence, and post-cook
+`readback`. If creation, parameter assignment, connection, layout, cook, or
+readback fails, the tool explicitly removes created nodes and restores any
+existing input connections and existing node positions touched by layout. Check
+`rollback.complete` and `rollback.errors` before retrying a failed recipe.

@@ -6,7 +6,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 import yaml
@@ -393,20 +393,41 @@ class TestAutomationSkills:
 
     def test_build_node_chain_with_mock_hou(self) -> None:
         mod = _load_script("houdini-automation", "build_node_chain.py")
+        box_type = MagicMock()
+        box_type.name.return_value = "box"
+        box_type.maxNumInputs.return_value = 0
+        box_type.maxNumOutputs.return_value = 1
+        null_type = MagicMock()
+        null_type.name.return_value = "null"
+        null_type.maxNumInputs.return_value = 4
+        null_type.maxNumOutputs.return_value = 1
         box = MagicMock()
         box.name.return_value = "box1"
         box.path.return_value = "/obj/geo1/box1"
-        box.type.return_value.name.return_value = "box"
+        box.type.return_value = box_type
         null = MagicMock()
         null.name.return_value = "OUT"
         null.path.return_value = "/obj/geo1/OUT"
-        null.type.return_value.name.return_value = "null"
+        null.type.return_value = null_type
+        connection = MagicMock()
+        connection.inputIndex.return_value = 0
+        connection.inputItem.return_value = box
+        connection.inputItemOutputIndex.return_value = 0
+        null.inputConnections.return_value = [connection]
         parent = MagicMock()
         parent.path.return_value = "/obj/geo1"
+        parent.isNetwork.return_value = True
+        parent.isEditable.return_value = True
+        parent.children.return_value = []
+        parent.childTypeCategory.return_value.nodeTypes.return_value = {
+            "box": box_type,
+            "null": null_type,
+        }
         parent.createNode.side_effect = [box, null]
         parent.node.side_effect = lambda name: {"box1": box, "OUT": null}.get(name)
         mock_hou = MagicMock()
         mock_hou.node.return_value = parent
+        mock_hou.text.variableName.side_effect = lambda value, safe_chars: value
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.build_node_chain(
@@ -416,5 +437,9 @@ class TestAutomationSkills:
             )
 
         assert result["success"] is True
+        assert parent.createNode.call_args_list == [
+            call("box", node_name="box1", exact_type_name=True),
+            call("null", node_name="OUT", exact_type_name=True),
+        ]
         null.setInput.assert_called_once_with(0, box, 0)
         null.cook.assert_called_once_with(force=False)

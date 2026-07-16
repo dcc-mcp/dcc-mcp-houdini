@@ -6,6 +6,7 @@
 
 * share owned isolated ROP jobs across renders, simulation caches, and ROP chains
 * derive bounded output progress and ETA during job polling
+* make `build_node_chain` an atomic prevalidated transaction with dry-run, one-step undo, explicit rollback, and scene readback
 
 ### Bug Fixes
 
@@ -19,7 +20,6 @@
 ### Features
 
 * isolate long-running ROP jobs ([#109](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/109)) ([08f7ab3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/08f7ab30eb8bb593deab09586e4d36ae62a04dfb))
-
 ## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.12.0...v0.13.0) (2026-07-16)
 
 
