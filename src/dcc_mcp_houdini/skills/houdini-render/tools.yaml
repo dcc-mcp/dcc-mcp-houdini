@@ -32,7 +32,8 @@ tools:
   - name: flipbook
     description: >-
       Flipbook the current viewport across a frame range to image files (use a
-      $F token in output_path). UI-aware.
+      $F token in output_path). Supports an optional frame increment and an
+      explicit camera. UI-aware.
     source_file: scripts/flipbook.py
     execution: async
     affinity: main
@@ -57,11 +58,15 @@ tools:
           items: {type: number}
           minItems: 2
           maxItems: 3
+          description: "[start, end, optional positive increment]."
         resolution:
           type: array
           items: {type: integer}
           minItems: 2
           maxItems: 2
+        camera_path:
+          type: string
+          description: "Optional camera node to activate before capture."
   - name: get_render_settings
     description: >-
       Read renderer, camera, resolution, frame range, output path, and image

@@ -94,8 +94,9 @@ tools:
           type: number
   - name: frame_view
     description: >-
-      Look through a camera and/or frame a node in the Scene Viewer. UI-aware:
-      returns framed=false with a warning when headless.
+      Frame a node and/or activate a camera in the Scene Viewer, applying the
+      camera last and reporting active_camera. UI-aware: returns framed=false
+      with a warning when headless.
     source_file: scripts/frame_view.py
     execution: sync
     affinity: main

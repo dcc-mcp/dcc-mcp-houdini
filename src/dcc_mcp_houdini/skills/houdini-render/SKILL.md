@@ -29,8 +29,9 @@ agent can detect and skip cleanly when rendering is unavailable.
 
 ## Tool groups
 
-- **`viewport`:** `capture_viewport` (single frame), `flipbook` (range). Both
-  clamp resolution to 4096 and return `written_files` / `skipped` / `warnings`.
+- **`viewport`:** `capture_viewport` (single frame), `flipbook` (range with an
+  optional positive increment and explicit camera). Both clamp resolution to
+  4096 and return `written_files` / `skipped` / `warnings`.
 - **`render`:** `get_render_settings` (read-only), `set_render_settings`
   (reports `unsupported` fields per ROP type), `render_rop` (foreground or
   isolated `hython` background job), `get_render_job` (polls and reconciles
@@ -48,7 +49,8 @@ agent can detect and skip cleanly when rendering is unavailable.
 2. `set_render_settings(rop_path="/out/mantra1", camera="/obj/rendercam", resolution=[1280,720], output_path="/tmp/beauty.exr")`
 3. `get_render_settings("/out/mantra1")` → verify
 4. `capture_viewport(output_path="/tmp/preview.jpg")` for a quick look (UI only)
-5. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive Houdini; foreground results in headless Houdini
+5. `flipbook(output_path="/tmp/preview.$F4.jpg", frame_range=[1,24,4], camera_path="/obj/rendercam")` for a sparse camera preview (UI only)
+6. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive Houdini; foreground results in headless Houdini
 
 ### Render Layers & AOVs
 

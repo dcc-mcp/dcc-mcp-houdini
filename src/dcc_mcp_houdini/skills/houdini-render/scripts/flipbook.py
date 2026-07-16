@@ -31,6 +31,7 @@ def flipbook(
     output_path: str,
     frame_range: List[float],
     resolution: Optional[List[int]] = None,
+    camera_path: Optional[str] = None,
 ) -> dict:
     """Flipbook the current viewport across *frame_range* to *output_path*.
 
@@ -43,7 +44,14 @@ def flipbook(
         return skill_error("Houdini not available", "hou could not be imported")
 
     if not frame_range or len(frame_range) < 2:
-        return skill_error("Invalid frame range", "frame_range must be [start, end]")
+        return skill_error("Invalid frame range", "frame_range must be [start, end, optional increment]")
+
+    start, end = float(frame_range[0]), float(frame_range[1])
+    increment = float(frame_range[2]) if len(frame_range) >= 3 else 1.0
+    if increment <= 0:
+        return skill_error("Invalid frame increment", "frame_range increment must be greater than zero")
+    if end < start:
+        return skill_error("Invalid frame range", "frame_range end must be greater than or equal to start")
 
     try:
         clamped = clamp_resolution(resolution)
@@ -66,13 +74,22 @@ def flipbook(
                 skipped=[output_path],
                 warnings=["No Scene Viewer pane is open"],
             )
-        start, end = float(frame_range[0]), float(frame_range[1])
         parent = os.path.dirname(os.path.abspath(output_path))
         if parent and not os.path.isdir(parent):
             os.makedirs(parent, exist_ok=True)
         warnings: List[str] = []
+        viewport = viewer.curViewport()
+        if camera_path:
+            camera = hou.node(camera_path)
+            if camera is None:
+                return skill_error("Camera not found", "No Houdini node exists at {}".format(camera_path))
+            viewport.setCamera(camera)
+            active = viewport.camera()
+            if active is None or active.path() != camera_path:
+                return skill_error("Camera activation failed", "Viewport did not activate {}".format(camera_path))
         settings = viewer.flipbookSettings().stash()
         settings.frameRange((start, end))
+        settings.frameIncrement(increment)
         settings.output(output_path)
         try:
             settings.outputToMPlay(False)
@@ -84,13 +101,17 @@ def flipbook(
                 settings.resolution(tuple(clamped))
             except Exception as res_exc:  # noqa: BLE001
                 warnings.append("Could not set resolution: {}".format(res_exc))
-        viewer.flipbook(viewer.curViewport(), settings)
+        viewer.flipbook(viewport, settings)
         written = _glob_outputs(output_path)
+        normalized_range = [start, end]
+        if len(frame_range) >= 3:
+            normalized_range.append(increment)
         return skill_success(
             "Flipbook complete",
             captured=bool(written),
             output_path=output_path,
-            frame_range=[start, end],
+            frame_range=normalized_range,
+            camera_path=camera_path,
             resolution=clamped,
             written_files=written,
             skipped=[] if written else [output_path],
