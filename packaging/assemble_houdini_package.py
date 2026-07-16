@@ -394,7 +394,7 @@ New-Item -ItemType Directory -Force -Path $packagesDir | Out-Null
 $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot "packages/dcc_mcp_houdini.json.template") -Raw
 $json = $template.Replace("__PACKAGE_ROOT__", $resolvedRoot)
 $target = Join-Path $packagesDir "dcc_mcp_houdini.json"
-Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+[IO.File]::WriteAllText($target, $json, [Text.UTF8Encoding]::new($false))
 
 Write-Host "Installed Houdini package: $target"
 Write-Host "Package root: $resolvedRoot"
