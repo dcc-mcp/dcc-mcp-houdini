@@ -16,7 +16,7 @@
 If your Gemini client supports MCP over HTTP, configure:
 
 ```
-Endpoint: http://127.0.0.1:8765/mcp
+Gateway endpoint: http://127.0.0.1:9765/mcp
 Protocol: MCP Streamable HTTP (2025-03-26 spec)
 ```
 

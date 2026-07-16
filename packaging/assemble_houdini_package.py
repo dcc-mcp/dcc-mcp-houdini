@@ -35,7 +35,7 @@ from packaging.version import Version
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 CORE_PACKAGE = "dcc-mcp-core"
-MIN_CORE_VERSION = "0.19.33"
+MIN_CORE_VERSION = "0.19.45"
 PLATFORMS = ("win64", "linux", "macos")
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 
@@ -256,12 +256,10 @@ def bootstrap_and_start() -> object:
 
     import dcc_mcp_houdini
 
-    port = int(os.environ.get("DCC_MCP_HOUDINI_PORT", "8765"))
     gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
     gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
     registry_dir = os.environ.get("DCC_MCP_REGISTRY_DIR") or None
     return dcc_mcp_houdini.start_server(
-        port=port,
         gateway_port=gateway_port,
         registry_dir=registry_dir,
         wait_ready=False,
@@ -408,7 +406,7 @@ $target = Join-Path $packagesDir "dcc_mcp_houdini.json"
 
 Write-Host "Installed Houdini package: $target"
 Write-Host "Package root: $resolvedRoot"
-Write-Host "Start Houdini $HoudiniVersion; MCP defaults to http://127.0.0.1:8765/mcp"
+Write-Host "Start Houdini $HoudiniVersion; connect through the gateway at http://127.0.0.1:9765/mcp"
 """
 
 
@@ -429,7 +427,7 @@ sed "s#__PACKAGE_ROOT__#$ROOT_ESCAPED#g" \
 
 echo "Installed Houdini package: $PACKAGES_DIR/dcc_mcp_houdini.json"
 echo "Package root: $ROOT_ESCAPED"
-echo "Start Houdini $HOUDINI_VERSION; MCP defaults to http://127.0.0.1:8765/mcp"
+echo "Start Houdini $HOUDINI_VERSION; connect through the gateway at http://127.0.0.1:9765/mcp"
 """
 
 
@@ -463,7 +461,8 @@ The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
 Background render children set DCC_MCP_BACKGROUND_RENDER=1; startup hooks must
 not start another MCP adapter when this child-only marker is present.
-MCP URL defaults to http://127.0.0.1:8765/mcp.
+Instance ports are assigned by the operating system. Connect through the stable
+gateway at http://127.0.0.1:9765/mcp or discover exact URLs with dcc-mcp-cli.
 """.format(version=version, core_version=core_version, platform=platform, core_policy=core_policy)
 
 

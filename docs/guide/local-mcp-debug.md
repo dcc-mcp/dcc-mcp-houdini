@@ -26,10 +26,12 @@ In the **Python Source Editor** (or a shelf tool):
 import dcc_mcp_houdini
 
 server = dcc_mcp_houdini.start_server()
-print(server.mcp_url)  # http://127.0.0.1:8765/mcp
+print(server.mcp_url)  # Exact direct endpoint selected by the OS
 ```
 
-The first Houdini instance to bind port **8765** becomes the **gateway** when auto-gateway is enabled (default). Additional instances register on ephemeral ports.
+Every Houdini instance binds an OS-assigned port and registers its exact URL.
+The gateway remains on stable port **9765**, so agents and the CLI can discover
+multiple simultaneous Houdini instances without hard-coded instance ports.
 
 For auto-start on every session, copy [`examples/houdini_123.py`](../../examples/houdini_123.py) into your Houdini scripts path (see file header).
 
@@ -44,7 +46,7 @@ Copy from [`examples/mcp/cursor-houdini-streamable-http.json`](../../examples/mc
 {
   "mcpServers": {
     "houdini-local": {
-      "url": "http://127.0.0.1:8765/mcp"
+      "url": "http://127.0.0.1:9765/mcp"
     }
   }
 }

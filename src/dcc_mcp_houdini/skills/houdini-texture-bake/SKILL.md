@@ -7,7 +7,7 @@ description: >-
   to low-res target. Pair with houdini-render for render output and
   houdini-materials for shader assignment.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.19.33+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.19.45+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

@@ -5,7 +5,7 @@ description: >-
   light mixer, and image output through typed tools. Pair with houdini-render
   for full render execution and houdini-camera-light for scene setup.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.33+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

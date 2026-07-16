@@ -27,7 +27,7 @@ skill and is CC0-1.0.
 
 ## Features
 
-- Embedded MCP Streamable HTTP server inside Houdini (port 8765)
+- Embedded MCP Streamable HTTP server inside Houdini (OS-assigned instance port)
 - Auto-gateway with first-wins election (gateway port 9765)
 - Progressive skill loading (discover → load → unload)
 - Houdini Python (`hython`) and interactive UI-thread dispatch
@@ -98,7 +98,7 @@ as process ownership evidence.
 import dcc_mcp_houdini
 
 server = dcc_mcp_houdini.start_server()
-print(server.mcp_url)  # http://127.0.0.1:8765/mcp
+print(server.mcp_url)  # Exact direct endpoint selected by the OS
 ```
 
 Default minimal mode (`DCC_MCP_MINIMAL=1`) loads only:
@@ -230,8 +230,8 @@ dcc-mcp-houdini/
 ## Requirements
 
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
-- `dcc-mcp-core >= 0.19.33`
-- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.19.33,<1.0.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
+- `dcc-mcp-core >= 0.19.45`
+- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.19.45,<1.0.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
 - See `pyproject.toml` for full dependencies
 
 ## License

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 SERVER_NAME = "dcc-mcp-houdini"
 SERVER_VERSION = __version__
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 0
 
 _BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 _DCC_NAME = "houdini"
@@ -52,7 +52,7 @@ def _host_dispatcher_from(dispatcher: Any) -> Any:
 class HoudiniServerOptions:
     """Adapter-local options collapsed for the dcc-mcp-core 0.17+ server contract."""
 
-    port: int = DEFAULT_PORT
+    port: Optional[int] = None
     extra_skill_paths: Optional[List[str]] = None
     server_name: str = SERVER_NAME
     server_version: str = SERVER_VERSION
@@ -121,7 +121,7 @@ class HoudiniMcpServer(DccServerBase):
 
     def __init__(
         self,
-        port: int = DEFAULT_PORT,
+        port: Optional[int] = None,
         extra_skill_paths: Optional[List[str]] = None,
         server_name: str = SERVER_NAME,
         server_version: str = SERVER_VERSION,
@@ -585,7 +585,7 @@ _host_instance: Any = None
 
 
 def start_server(
-    port: int = DEFAULT_PORT,
+    port: Optional[int] = None,
     extra_skill_paths: Optional[List[str]] = None,
     register_builtins: bool = True,
     include_bundled: bool = True,

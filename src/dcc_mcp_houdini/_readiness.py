@@ -151,12 +151,20 @@ def wait_until_ready(server: Any, timeout: int = 30) -> bool:
     """Block until ``/v1/readyz`` returns 200 (or ``/health`` as fallback)."""
     import time
     import urllib.error
+    import urllib.parse
     import urllib.request
 
-    port = getattr(server, "port", None)
-    if port is None and hasattr(server, "_options"):
-        port = getattr(server._options, "port", 8765)
-    port = int(port or 8765)
+    mcp_url = getattr(server, "mcp_url", None)
+    try:
+        port = urllib.parse.urlsplit(mcp_url).port if isinstance(mcp_url, str) else None
+    except ValueError:
+        port = None
+    if port is None:
+        port = getattr(getattr(server, "_handle", None), "port", None)
+    if port is None or int(port) <= 0:
+        logger.warning("Houdini MCP readiness skipped: server has no bound instance port")
+        return False
+    port = int(port)
 
     urls = (
         f"http://127.0.0.1:{port}/v1/readyz",

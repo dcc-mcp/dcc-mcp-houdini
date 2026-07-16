@@ -6,13 +6,15 @@ Run with:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from dcc_mcp_core.host import BlockingDispatcher
 
 from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniHost
 from dcc_mcp_houdini.server import HoudiniMcpServer
 
 
-def main(port: int = 18765) -> None:
+def main(port: Optional[int] = None) -> None:
     """Start the MCP server and block while the headless host pumps jobs."""
     blocking = BlockingDispatcher()
     dispatcher = HoudiniCallableDispatcher(blocking)

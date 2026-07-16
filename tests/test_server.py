@@ -94,11 +94,18 @@ def test_wait_until_ready_uses_urllib(monkeypatch: pytest.MonkeyPatch) -> None:
         def __exit__(self, *args):
             return False
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: FakeResp())
+    requested_urls = []
+
+    def fake_urlopen(url, **kwargs):
+        requested_urls.append(url)
+        return FakeResp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
     server = MagicMock()
-    server.port = 8765
+    server.mcp_url = "http://127.0.0.1:54321/mcp"
     assert wait_until_ready(server, timeout=1) is True
+    assert requested_urls == ["http://127.0.0.1:54321/v1/readyz"]
 
 
 def test_api_helpers() -> None:
