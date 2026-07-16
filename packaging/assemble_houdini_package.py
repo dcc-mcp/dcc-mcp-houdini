@@ -202,6 +202,7 @@ def _bootstrap_py() -> str:
 
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 import shutil
@@ -248,6 +249,7 @@ def bootstrap_and_start() -> object:
     vendor_str = str(vendor)
     if vendor_str not in sys.path:
         sys.path.insert(0, vendor_str)
+    importlib.invalidate_caches()
 
     if os.environ.get("DCC_MCP_HOUDINI_AUTOSTART", "1").strip().lower() in {"0", "false", "no", "off"}:
         return None

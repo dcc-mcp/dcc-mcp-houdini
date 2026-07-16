@@ -244,6 +244,58 @@ def bootstrap_and_start():
     assert marker.read_text(encoding="utf-8") == "1"
 
 
+def test_bootstrap_refreshes_cached_missing_vendor_path(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    root = tmp_path / "dcc_mcp_houdini"
+    wheels = root / "wheels"
+    scripts = root / "scripts"
+    wheels.mkdir(parents=True)
+    scripts.mkdir()
+    with zipfile.ZipFile(wheels / "dcc_mcp_houdini-1.0.0-py3-none-any.whl", "w") as zf:
+        zf.writestr(
+            "dcc_mcp_houdini/__init__.py",
+            "def start_server(**kwargs):\n    return kwargs\n",
+        )
+    bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
+
+    code = r"""
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+vendor = str(root / "vendor")
+sys.path.insert(0, vendor)
+try:
+    import dcc_mcp_houdini
+except ModuleNotFoundError:
+    pass
+else:
+    raise AssertionError("vendor unexpectedly importable before extraction")
+assert sys.path_importer_cache.get(vendor) is None
+
+os.environ["DCC_MCP_HOUDINI_ROOT"] = str(root)
+spec = importlib.util.spec_from_file_location(
+    "dcc_mcp_houdini_bootstrap",
+    root / "scripts" / "dcc_mcp_houdini_bootstrap.py",
+)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+server = module.bootstrap_and_start()
+assert server["port"] == 8765
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code, str(root)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
     pkg = _load_packaging_script()
 
