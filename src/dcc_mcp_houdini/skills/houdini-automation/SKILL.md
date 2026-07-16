@@ -12,7 +12,7 @@ metadata:
     dcc: houdini
     layer: pipeline
     stage: pipeline
-    version: "1.1.0"
+    version: "1.2.0"
     tags: [houdini, automation, hip, timeline, pipeline, scripts]
     search-hint: "run python file, save hip, load hip, timeline, build node chain"
     search-aliases: [run script file, save hip, open hip, load scene, set frame range, timeline, build node chain, automate houdini]
@@ -57,3 +57,30 @@ include `transaction_id`, `undo_label`, validation evidence, and post-cook
 readback fails, the tool explicitly removes created nodes and restores any
 existing input connections and existing node positions touched by layout. Check
 `rollback.complete` and `rollback.errors` before retrying a failed recipe.
+
+Successful responses expose a compact `summary` with the created nodes,
+readback-verified connections, submitted parameter values, and counts. This is
+the preferred proof for generated MaterialX networks.
+
+## MaterialX displacement acceptance
+
+For each existing MaterialX builder, use one `build_node_chain` recipe with an
+`mtlximage` feeding `mtlxrange`, then `mtlxdisplacement`. Put texture paths,
+range bounds, clamping, and displacement scale in each node's `parameters` and
+connect nodes by their recipe-local `ref` or `node_name`. Four materials need
+four such calls because they have four different parent networks; each call is
+independently prevalidated and leaves no partial network when rollback is
+complete.
+
+Use a separate atomic recipe under `/stage` for the
+`rendergeometrysettings` node and its upstream/downstream LOP connections.
+Resolve the current Houdini/Karma true-displacement and dicing parameter names
+with the parameter inspection tools, then pass those names through the same
+structured `parameters` object; no renderer-specific Python is required.
+
+Do not save between batch calls. After every material and stage response has a
+successful summary, call `save_hip_file`. It writes a sibling temporary HIP and
+uses an atomic filesystem replacement, so a save or replace failure preserves
+the prior target. If replacement fails after the temporary save, use the
+returned `recovery_file`. In-memory recipes remain separate transactions;
+reload the prior saved HIP when whole-batch rollback is required.

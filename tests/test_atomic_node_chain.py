@@ -194,7 +194,11 @@ class FakeParent:
         self.editable = True
         self.types = {
             "box": FakeNodeType("box", 0, 1),
+            "mtlxdisplacement": FakeNodeType("mtlxdisplacement", 1, 1),
+            "mtlximage": FakeNodeType("mtlximage", 0, 1),
+            "mtlxrange": FakeNodeType("mtlxrange", 1, 1),
             "null": FakeNodeType("null", 4, 1),
+            "rendergeometrysettings": FakeNodeType("rendergeometrysettings", 1, 1),
         }
         self._children: List[FakeNode] = []
         self.create_count = 0
@@ -646,3 +650,119 @@ def test_success_uses_one_named_undo_group_and_returns_scene_readback() -> None:
     assert readback["cook"]["node"]["path"] == "/obj/geo1/OUT"
     assert parent.node("OUT").cooked is True
     assert context["rollback"] == {"attempted": False, "complete": True, "errors": []}
+
+
+def _materialx_displacement_recipe() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    nodes = []
+    connections = []
+    for index in range(4):
+        prefix = "surface_{}".format(index)
+        nodes.extend(
+            [
+                {
+                    "node_type": "mtlximage",
+                    "node_name": "{}_image".format(prefix),
+                    "parameters": {"signature": "default", "file": "/assets/{}_height.exr".format(prefix)},
+                },
+                {
+                    "node_type": "mtlxrange",
+                    "node_name": "{}_range".format(prefix),
+                    "parameters": {
+                        "signature": "default",
+                        "inlow": 0.1,
+                        "inhigh": 0.9,
+                        "outlow": -1.0,
+                        "outhigh": 1.0,
+                        "doclamp": 1,
+                    },
+                },
+                {
+                    "node_type": "mtlxdisplacement",
+                    "node_name": "{}_displacement".format(prefix),
+                    "parameters": {"signature": "default", "scale": 0.01},
+                },
+            ]
+        )
+        connections.extend(
+            [
+                {"input": "{}_range".format(prefix), "output": "{}_image".format(prefix)},
+                {"input": "{}_displacement".format(prefix), "output": "{}_range".format(prefix)},
+            ]
+        )
+    return nodes, connections
+
+
+def test_materialx_displacement_batch_and_stage_settings_return_summaries() -> None:
+    module = _load_script()
+    nodes, connections = _materialx_displacement_recipe()
+    material_parent = FakeParent("/mat/displacement_batch")
+
+    with patch.dict(sys.modules, {"hou": FakeHou(material_parent)}):
+        material_result = module.build_node_chain(
+            material_parent.path(),
+            nodes,
+            connections,
+            layout=False,
+            cook_last=False,
+        )
+
+    material_summary = material_result["context"]["summary"]
+    assert material_summary["counts"] == {"created": 12, "connected": 8, "parameters": 40}
+    assert all(connection["matches"] for connection in material_summary["connected"])
+    assert len(material_summary["parameters"]) == 12
+
+    stage_parent = FakeParent("/stage")
+    upstream = stage_parent.add_existing("null", "upstream", (0.0, 0.0))
+    downstream = stage_parent.add_existing("null", "downstream", (1.0, 0.0))
+    with patch.dict(sys.modules, {"hou": FakeHou(stage_parent)}):
+        settings_result = module.build_node_chain(
+            stage_parent.path(),
+            [
+                {
+                    "node_type": "rendergeometrysettings",
+                    "node_name": "displacement_settings",
+                    "parameters": {
+                        "primpattern": "/asset/*",
+                        "xn__primvarskarmaobjecttruedisplace_control_n4bfg": "set",
+                        "xn__primvarskarmaobjecttruedisplace_mrbfg": "True Displacement",
+                        "xn__primvarskarmaobjectdicingquality_control_95bfg": "set",
+                        "xn__primvarskarmaobjectdicingquality_8sbfg": 1.25,
+                    },
+                }
+            ],
+            [
+                {"input": "displacement_settings", "output": upstream.path()},
+                {"input": downstream.path(), "output": "displacement_settings"},
+            ],
+            layout=False,
+            cook_last=False,
+        )
+
+    assert settings_result["context"]["summary"]["counts"] == {
+        "created": 1,
+        "connected": 2,
+        "parameters": 5,
+    }
+
+
+def test_materialx_batch_failure_leaves_no_partial_network() -> None:
+    module = _load_script()
+    nodes, connections = _materialx_displacement_recipe()
+    parent = FakeParent("/mat/displacement_batch")
+    parent.cook_fail_names.add("surface_3_displacement")
+
+    with patch.dict(sys.modules, {"hou": FakeHou(parent)}):
+        result = module.build_node_chain(
+            parent.path(),
+            nodes,
+            connections,
+            layout=False,
+            cook_last=True,
+        )
+
+    assert result["success"] is False
+    assert parent.children() == ()
+    rollback = result["context"]["rollback"]
+    assert rollback["complete"] is True
+    assert len(rollback["created_paths"]) == 12
+    assert set(rollback["deleted_paths"]) == set(rollback["created_paths"])

@@ -640,11 +640,30 @@ class AtomicNodeChainExecutor:
                     "warnings": list(cooked_node.warnings()) if hasattr(cooked_node, "warnings") else [],
                 }
             )
+        parameter_results = [
+            {
+                "path": created[planned.index].path(),
+                "values": dict(planned.parameters),
+            }
+            for planned in plan.nodes
+            if planned.parameters
+        ]
+        summary = {
+            "created": node_results,
+            "connected": connection_results,
+            "parameters": parameter_results,
+            "counts": {
+                "created": len(node_results),
+                "connected": len(connection_results),
+                "parameters": sum(len(entry["values"]) for entry in parameter_results),
+            },
+        }
         return {
             "performed": True,
             "nodes": node_results,
             "connections": connection_results,
             "cook": cook_result,
+            "summary": summary,
         }
 
     @staticmethod
