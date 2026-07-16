@@ -525,16 +525,10 @@ class TestRenderExecution:
         job_id = "f" * 32
         job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
         job_dir.mkdir(parents=True)
-        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in (1, 2, 3)]
-        outputs[0].write_bytes(b"stale")
-        outputs[1].write_bytes(b"new")
-        snapshot = {
-            str(outputs[0]): {
-                "mtime_ns": outputs[0].stat().st_mtime_ns,
-                "size": outputs[0].stat().st_size,
-            },
-            str(outputs[1]): {"mtime_ns": 1, "size": 1},
-        }
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in range(1, 31)]
+        for output in outputs[:25]:
+            output.write_bytes(b"new")
+        snapshot = {str(output): {"mtime_ns": 1, "size": 1} for output in outputs[:25]}
         (job_dir / "status.json").write_text(
             json.dumps(
                 {
@@ -543,6 +537,7 @@ class TestRenderExecution:
                     "started_at": 10.0,
                     "expected_outputs": [str(path) for path in outputs],
                     "output_snapshot": snapshot,
+                    "written_files": [],
                 }
             ),
             encoding="utf-8",
@@ -554,15 +549,18 @@ class TestRenderExecution:
             summary = mod.read_render_job(job_id)
             details = mod.read_render_job(job_id, include_details=True)
 
-        assert summary["completed"] == 1
-        assert summary["total"] == 3
-        assert summary["progress"] == pytest.approx(1.0 / 3.0)
+        assert summary["completed"] == 25
+        assert summary["total"] == 30
+        assert summary["progress"] == pytest.approx(25.0 / 30.0)
         assert summary["elapsed_secs"] == 30.0
-        assert summary["eta_secs"] == 60.0
+        assert summary["eta_secs"] == 6.0
+        assert summary["written_file_count"] == 25
+        assert summary["recent_written_files"] == [str(output) for output in outputs[15:25]]
         assert "expected_outputs" not in summary
         assert "output_snapshot" not in summary
         assert details["expected_outputs"] == [str(path) for path in outputs]
         assert details["output_snapshot"] == snapshot
+        assert details["written_files"] == [str(output) for output in outputs[:25]]
 
     def test_cancel_complete_race_preserves_completed_state(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -634,7 +632,12 @@ class TestRenderExecution:
         job_id = "6" * 32
         job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
         job_dir.mkdir(parents=True)
-        warnings = ["warning {}\n{}".format(index, "x" * 600) for index in range(12)]
+        shared_prefix = "x" * 600
+        warnings = [
+            shared_prefix + " first",
+            shared_prefix + " second",
+            *["warning {}\n{}".format(index, "x" * 600) for index in range(10)],
+        ]
         (job_dir / "status.json").write_text(
             json.dumps({"job_id": job_id, "state": "failed", "warnings": warnings}),
             encoding="utf-8",
@@ -648,6 +651,48 @@ class TestRenderExecution:
         assert len(summary["recent_warnings"]) == 10
         assert all("\n" not in warning and len(warning) <= 500 for warning in summary["recent_warnings"])
         assert details["warnings"] == warnings
+
+    def test_get_render_job_surfaces_bounded_stderr_warnings(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "5" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        stderr = job_dir / "stderr.log"
+        stderr_warnings = [
+            "Property 'vblur' cannot be specified on a per-instance at this time.",
+            "Pixel filter 'minmax' - Mode idcover requires PrimId channel",
+        ]
+        stderr_lines = [warning for warning in stderr_warnings for _ in range(2)]
+        stderr_limit = mod.read_render_job.__globals__["_STDERR_TAIL_BYTES"]
+        stderr.write_text(
+            "outside bounded tail\n{}\n{}\n".format(
+                "x" * (stderr_limit + 1),
+                "\n".join(stderr_lines),
+            ),
+            encoding="utf-8",
+        )
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "running",
+                    "stderr_path": str(stderr),
+                    "warnings": ["worker warning", stderr_warnings[0]],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            summary = mod.read_render_job(job_id)
+            details = mod.read_render_job(job_id, include_details=True)
+
+        expected_warnings = ["worker warning", *stderr_warnings]
+        assert summary["warning_count"] == len(expected_warnings)
+        assert summary["recent_warnings"] == expected_warnings
+        assert all(len(warning) <= 500 for warning in summary["recent_warnings"])
+        assert details["warning_count"] == len(expected_warnings)
+        assert details["warnings"] == expected_warnings
 
     def test_get_render_job_tool_forwards_include_details(self) -> None:
         mod = _load_script("houdini-render", "get_render_job.py")
