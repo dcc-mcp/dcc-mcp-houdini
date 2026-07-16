@@ -266,16 +266,10 @@ class TestRenderExecution:
         mod = _load_script("houdini-render", "_background_render.py")
         hip = tmp_path / "scene.hip"
         hip.write_bytes(b"hip")
-        requested = tmp_path / "beauty.0001.exr"
-        requested.write_bytes(b"old")
-        (tmp_path / "beauty.0002.exr").write_bytes(b"outside requested range")
         hython = tmp_path / ("hython.exe" if mod.os.name == "nt" else "hython")
         hython.write_bytes(b"exe")
         mock_hou = MagicMock()
         mock_hou.hipFile.path.return_value = str(hip)
-        mock_hou.text.expandStringAtFrame.side_effect = lambda pattern, frame: pattern.replace(
-            "$F4", "{:04d}".format(int(frame))
-        )
         process = MagicMock(pid=4321)
 
         with patch.dict(mod.os.environ, {"PARENT_ONLY": "keep"}, clear=True), patch.object(
@@ -286,7 +280,7 @@ class TestRenderExecution:
             job = mod.launch_background_render(
                 mock_hou,
                 "/stage/karma",
-                [1, 9, 4],
+                [1, 100000, 1],
                 str(tmp_path / "beauty.$F4.exr"),
             )
             assert "DCC_MCP_BACKGROUND_RENDER" not in mod.os.environ
@@ -295,9 +289,9 @@ class TestRenderExecution:
         assert job["pid"] == 4321
         assert status["state"] == "queued"
         assert "pid" not in status
-        assert status["output_snapshot"] == {
-            str(requested): {"mtime_ns": requested.stat().st_mtime_ns, "size": requested.stat().st_size}
-        }
+        assert "expected_outputs" not in status
+        assert "output_snapshot" not in status
+        mock_hou.text.expandStringAtFrame.assert_not_called()
         assert popen.call_args.kwargs["cwd"].endswith(job["job_id"])
         assert popen.call_args.args[0][0] == str(hython)
         assert popen.call_args.kwargs["env"]["PARENT_ONLY"] == "keep"
@@ -393,6 +387,27 @@ class TestRenderExecution:
         launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 9, 4], str(tmp_path / "beauty.$F4.exr"))
         rop.render.assert_not_called()
 
+    def test_render_rop_defaults_to_background_in_ui(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "beauty.$F4.exr"))
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = True
+        job = {"job_id": "a" * 32, "state": "queued", "pid": 1234}
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
+            result = mod.render_rop("/out/mantra1", frame_range=[1, 100000, 1])
+
+        assert result["success"] is True
+        assert result["context"]["background"] is True
+        launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 100000, 1], str(tmp_path / "beauty.$F4.exr"))
+        rop.render.assert_not_called()
+
     def test_render_rop_reports_written_and_elapsed(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.exr"
@@ -404,6 +419,7 @@ class TestRenderExecution:
         rop.errors.return_value = []
         mock_hou = MagicMock()
         mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.render_rop("/out/mantra1")
@@ -431,6 +447,7 @@ class TestRenderExecution:
         rop.errors.return_value = []
         mock_hou = MagicMock()
         mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = True
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.render_rop("/stage/karma_rop", frame_range=[1, 1], background=False)

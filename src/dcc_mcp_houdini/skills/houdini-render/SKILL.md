@@ -46,7 +46,7 @@ agent can detect and skip cleanly when rendering is unavailable.
 2. `set_render_settings(rop_path="/out/mantra1", camera="/obj/rendercam", resolution=[1280,720], output_path="/tmp/beauty.exr")`
 3. `get_render_settings("/out/mantra1")` → verify
 4. `capture_viewport(output_path="/tmp/preview.jpg")` for a quick look (UI only)
-5. `render_rop("/out/mantra1", frame_range=[1,1])` → `written_files`, `elapsed_secs`
+5. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive Houdini; foreground results in headless Houdini
 
 ### Render Layers & AOVs
 
@@ -60,9 +60,10 @@ agent can detect and skip cleanly when rendering is unavailable.
 2. `manage_takes(action="switch", take_name="lighting_variant_a")`
 3. `manage_takes(action="list")` → review all takes
 
-Use `render_rop(..., background=true)` for production renders, then poll
-`get_render_job(job_id)`. The main thread only validates the ROP and launches
-the isolated process; Mantra/Karma work never occupies Houdini's event loop.
-Foreground `render_rop` retains the 30-minute timeout hint; output-path and
+Interactive Houdini defaults to an isolated process; poll
+`get_render_job(job_id)`. Pass `background=false` only when foreground
+execution is intentional. Headless Houdini defaults to foreground execution.
+The main thread only validates the ROP and launches the isolated process;
+Mantra/Karma work never occupies Houdini's event loop. Output-path and
 resolution parameter writes are defensive (candidate names) so Mantra, Karma,
 and ROP geometry/USD drivers are all tolerated.

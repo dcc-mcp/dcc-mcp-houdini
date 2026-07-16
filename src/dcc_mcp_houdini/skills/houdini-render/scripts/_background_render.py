@@ -15,8 +15,6 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from _render_common import output_snapshot, requested_outputs
-
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     pending = path.with_suffix(".tmp")
@@ -56,7 +54,6 @@ def launch_background_render(
         str(status_path),
         json.dumps(output_pattern),
     ]
-    expected_outputs = requested_outputs(hou, output_pattern, frame_range)
     initial = {
         "job_id": job_id,
         "state": "queued",
@@ -67,14 +64,7 @@ def launch_background_render(
         "stdout_path": str(stdout_path),
         "stderr_path": str(stderr_path),
     }
-    status = dict(initial)
-    status.update(
-        {
-            "expected_outputs": expected_outputs,
-            "output_snapshot": output_snapshot(expected_outputs),
-        }
-    )
-    _write_json(status_path, status)
+    _write_json(status_path, initial)
     child_env = dict(os.environ)
     child_env["DCC_MCP_BACKGROUND_RENDER"] = "1"
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0

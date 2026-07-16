@@ -22,7 +22,7 @@ _OUTPUT_PARMS = ("outputimage", "picture", "vm_picture", "sopoutput", "filename"
 def render_rop(
     rop_path: str,
     frame_range: Optional[List[float]] = None,
-    background: bool = False,
+    background: Optional[bool] = None,
 ) -> dict:
     """Render the ROP at *rop_path*, returning written files and elapsed time."""
     try:
@@ -42,7 +42,8 @@ def render_rop(
                 node_path=rop.path(),
             )
         output_pattern = eval_first_parm(rop, _OUTPUT_PARMS, preserve_string=True)
-        if background:
+        use_background = bool(hou.isUIAvailable()) if background is None else background
+        if use_background:
             job = launch_background_render(hou, rop.path(), frame_range, output_pattern)
             return skill_success(
                 "Started background ROP render",

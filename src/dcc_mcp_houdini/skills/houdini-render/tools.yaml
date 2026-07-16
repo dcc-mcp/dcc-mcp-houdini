@@ -123,7 +123,8 @@ tools:
   - name: render_rop
     description: >-
       Render a ROP/output driver and report written files, elapsed time,
-      warnings/errors. Async with a long timeout hint to avoid hanging the host.
+      warnings/errors. Interactive Houdini defaults to an isolated job so the
+      UI stays responsive; headless Houdini defaults to foreground execution.
     source_file: scripts/render_rop.py
     execution: async
     affinity: main
@@ -149,8 +150,7 @@ tools:
           maxItems: 3
         background:
           type: boolean
-          default: false
-          description: Launch an isolated hython job and return immediately, keeping the Houdini UI responsive.
+          description: Explicitly select isolated hython (true) or foreground (false) execution. When omitted, interactive Houdini uses an isolated job and headless Houdini renders in the foreground.
   - name: get_render_job
     description: Read status, elapsed time, and written files for a background ROP render job.
     source_file: scripts/get_render_job.py
