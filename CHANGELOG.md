@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.17.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.1...v0.17.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* budget Houdini UI host dispatch ([#126](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/126)) ([1128ef4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1128ef4986d552309b61ab294d31769047b8460e))
+
 ## [0.17.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.0...v0.17.1) (2026-07-16)
 
 
