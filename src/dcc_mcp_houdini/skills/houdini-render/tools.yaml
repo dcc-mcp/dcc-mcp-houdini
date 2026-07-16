@@ -170,6 +170,26 @@ tools:
       properties:
         job_id:
           type: string
+  - name: cancel_render_job
+    description: Cancel a background ROP render owned by the current adapter process. Repeated calls are safe.
+    source_file: scripts/cancel_render_job.py
+    execution: sync
+    affinity: any
+    timeout_hint_secs: 10
+    group: render
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
   - name: create_render_layer
     description: >-
       Create a render layer (Render Product in Solaris /stage or merge in ROP

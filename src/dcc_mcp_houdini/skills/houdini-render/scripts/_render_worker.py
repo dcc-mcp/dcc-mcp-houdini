@@ -13,7 +13,7 @@ from _render_common import expanded_outputs, output_snapshot, render_node, reque
 
 
 def write_status(path: Path, payload: dict) -> None:
-    pending = path.with_suffix(".tmp")
+    pending = path.with_name("{}.{}.tmp".format(path.name, os.getpid()))
     pending.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(str(pending), str(path))
 
