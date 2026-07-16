@@ -216,6 +216,34 @@ def test_windows_installer_writes_bomless_package_json(tmp_path: Path) -> None:
     assert json.loads(raw) == json.loads(expected)
 
 
+def test_startup_hook_uses_package_root_without_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pkg = _load_packaging_script()
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    marker = tmp_path / "bootstrap_calls"
+    (scripts / "dcc_mcp_houdini_bootstrap.py").write_text(
+        """from pathlib import Path
+
+class Server:
+    mcp_url = "http://127.0.0.1:8765/mcp"
+
+def bootstrap_and_start():
+    marker = Path({marker!r})
+    marker.write_text((marker.read_text() if marker.exists() else "") + "1")
+    return Server()
+""".format(marker=str(marker)),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DCC_MCP_HOUDINI_ROOT", str(tmp_path))
+
+    exec(compile(pkg._startup_py(), "<houdini-startup>", "exec"), {})
+
+    assert marker.read_text(encoding="utf-8") == "1"
+
+
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
     pkg = _load_packaging_script()
 
