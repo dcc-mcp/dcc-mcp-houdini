@@ -7,6 +7,8 @@
 * share owned isolated ROP jobs across renders, simulation caches, and ROP chains
 * derive bounded output progress and ETA during job polling
 * make `build_node_chain` an atomic prevalidated transaction with dry-run, one-step undo, explicit rollback, and scene readback
+* report created, connected, and parameter summaries for structured node recipes
+* replace HIP targets atomically after a successful temporary save
 
 ### Bug Fixes
 

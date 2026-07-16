@@ -391,6 +391,55 @@ class TestAutomationSkills:
         assert "hello" in result["context"]["stdout"]
         assert result["context"]["result"] == "42"
 
+    def test_save_hip_file_atomically_replaces_target(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "save_hip_file.py")
+        target = tmp_path / "scene.hip"
+        target.write_bytes(b"old")
+        hip_file = MagicMock()
+        hip_file.name.return_value = str(target)
+        hip_file.path.return_value = str(target)
+
+        def save(file_name: str, save_to_recent_files: bool) -> None:
+            assert save_to_recent_files is False
+            Path(file_name).write_bytes(b"new")
+
+        hip_file.save.side_effect = save
+        mock_hou = MagicMock(hipFile=hip_file)
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.save_hip_file(str(target))
+
+        resolved = str(target.resolve())
+        assert result["success"] is True
+        assert result["context"] == {"hip_file": resolved, "atomic_replace": True}
+        assert target.read_bytes() == b"new"
+        hip_file.setName.assert_called_once_with(resolved)
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_save_hip_file_preserves_target_when_replace_fails(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "save_hip_file.py")
+        previous = tmp_path / "previous.hip"
+        target = tmp_path / "scene.hip"
+        target.write_bytes(b"old")
+        hip_file = MagicMock()
+        hip_file.name.return_value = str(previous)
+        hip_file.path.return_value = str(previous)
+        hip_file.save.side_effect = lambda file_name, save_to_recent_files: Path(file_name).write_bytes(b"new")
+        mock_hou = MagicMock(hipFile=hip_file)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod.os,
+            "replace",
+            side_effect=OSError("replace failed"),
+        ):
+            result = mod.save_hip_file(str(target))
+
+        assert result["success"] is False
+        assert target.read_bytes() == b"old"
+        recovery = Path(result["context"]["recovery_file"])
+        assert recovery.read_bytes() == b"new"
+        assert hip_file.setName.call_args_list[-1] == call(str(recovery))
+        assert sorted(path.name for path in tmp_path.iterdir()) == sorted([target.name, recovery.name])
+
     def test_build_node_chain_with_mock_hou(self) -> None:
         mod = _load_script("houdini-automation", "build_node_chain.py")
         box_type = MagicMock()

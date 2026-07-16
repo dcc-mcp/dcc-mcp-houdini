@@ -117,6 +117,7 @@ def build_node_chain(
         parent_path=plan.parent.path(),
         affected_paths=list(execution.affected_paths),
         validated=validated,
+        summary=execution.readback["summary"],
         readback=execution.readback,
         rollback={"attempted": False, "complete": True, "errors": []},
         nodes=[node_summary(node) for node in execution.nodes],

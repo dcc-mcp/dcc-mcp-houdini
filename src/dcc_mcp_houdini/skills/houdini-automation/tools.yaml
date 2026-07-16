@@ -72,7 +72,9 @@ tools:
       idempotent_hint: true
 
   - name: save_hip_file
-    description: "Save the current Houdini hip file, optionally to a new path."
+    description: >-
+      Save the current Houdini hip file, optionally to a new path, through a
+      sibling temporary file and atomic target replacement.
     input_schema:
       type: object
       properties:
@@ -88,7 +90,7 @@ tools:
     source_file: scripts/save_hip_file.py
     tool_role: action
     risk: medium
-    search_aliases: [save hip, save scene, write hip file, save as]
+    search_aliases: [save hip, atomic save hip, save scene, write hip file, save as]
     produces: ["file:hip"]
     annotations:
       read_only_hint: false
@@ -127,7 +129,8 @@ tools:
     description: >-
       Prevalidate and atomically build a small Houdini node chain from
       structured node specs and connections. Supports dry-run, one-step undo,
-      explicit rollback evidence, and post-cook scene readback.
+      explicit rollback evidence, post-cook scene readback, and compact
+      created/connected/parameter summaries.
     input_schema:
       type: object
       required: [parent_path, nodes]
