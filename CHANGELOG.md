@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.17.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.3...v0.17.0) (2026-07-16)
+
+
+### Features
+
+* **skills:** add read-only Solaris USD inspection ([#122](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/122)) ([eefab7c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/eefab7ccc27b1ced452574d9be8edfe2157f056e))
+
 ## [0.16.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.2...v0.16.3) (2026-07-16)
 
 
