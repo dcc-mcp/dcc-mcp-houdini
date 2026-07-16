@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.17.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.2...v0.17.3) (2026-07-16)
+
+
+### Bug Fixes
+
+* use OS-assigned MCP instance ports ([#128](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/128)) ([9230341](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/923034138df39d692fd694bb1b4b8ea9b9b2697e))
+
 ## [0.17.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.1...v0.17.2) (2026-07-16)
 
 
