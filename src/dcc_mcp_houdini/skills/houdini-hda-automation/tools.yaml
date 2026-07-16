@@ -128,7 +128,10 @@ tools:
   - name: execute_rop_chain
     description: >-
       Render a ROP with its upstream output-driver dependencies (or just itself
-      when ignore_inputs is set) and report errors.
+      when ignore_inputs is set). Interactive Houdini defaults to an isolated
+      job; headless Houdini defaults to foreground execution. Chain success is
+      based on execution/cook errors; output_verification reports whether file
+      output was verified, not observed, or unavailable.
     source_file: scripts/execute_rop_chain.py
     execution: async
     affinity: main
@@ -155,3 +158,10 @@ tools:
         ignore_inputs:
           type: boolean
           default: false
+        background:
+          type: boolean
+          description: >-
+            Explicitly select isolated hython (true) or foreground (false)
+            execution. When omitted, interactive Houdini uses an isolated job
+            and headless Houdini runs in the foreground. Explicit headless
+            isolation saves the existing HIP before spawning the worker.

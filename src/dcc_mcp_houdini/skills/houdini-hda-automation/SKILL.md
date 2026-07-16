@@ -40,13 +40,21 @@ definition introspection, instantiation, validation, and graph-level cooking.
   `skill_error` envelopes when `hou` is unavailable; PDG/ROP cooking still
   requires a valid Houdini session.
 - **Long runs:** `instantiate_hda`, `validate_hda`, `cook_top_network`, and
-  `execute_rop_chain` are `execution: async` with `timeout_hint_secs` set —
-  cooking and rendering can be slow; agents should poll rather than block.
+  `execute_rop_chain` are `execution: async` with `timeout_hint_secs` set.
+  Interactive `execute_rop_chain` returns an isolated job; poll it through
+  `houdini_render__get_render_job` instead of occupying the Houdini event loop.
 - **PDG stats:** `cook_top_network` reports `work_item_count` on a best-effort
   basis via `getPDGGraphContext()`; it may be `null` when the context is
   unavailable.
 - **ROP dependencies:** `execute_rop_chain` honours upstream ROP inputs by
-  default; pass `ignore_inputs=true` to render only the named driver.
+  default in both foreground and isolated workers; pass `ignore_inputs=true`
+  to render only the named driver. Interactive Houdini defaults to isolated
+  `hython`, while headless Houdini defaults to foreground. Interactive isolated
+  launch requires a saved, clean HIP and never auto-saves the GUI scene.
+  Explicit headless isolated launch requires an existing HIP and saves its
+  current state before spawning the worker. A chain can complete without a
+  discoverable output path when it has no execution/cook errors;
+  inspect `output_verification` to distinguish this from verified file output.
 
 ## Tracer-bullet flow
 

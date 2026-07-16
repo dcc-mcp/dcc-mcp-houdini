@@ -187,12 +187,97 @@ class TestPdgRop:
         mock_hou = MagicMock()
         mock_hou.node.return_value = node
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.execute_rop_chain("/out/mantra1", frame_range=[1, 24])
+            result = mod.execute_rop_chain("/out/mantra1", frame_range=[1, 24], background=False)
         assert result["success"] is True
         node.render.assert_called_once()
         _, kwargs = node.render.call_args
         assert kwargs["frame_range"] == (1.0, 24.0, 1.0)
         assert kwargs["ignore_inputs"] is False
+
+    def test_execute_rop_chain_defaults_to_background_and_preserves_ignore_inputs(self) -> None:
+        mod = _load_script("execute_rop_chain.py")
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        picture = MagicMock()
+        picture.unexpandedString.return_value = "/tmp/beauty.$F4.exr"
+        node.parm.side_effect = lambda name: picture if name == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        mock_hou.isUIAvailable.return_value = True
+        job = {"job_id": "b" * 32, "state": "queued", "pid": 9876}
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
+            result = mod.execute_rop_chain(
+                "/out/mantra1",
+                frame_range=[1, 24, 2],
+                ignore_inputs=True,
+            )
+
+        assert result["success"] is True
+        assert result["context"]["background"] is True
+        launch.assert_called_once_with(
+            mock_hou,
+            "/out/mantra1",
+            [1, 24, 2],
+            "/tmp/beauty.$F4.exr",
+            ignore_inputs=True,
+            job_kind="rop_chain",
+        )
+        node.render.assert_not_called()
+
+    def test_execute_rop_chain_detects_lopoutput(self) -> None:
+        mod = _load_script("execute_rop_chain.py")
+        lopoutput = MagicMock()
+        lopoutput.unexpandedString.return_value = "/tmp/stage.$F4.usd"
+        node = MagicMock()
+        node.parm.side_effect = lambda name: lopoutput if name == "lopoutput" else None
+
+        assert mod._output_pattern(node) == "/tmp/stage.$F4.usd"
+
+    def test_execute_rop_chain_defaults_to_foreground_without_ui(self) -> None:
+        mod = _load_script("execute_rop_chain.py")
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.errors.return_value = []
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "launch_background_render") as launch:
+            result = mod.execute_rop_chain("/out/mantra1", frame_range=[1, 24, 2], ignore_inputs=True)
+
+        assert result["success"] is True
+        assert result["context"]["background"] is False
+        launch.assert_not_called()
+        _, kwargs = node.render.call_args
+        assert kwargs["frame_range"] == (1.0, 24.0, 2.0)
+        assert kwargs["ignore_inputs"] is True
+
+    def test_execute_rop_chain_fallback_never_drops_ignore_inputs(self) -> None:
+        mod = _load_script("execute_rop_chain.py")
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.errors.return_value = []
+        accepted = []
+
+        def render(**kwargs):
+            if "verbose" in kwargs:
+                raise TypeError("verbose is unsupported")
+            accepted.append(kwargs)
+
+        node.render.side_effect = render
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.execute_rop_chain(
+                "/out/mantra1",
+                frame_range=[1, 24, 2],
+                ignore_inputs=True,
+                background=False,
+            )
+
+        assert result["success"] is True
+        assert accepted == [{"ignore_inputs": True, "frame_range": (1.0, 24.0, 2.0)}]
 
     def test_execute_rop_chain_rejects_non_rop(self) -> None:
         mod = _load_script("execute_rop_chain.py")

@@ -66,6 +66,21 @@ Interactive Houdini defaults to an isolated process; poll
 `get_render_job(job_id)` and use `cancel_render_job(job_id)` to stop a job
 started by the same adapter process. Pass `background=false` only when
 foreground execution is intentional. Headless Houdini defaults to foreground execution.
+The default poll response is bounded: it reports `completed`, `total`,
+fractional `progress`, `elapsed_secs`, `eta_secs`, `written_file_count`, and up
+to ten `recent_written_files`. `output_verification.state` distinguishes
+`verified`, `not_observed`, and `unavailable` output evidence. Pass
+`include_details=true` only when the full
+expected-output snapshot, complete written-file and warning lists, error, and
+traceback are needed. The same job lifecycle also observes `cache_simulation` and
+`execute_rop_chain` jobs.
+ROP-chain completion is governed by execution/cook errors; a chain without a
+discoverable output pattern can complete with `output_verification.state` set
+to `unavailable`. Render and cache jobs still require a new or updated output.
+Interactive background launch requires a saved HIP with no unsaved changes and
+never auto-saves the GUI scene. Headless Houdini defaults to foreground; when
+`background=true` is explicitly requested, the adapter requires an existing HIP
+and saves its current state before spawning the isolated worker.
 The main thread only validates the ROP and launches the isolated process;
 Mantra/Karma work never occupies Houdini's event loop. Output-path and
 resolution parameter writes are defensive (candidate names) so Mantra, Karma,

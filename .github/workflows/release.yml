@@ -74,6 +74,9 @@ jobs:
           with zipfile.ZipFile(wheels[-1]) as zf:
               names = set(zf.namelist())
           required = {
+              "dcc_mcp_houdini/_isolated_jobs.py",
+              "dcc_mcp_houdini/_rop_jobs.py",
+              "dcc_mcp_houdini/skills/houdini-render/scripts/_render_worker.py",
               "dcc_mcp_houdini/skills/houdini-scene/SKILL.md",
               "dcc_mcp_houdini/skills/houdini-nodes/SKILL.md",
               "dcc_mcp_houdini/skills/houdini-materials/SKILL.md",

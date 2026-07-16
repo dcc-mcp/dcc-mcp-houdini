@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* share owned isolated ROP jobs across renders, simulation caches, and ROP chains
+* derive bounded output progress and ETA during job polling
+
+### Bug Fixes
+
+* reject dirty GUI background launches and persist explicit headless background launches before rendering
+* avoid false failures for successful ROP chains without discoverable output paths
+* preserve `ignore_inputs` for isolated Solaris ROP chains
+
 ## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.12.0...v0.13.0) (2026-07-16)
 
 
