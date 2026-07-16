@@ -105,28 +105,28 @@ def test_assemble_houdini_package_can_pin_validated_core(
     dist_dir.mkdir()
     adapter_wheel = dist_dir / "dcc_mcp_houdini-{}-py3-none-any.whl".format(version)
     adapter_wheel.write_bytes(b"adapter")
-    core_wheel = tmp_path / "dcc_mcp_core-0.19.17-cp38-abi3-win_amd64.whl"
+    core_wheel = tmp_path / "dcc_mcp_core-0.19.42-cp38-abi3-win_amd64.whl"
     core_wheel.write_bytes(b"core")
 
     def fail_resolve(min_version=pkg.MIN_CORE_VERSION):
         raise AssertionError("explicit core version should skip PyPI latest resolution")
 
     def download_core_wheels(version_arg, platform, dest_dir):
-        assert version_arg == "0.19.17"
+        assert version_arg == "0.19.42"
         assert platform == "win64"
         return [core_wheel]
 
     monkeypatch.setattr(pkg, "resolve_core_version", fail_resolve)
     monkeypatch.setattr(pkg, "download_core_wheels", download_core_wheels)
 
-    zip_path = pkg.assemble("win64", dist_dir, tmp_path / "out", core_version="0.19.17")
+    zip_path = pkg.assemble("win64", dist_dir, tmp_path / "out", core_version="0.19.42")
 
     with zipfile.ZipFile(zip_path) as zf:
         names = set(zf.namelist())
         readme = zf.read("dcc_mcp_houdini/README.txt").decode("utf-8")
     assert "dcc_mcp_houdini/wheels/{}".format(core_wheel.name) in names
-    assert "dcc-mcp-core wheels: 0.19.17" in readme
-    assert "Core bundle policy: explicit validated dcc-mcp-core 0.19.17." in readme
+    assert "dcc-mcp-core wheels: 0.19.42" in readme
+    assert "Core bundle policy: explicit validated dcc-mcp-core 0.19.42." in readme
 
 
 def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> None:
@@ -136,11 +136,11 @@ def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> N
     _write_quickinstall_zip(
         zip_path,
         "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
-        "dcc_mcp_core-0.19.7-cp38-abi3-win_amd64.whl",
+        "dcc_mcp_core-0.19.33-cp38-abi3-win_amd64.whl",
     )
 
     with pytest.raises(RuntimeError, match="Bundled core drift"):
-        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.42")
 
 
 def test_verify_quickinstall_zip_requires_scene_load_hook(tmp_path: Path) -> None:
@@ -150,12 +150,12 @@ def test_verify_quickinstall_zip_requires_scene_load_hook(tmp_path: Path) -> Non
     _write_quickinstall_zip(
         zip_path,
         "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
-        "dcc_mcp_core-0.19.15-cp38-abi3-win_amd64.whl",
+        "dcc_mcp_core-0.19.42-cp38-abi3-win_amd64.whl",
         include_scene_hook=False,
     )
 
     with pytest.raises(RuntimeError, match="/scripts/456.py"):
-        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.42")
 
 
 def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
@@ -165,13 +165,13 @@ def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
     _write_quickinstall_zip(
         zip_path,
         "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
-        "dcc_mcp_core-0.19.15-cp38-abi3-win_amd64.whl",
+        "dcc_mcp_core-0.19.42-cp38-abi3-win_amd64.whl",
     )
 
-    matrix = pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+    matrix = pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.42")
 
     assert matrix["adapter"] == pkg.get_package_version()
-    assert matrix["core"] == "0.19.15"
+    assert matrix["core"] == "0.19.42"
     assert matrix["server"] == pkg.get_package_version()
     assert matrix["cli"] == pkg.get_package_version()
 

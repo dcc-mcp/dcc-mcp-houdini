@@ -72,7 +72,13 @@ from dcc_mcp_houdini.dispatcher import (
     HoudiniStandaloneDispatcher,
     create_execution_stack,
 )
-from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniHost
+from dcc_mcp_houdini.host import (
+    HoudiniCallableDispatcher,
+    HoudiniEventLoopTimerAdapter,
+    HoudiniHost,
+    HoudiniUiDispatcher,
+    HoudiniUiPump,
+)
 from dcc_mcp_houdini.server import (
     DEFAULT_PORT,
     SERVER_NAME,
@@ -100,6 +106,7 @@ __all__ = [
     "HoudiniCallableDispatcher",
     "HoudiniCapabilityManifestBuilder",
     "HoudiniContextSnapshotProvider",
+    "HoudiniEventLoopTimerAdapter",
     "HoudiniHost",
     "HoudiniMcpServer",
     "HoudiniResourceBinder",
@@ -107,6 +114,8 @@ __all__ = [
     "HoudiniSemanticIndex",
     "HoudiniServerOptions",
     "HoudiniStandaloneDispatcher",
+    "HoudiniUiDispatcher",
+    "HoudiniUiPump",
     "MINIMAL_SKILLS",
     "MissingParamError",
     "ProjectToolsIntegration",
