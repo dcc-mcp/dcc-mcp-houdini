@@ -16,6 +16,15 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.16.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.2...v0.16.3) (2026-07-16)
+
+
+### Bug Fixes
+
+* refresh quickinstall vendor import caches ([b22ce5d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b22ce5d7acecf0f2ddba329ffd8374140f66e947))
+* refresh quickinstall vendor import caches ([2cc8b3b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2cc8b3b09a64f3700a5e512fa736c953b14d74a1))
+* report partial render outputs accurately ([#121](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/121)) ([10b7b86](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/10b7b866c3c9cee87765df5a632cd1a0beada9df))
+
 ## [0.16.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.1...v0.16.2) (2026-07-16)
 
 
