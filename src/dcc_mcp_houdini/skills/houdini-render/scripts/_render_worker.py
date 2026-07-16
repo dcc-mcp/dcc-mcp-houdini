@@ -77,7 +77,9 @@ def main() -> None:
         logged_cook_errors = _cook_errors(status)
         candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
         written_files = updated_outputs(candidates, before)
-        verification_state = "verified" if written_files else "not_observed"
+        verification_state = "not_observed"
+        if written_files:
+            verification_state = "verified" if len(written_files) == len(candidates) else "partial"
         if not output_pattern:
             verification_state = "unavailable"
         output_verification = {
