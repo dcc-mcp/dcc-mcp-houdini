@@ -220,6 +220,30 @@ class TestViewSkills:
         viewport.setCamera.assert_called_once_with(cam)
         viewport.frameAll.assert_not_called()
 
+    def test_frame_view_frames_node_before_activating_camera(self) -> None:
+        mod = _load_script("houdini-camera-light", "frame_view.py")
+        events = []
+        geo = _node("/obj/geo1", "geo1")
+        cam = _node("/obj/shotcam", "shotcam", "cam")
+        geo.setSelected.side_effect = lambda *args, **kwargs: events.append("select")
+        viewport = MagicMock()
+        viewport.frameSelected.side_effect = lambda: events.append("frame")
+        viewport.setCamera.side_effect = lambda camera: events.append("camera")
+        viewport.camera.return_value = cam
+        viewer = MagicMock()
+        viewer.curViewport.return_value = viewport
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        mock_hou.node.side_effect = lambda path: {"/obj/geo1": geo, "/obj/shotcam": cam}[path]
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.frame_view(node_path="/obj/geo1", camera_path="/obj/shotcam")
+
+        assert result["success"] is True
+        assert result["context"]["active_camera"] == "/obj/shotcam"
+        assert events == ["select", "frame", "camera"]
+
 
 class TestViewportCapture:
     def test_capture_viewport_headless_skips(self, tmp_path: Path) -> None:
