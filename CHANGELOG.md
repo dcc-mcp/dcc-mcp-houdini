@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.12.0...v0.13.0) (2026-07-16)
+
+
+### Features
+
+* add cancellable background render jobs ([#107](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/107)) ([0bd0ca3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0bd0ca39ecfa0eb5e0771a05f2cd3e7ae21ec8fb))
+
 ## [0.12.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.5...v0.12.0) (2026-07-16)
 
 
