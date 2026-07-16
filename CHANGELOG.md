@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.17.4](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.3...v0.17.4) (2026-07-16)
+
+
+### Bug Fixes
+
+* honor Houdini flipbook increments and camera selection ([#130](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/130)) ([ce40084](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ce4008423aa653d57f9c374efd695472351609d0))
+
 ## [0.17.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.2...v0.17.3) (2026-07-16)
 
 
