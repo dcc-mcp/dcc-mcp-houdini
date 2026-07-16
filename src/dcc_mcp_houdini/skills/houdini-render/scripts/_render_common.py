@@ -105,11 +105,15 @@ def apply_frame_range(node: Any, frame_range: Optional[Sequence[float]]) -> Opti
     return [start, end]
 
 
-def render_node(node: Any, frame_range: Optional[Sequence[float]] = None) -> tuple:
+def render_node(
+    node: Any,
+    frame_range: Optional[Sequence[float]] = None,
+    ignore_inputs: bool = False,
+) -> tuple:
     """Execute a render using the host contract for the node type."""
     applied_range = apply_frame_range(node, frame_range)
     type_name = node.type().name().split("::", 1)[0]
-    if type_name == "usdrender_rop":
+    if type_name == "usdrender_rop" and not ignore_inputs:
         execute = node.parm("execute")
         if execute is None:
             raise ValueError("Solaris USD Render node has no execute button")
@@ -126,6 +130,8 @@ def render_node(node: Any, frame_range: Optional[Sequence[float]] = None) -> tup
             float(frame_range[1]),
             float(frame_range[2]) if len(frame_range) > 2 else 1.0,
         )
+    if ignore_inputs:
+        kwargs["ignore_inputs"] = True
     try:
         render(verbose=False, **kwargs)
     except TypeError:

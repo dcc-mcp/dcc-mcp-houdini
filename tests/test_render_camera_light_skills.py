@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
+_DEFAULT_PATTERN = object()
 
 
 def _load_script(skill_name: str, script_name: str) -> ModuleType:
@@ -53,17 +54,25 @@ def _run_render_worker(
     snapshot,
     render,
     stderr_text="",
-    pattern=None,
+    pattern=_DEFAULT_PATTERN,
     include_launch_snapshot=True,
+    ignore_inputs=False,
+    job_kind="render",
 ):
     mod = _load_render_worker()
-    pattern = pattern or str(tmp_path / "beauty.$F4.exr")
+    if pattern is _DEFAULT_PATTERN:
+        pattern = str(tmp_path / "beauty.$F4.exr")
     stdout = tmp_path / "stdout.log"
     stderr = tmp_path / "stderr.log"
     stdout.write_text("", encoding="utf-8")
     stderr.write_text(stderr_text, encoding="utf-8")
     status_path = tmp_path / "status.json"
-    status = {"state": "queued", "stdout_path": str(stdout), "stderr_path": str(stderr)}
+    status = {
+        "state": "queued",
+        "job_kind": job_kind,
+        "stdout_path": str(stdout),
+        "stderr_path": str(stderr),
+    }
     if include_launch_snapshot:
         status.update(
             {
@@ -86,6 +95,7 @@ def _run_render_worker(
         json.dumps(frame_range),
         str(status_path),
         json.dumps(pattern),
+        json.dumps(ignore_inputs),
     ]
     with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod.sys, "argv", argv), patch.object(
         mod, "render_node", side_effect=render
@@ -265,6 +275,43 @@ class TestRenderSettings:
 
 
 class TestRenderExecution:
+    def test_solaris_ignore_inputs_uses_rop_render_contract(self) -> None:
+        mod = _load_script("houdini-render", "_render_common.py")
+        rop = _node("/stage/karma", "karma", "usdrender_rop")
+        execute = MagicMock()
+        rop.parm.side_effect = lambda name: execute if name == "execute" else None
+        rop.parmTuple.return_value = None
+
+        applied_range, execution_mode = mod.render_node(
+            rop,
+            [1, 24, 2],
+            ignore_inputs=True,
+        )
+
+        assert applied_range == [1.0, 24.0]
+        assert execution_mode == "render"
+        execute.pressButton.assert_not_called()
+        rop.render.assert_called_once_with(
+            verbose=False,
+            frame_range=(1.0, 24.0, 2.0),
+            ignore_inputs=True,
+        )
+
+    def test_solaris_ignore_inputs_never_falls_back_to_execute_button(self) -> None:
+        mod = _load_script("houdini-render", "_render_common.py")
+        rop = _node("/stage/karma", "karma", "usdrender_rop")
+        execute = MagicMock()
+        rop.parm.side_effect = lambda name: execute if name == "execute" else None
+        rop.parmTuple.return_value = None
+        rop.render.side_effect = TypeError("ignore_inputs is unsupported")
+
+        with pytest.raises(TypeError, match="ignore_inputs is unsupported"):
+            mod.render_node(rop, [1, 24, 2], ignore_inputs=True)
+
+        execute.pressButton.assert_not_called()
+        assert rop.render.call_count == 2
+        assert all(call.kwargs["ignore_inputs"] is True for call in rop.render.call_args_list)
+
     def test_background_render_launches_isolated_hython(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
         hip = tmp_path / "scene.hip"
@@ -273,6 +320,7 @@ class TestRenderExecution:
         hython.write_bytes(b"exe")
         mock_hou = MagicMock()
         mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.hasUnsavedChanges.return_value = False
         process = MagicMock(pid=4321)
 
         with patch.dict(mod.os.environ, {"PARENT_ONLY": "keep"}, clear=True), patch.object(
@@ -285,6 +333,8 @@ class TestRenderExecution:
                 "/stage/karma",
                 [1, 100000, 1],
                 str(tmp_path / "beauty.$F4.exr"),
+                ignore_inputs=True,
+                job_kind="rop_chain",
             )
             assert "DCC_MCP_BACKGROUND_RENDER" not in mod.os.environ
 
@@ -297,10 +347,73 @@ class TestRenderExecution:
         mock_hou.text.expandStringAtFrame.assert_not_called()
         assert popen.call_args.kwargs["cwd"].endswith(job["job_id"])
         assert popen.call_args.args[0][0] == str(hython)
+        assert json.loads(popen.call_args.args[0][-1]) is True
         assert popen.call_args.kwargs["env"]["PARENT_ONLY"] == "keep"
         assert popen.call_args.kwargs["env"]["DCC_MCP_BACKGROUND_RENDER"] == "1"
         assert popen.call_args.kwargs["start_new_session"] is (mod.os.name != "nt")
         assert mod._PROCESS_HANDLES[job["job_id"]] is process
+        assert status["ignore_inputs"] is True
+        assert status["job_kind"] == "rop_chain"
+
+    def test_background_render_gui_rejects_dirty_hip_without_saving(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+        mock_hou.isUIAvailable.return_value = True
+
+        with patch.object(mod.subprocess, "Popen") as popen, pytest.raises(ValueError, match="unsaved changes"):
+            mod.launch_background_render(mock_hou, "/out/mantra1", [1, 2, 1], "beauty.$F4.exr")
+
+        mock_hou.hipFile.save.assert_not_called()
+        popen.assert_not_called()
+
+    def test_background_render_headless_saves_current_hip_before_launch(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"hip")
+        hython = tmp_path / ("hython.exe" if mod.os.name == "nt" else "hython")
+        hython.write_bytes(b"exe")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
+            mod.tempfile, "gettempdir", return_value=str(tmp_path)
+        ), patch.object(mod.subprocess, "Popen", return_value=MagicMock(pid=4321)) as popen:
+            mod.launch_background_render(mock_hou, "/out/geometry1", [1, 2, 1], "cache.$F4.bgeo.sc")
+
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.save.assert_called_once_with()
+        popen.assert_called_once()
+
+    def test_background_render_headless_rejects_failed_save(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.save.side_effect = RuntimeError("save failed")
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.object(mod.subprocess, "Popen") as popen, pytest.raises(ValueError, match="failed to save"):
+            mod.launch_background_render(mock_hou, "/out/geometry1", [1, 2, 1], "cache.$F4.bgeo.sc")
+
+        popen.assert_not_called()
+
+    def test_background_render_headless_rejects_missing_hip(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(tmp_path / "untitled.hip")
+        mock_hou.isUIAvailable.return_value = False
+
+        with pytest.raises(ValueError, match="requires.*saved"):
+            mod.launch_background_render(mock_hou, "/out/mantra1", None, None)
+
+        mock_hou.hipFile.save.assert_not_called()
 
     def test_cancel_background_render_is_idempotent(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -324,6 +437,36 @@ class TestRenderExecution:
         assert second["state"] == "cancelled"
         assert second["cancel_requested"] is False
         terminate.assert_called_once_with(process)
+        assert job_id not in mod._PROCESS_HANDLES
+
+    def test_concurrent_cancel_terminates_owned_process_once(self, tmp_path: Path) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "9" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        (job_dir / "status.json").write_text(
+            json.dumps({"job_id": job_id, "state": "running"}),
+            encoding="utf-8",
+        )
+        return_code = {"value": None}
+        process = MagicMock(pid=4321)
+        process.poll.side_effect = lambda: return_code["value"]
+        mod._PROCESS_HANDLES[job_id] = process
+
+        def terminate(_process):
+            return_code["value"] = 0
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree", side_effect=terminate
+        ) as terminate_mock, ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _index: mod.cancel_render_job(job_id), range(2)))
+
+        assert [result["state"] for result in results] == ["cancelled", "cancelled"]
+        assert sorted(result["cancel_requested"] for result in results) == [False, True]
+        terminate_mock.assert_called_once_with(process)
+        assert job_id not in mod._PROCESS_HANDLES
 
     def test_cancel_never_uses_unowned_status_pid(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -376,6 +519,50 @@ class TestRenderExecution:
         assert result["elapsed_secs"] == 5.0
         assert result["owned_by_current_process"] is False
 
+    def test_get_render_job_derives_progress_and_hides_internal_details(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "f" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in (1, 2, 3)]
+        outputs[0].write_bytes(b"stale")
+        outputs[1].write_bytes(b"new")
+        snapshot = {
+            str(outputs[0]): {
+                "mtime_ns": outputs[0].stat().st_mtime_ns,
+                "size": outputs[0].stat().st_size,
+            },
+            str(outputs[1]): {"mtime_ns": 1, "size": 1},
+        }
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "running",
+                    "started_at": 10.0,
+                    "expected_outputs": [str(path) for path in outputs],
+                    "output_snapshot": snapshot,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod.time, "time", return_value=40.0
+        ):
+            summary = mod.read_render_job(job_id)
+            details = mod.read_render_job(job_id, include_details=True)
+
+        assert summary["completed"] == 1
+        assert summary["total"] == 3
+        assert summary["progress"] == pytest.approx(1.0 / 3.0)
+        assert summary["elapsed_secs"] == 30.0
+        assert summary["eta_secs"] == 60.0
+        assert "expected_outputs" not in summary
+        assert "output_snapshot" not in summary
+        assert details["expected_outputs"] == [str(path) for path in outputs]
+        assert details["output_snapshot"] == snapshot
+
     def test_cancel_complete_race_preserves_completed_state(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
         job_id = "d" * 32
@@ -401,6 +588,75 @@ class TestRenderExecution:
         assert result["state"] == "completed"
         assert result["written_files"] == ["beauty.exr"]
         assert result["cancel_requested"] is True
+        assert job_id not in mod._PROCESS_HANDLES
+
+    def test_get_render_job_returns_bounded_terminal_summary(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "8" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        output = job_dir / "beauty.0001.exr"
+        output.write_bytes(b"new")
+        written_files = [str(job_dir / "beauty.{:04d}.exr".format(frame)) for frame in range(12)]
+        status = {
+            "job_id": job_id,
+            "state": "failed",
+            "started_at": 10.0,
+            "finished_at": 20.0,
+            "expected_outputs": [str(output)],
+            "output_snapshot": {},
+            "written_files": written_files,
+            "error": "ROP failed\n" + "x" * 1000,
+            "traceback": "large traceback" * 100,
+        }
+        (job_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            summary = mod.read_render_job(job_id)
+            details = mod.read_render_job(job_id, include_details=True)
+
+        assert summary["written_file_count"] == 12
+        assert summary["recent_written_files"] == written_files[-10:]
+        assert summary["error_summary"].startswith("ROP failed")
+        assert len(summary["error_summary"]) <= 500
+        assert summary["warning_count"] == 0
+        assert summary["recent_warnings"] == []
+        assert summary["eta_secs"] is None
+        for internal in ("expected_outputs", "output_snapshot", "written_files", "traceback", "error"):
+            assert internal not in summary
+        assert details["written_files"] == written_files
+        assert details["traceback"] == status["traceback"]
+        assert details["error"] == status["error"]
+
+    def test_get_render_job_bounds_warnings_in_default_summary(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "6" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        warnings = ["warning {}\n{}".format(index, "x" * 600) for index in range(12)]
+        (job_dir / "status.json").write_text(
+            json.dumps({"job_id": job_id, "state": "failed", "warnings": warnings}),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            summary = mod.read_render_job(job_id)
+            details = mod.read_render_job(job_id, include_details=True)
+
+        assert summary["warning_count"] == 12
+        assert len(summary["recent_warnings"]) == 10
+        assert all("\n" not in warning and len(warning) <= 500 for warning in summary["recent_warnings"])
+        assert details["warnings"] == warnings
+
+    def test_get_render_job_tool_forwards_include_details(self) -> None:
+        mod = _load_script("houdini-render", "get_render_job.py")
+        status = {"job_id": "7" * 32, "state": "running"}
+
+        with patch.object(mod, "read_render_job", return_value=status) as read:
+            result = mod.get_render_job("7" * 32, include_details=True)
+
+        assert result["success"] is True
+        read.assert_called_once_with("7" * 32, include_details=True)
 
     def test_terminate_process_tree_uses_taskkill_on_windows(self) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -486,6 +742,55 @@ class TestRenderExecution:
         assert status["written_files"] == []
         assert "no new or updated output" in status["error"].lower()
 
+    @pytest.mark.parametrize("job_kind", ["render", "cache"])
+    def test_background_worker_output_job_without_pattern_still_fails(self, tmp_path: Path, job_kind: str) -> None:
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [],
+            {},
+            lambda _rop, _frame_range: ([1.0, 1.0], "render"),
+            pattern=None,
+            job_kind=job_kind,
+        )
+
+        assert status["state"] == "failed"
+        assert status["output_verification"]["state"] == "unavailable"
+
+    def test_background_worker_rop_chain_without_output_pattern_completes(self, tmp_path: Path) -> None:
+        status = _run_render_worker(
+            tmp_path,
+            [1, 24, 1],
+            [],
+            {},
+            lambda _rop, _frame_range: ([1.0, 24.0], "render"),
+            pattern=None,
+            job_kind="rop_chain",
+        )
+
+        assert status["state"] == "completed"
+        assert status["written_files"] == []
+        assert status["output_verification"] == {
+            "state": "unavailable",
+            "expected_output_count": 0,
+            "written_file_count": 0,
+        }
+
+    def test_background_worker_rop_chain_with_unchanged_output_completes(self, tmp_path: Path) -> None:
+        stale = tmp_path / "beauty.0001.exr"
+        stale.write_bytes(b"stale")
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [stale],
+            {str(stale): {"mtime_ns": stale.stat().st_mtime_ns, "size": stale.stat().st_size}},
+            lambda _rop, _frame_range: ([1.0, 1.0], "render"),
+            job_kind="rop_chain",
+        )
+
+        assert status["state"] == "completed"
+        assert status["output_verification"]["state"] == "not_observed"
+
     def test_background_worker_fails_on_rop_cook_error_log(self, tmp_path: Path) -> None:
         def render(_rop, _frame_range):
             (tmp_path / "beauty.0001.exr").write_bytes(b"new")
@@ -501,6 +806,26 @@ class TestRenderExecution:
         )
         assert status["state"] == "failed"
         assert "rop cook error" in status["error"].lower()
+
+    def test_background_worker_preserves_ignore_inputs(self, tmp_path: Path) -> None:
+        captured = {}
+
+        def render(_rop, _frame_range, ignore_inputs=False):
+            captured["ignore_inputs"] = ignore_inputs
+            (tmp_path / "beauty.0001.exr").write_bytes(b"new")
+            return [1.0, 1.0], "render"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [tmp_path / "beauty.0001.exr"],
+            {},
+            render,
+            ignore_inputs=True,
+        )
+
+        assert status["state"] == "completed"
+        assert captured["ignore_inputs"] is True
 
     def test_render_rop_background_returns_job_without_rendering_in_ui(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")

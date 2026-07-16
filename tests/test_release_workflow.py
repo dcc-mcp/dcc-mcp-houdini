@@ -31,12 +31,18 @@ def test_release_workflow_can_backfill_pypi_for_existing_tag() -> None:
     assert "inputs.publish_to_pypi == true" in publish_job["if"]
 
 
-def test_release_build_verifies_bundled_skills_before_publish() -> None:
-    workflow = _release_workflow()
-    build_steps = workflow["jobs"]["build"]["steps"]
-    verify_steps = [step for step in build_steps if step.get("name") == "Verify wheel contains bundled skills"]
-    assert verify_steps, "release build should verify wheel skill payload"
-    assert "houdini-materials/SKILL.md" in verify_steps[0]["run"]
+def test_builds_verify_runtime_wheel_payload() -> None:
+    required = (
+        "dcc_mcp_houdini/_isolated_jobs.py",
+        "dcc_mcp_houdini/_rop_jobs.py",
+        "dcc_mcp_houdini/skills/houdini-render/scripts/_render_worker.py",
+        "houdini-materials/SKILL.md",
+    )
+    for workflow in (_ci_workflow(), _release_workflow()):
+        build_steps = workflow["jobs"]["build"]["steps"]
+        verify_steps = [step for step in build_steps if step.get("name") == "Verify wheel contains bundled skills"]
+        assert verify_steps, "build should verify wheel runtime payload"
+        assert all(path in verify_steps[0]["run"] for path in required)
 
 
 def test_release_please_updates_runtime_version_file() -> None:

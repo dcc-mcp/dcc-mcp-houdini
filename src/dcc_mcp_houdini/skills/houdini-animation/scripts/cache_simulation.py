@@ -11,6 +11,8 @@ from typing import List, Optional
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini._rop_jobs import launch_background_render
+
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
@@ -33,10 +35,17 @@ def _set_frame_range(node, frame_range):
     return [start, end]
 
 
-def _eval_output(node) -> Optional[str]:
+def _eval_output(node, preserve_string: bool = False) -> Optional[str]:
     for name in _OUTPUT_PARMS:
         parm = node.parm(name)
         if parm is not None:
+            if preserve_string:
+                try:
+                    value = parm.unexpandedString()
+                    if isinstance(value, str):
+                        return value
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 return parm.eval()
             except Exception:  # noqa: BLE001
@@ -55,7 +64,11 @@ def _expand(pattern: Optional[str]) -> list:
     return [pattern] if os.path.isfile(pattern) else []
 
 
-def cache_simulation(rop_path: str, frame_range: Optional[List[float]] = None) -> dict:
+def cache_simulation(
+    rop_path: str,
+    frame_range: Optional[List[float]] = None,
+    background: Optional[bool] = None,
+) -> dict:
     """Render a cache/sim ROP (filecache/dop/geometry) and report outputs."""
     try:
         import hou  # noqa: PLC0415
@@ -70,8 +83,23 @@ def cache_simulation(rop_path: str, frame_range: Optional[List[float]] = None) -
                 "Node has no render(); expected a ROP/file cache node",
                 node_path=rop.path(),
             )
+        use_background = bool(hou.isUIAvailable()) if background is None else background
+        output_pattern = _eval_output(rop, preserve_string=use_background)
+        if use_background:
+            job = launch_background_render(
+                hou,
+                rop.path(),
+                frame_range,
+                output_pattern,
+                job_kind="cache",
+            )
+            return skill_success(
+                "Started background simulation cache",
+                node_path=rop.path(),
+                background=True,
+                **job,
+            )
         applied_range = _set_frame_range(rop, frame_range)
-        output_pattern = _eval_output(rop)
         warnings: List[str] = []
         start = time.time()
         cached = True
@@ -87,6 +115,7 @@ def cache_simulation(rop_path: str, frame_range: Optional[List[float]] = None) -
         return skill_success(
             "Cached simulation",
             node_path=rop.path(),
+            background=False,
             cached=cached,
             elapsed_secs=elapsed,
             frame_range=applied_range,

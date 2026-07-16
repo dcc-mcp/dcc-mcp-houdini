@@ -8,17 +8,42 @@ from typing import List, Optional
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini._rop_jobs import launch_background_render
+
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 from _hda_auto_common import get_node, node_summary  # noqa: E402
 
+_OUTPUT_PARMS = ("outputimage", "picture", "vm_picture", "sopoutput", "filename", "dopoutput", "lopoutput")
+
+
+def _output_pattern(node) -> Optional[str]:
+    for name in _OUTPUT_PARMS:
+        parm = node.parm(name)
+        if parm is None:
+            continue
+        try:
+            value = parm.unexpandedString()
+            if isinstance(value, str):
+                return value
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            value = parm.eval()
+            if isinstance(value, str):
+                return value
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
 
 def execute_rop_chain(
     rop_path: str,
     frame_range: Optional[List[float]] = None,
     ignore_inputs: bool = False,
+    background: Optional[bool] = None,
 ) -> dict:
     """Render the ROP at *rop_path*, honouring upstream ROP dependencies.
 
@@ -39,6 +64,24 @@ def execute_rop_chain(
                 node=node_summary(node),
             )
 
+        use_background = bool(hou.isUIAvailable()) if background is None else background
+        if use_background:
+            job = launch_background_render(
+                hou,
+                rop_path,
+                frame_range,
+                _output_pattern(node),
+                ignore_inputs=bool(ignore_inputs),
+                job_kind="rop_chain",
+            )
+            return skill_success(
+                "Started background ROP chain",
+                node=node_summary(node),
+                background=True,
+                ignored_inputs=bool(ignore_inputs),
+                **job,
+            )
+
         kwargs: dict = {"verbose": False, "ignore_inputs": bool(ignore_inputs)}
         if frame_range is not None and len(frame_range) >= 2:
             start = float(frame_range[0])
@@ -49,13 +92,22 @@ def execute_rop_chain(
         try:
             render_fn(**kwargs)
         except TypeError:
-            # Older signatures may not accept all kwargs.
-            render_fn()
+            # Older signatures may reject ``verbose`` but still accept the
+            # frame/dependency contract. Never silently drop ignore_inputs.
+            fallback_kwargs = dict(kwargs)
+            fallback_kwargs.pop("verbose", None)
+            try:
+                render_fn(**fallback_kwargs)
+            except TypeError:
+                if ignore_inputs:
+                    raise
+                render_fn()
 
         errors = list(node.errors()) if hasattr(node, "errors") else []
         return skill_success(
             "Executed ROP chain" if not errors else "ROP chain executed with errors",
             node=node_summary(node),
+            background=False,
             frame_range=frame_range,
             ignored_inputs=bool(ignore_inputs),
             errors=errors,

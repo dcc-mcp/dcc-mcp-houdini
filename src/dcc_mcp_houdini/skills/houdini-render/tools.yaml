@@ -150,9 +150,18 @@ tools:
           maxItems: 3
         background:
           type: boolean
-          description: Explicitly select isolated hython (true) or foreground (false) execution. When omitted, interactive Houdini uses an isolated job and headless Houdini renders in the foreground.
+          description: >-
+            Explicitly select isolated hython (true) or foreground (false)
+            execution. When omitted, interactive Houdini uses an isolated job
+            and headless Houdini renders in the foreground. Explicit headless
+            isolation saves the existing HIP before spawning the worker.
   - name: get_render_job
-    description: Read status, elapsed time, and written files for a background ROP render job.
+    description: >-
+      Read bounded status, output progress, elapsed time, and ETA for a background
+      ROP render/cache/chain job. Set include_details only when full internal
+      output and warning lists plus traceback data are required. The bounded
+      summary includes warning_count and at most ten individually truncated
+      recent_warnings.
     source_file: scripts/get_render_job.py
     execution: sync
     affinity: any
@@ -170,8 +179,12 @@ tools:
       properties:
         job_id:
           type: string
+        include_details:
+          type: boolean
+          default: false
+          description: Include full expected/output snapshots, written-file and warning lists, errors, and traceback data. The default response is bounded.
   - name: cancel_render_job
-    description: Cancel a background ROP render owned by the current adapter process. Repeated calls are safe.
+    description: Cancel a background ROP render/cache/chain job owned by the current adapter process. Repeated calls are safe.
     source_file: scripts/cancel_render_job.py
     execution: sync
     affinity: any

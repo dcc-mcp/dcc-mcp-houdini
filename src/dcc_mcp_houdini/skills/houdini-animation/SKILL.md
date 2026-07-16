@@ -35,7 +35,8 @@ Typed animation tools for agents. All tools are `affinity: main`.
   `import_channels` (JSON round-trip).
 - **`bake`** (async): `bake_channels` (per-frame sample → constant keys, hard
   frame cap), `cache_simulation` (render a filecache/DOP/geometry ROP, report
-  `written_files` + `elapsed_secs`).
+  a background job in interactive Houdini or `written_files` + `elapsed_secs`
+  in headless/explicit foreground mode).
 
 ## Tracer-bullet flow
 
@@ -46,6 +47,12 @@ Typed animation tools for agents. All tools are `affinity: main`.
 5. `export_channels("/obj/geo1", ["tx"], "/tmp/tx.json")` → `import_channels` to retarget
 6. `bake_channels("/obj/geo1", ["tx"], frame_range=[1,48])` to flatten expressions
 
-`cache_simulation` is `async` with a 1-hour timeout hint; output-path parm
-names are probed defensively so File Cache, DOP I/O, and Geometry ROPs are all
-tolerated.
+`cache_simulation` is `async` with a 1-hour timeout hint. Interactive Houdini
+defaults to isolated `hython`; poll its `job_id` with
+`houdini_render__get_render_job` and cancel it with
+`houdini_render__cancel_render_job`. Pass `background=false` for intentional
+foreground execution. Interactive background launch requires an explicitly
+saved, clean HIP and never auto-saves the GUI scene. Explicit headless
+background launch requires an existing HIP and saves its current state before
+spawning the worker. Output-path parm names are probed defensively so File
+Cache, DOP I/O, and Geometry ROPs are all tolerated.
