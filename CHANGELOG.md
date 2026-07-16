@@ -13,6 +13,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.14.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.13.0...v0.14.0) (2026-07-16)
+
+
+### Features
+
+* isolate long-running ROP jobs ([#109](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/109)) ([08f7ab3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/08f7ab30eb8bb593deab09586e4d36ae62a04dfb))
+
 ## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.12.0...v0.13.0) (2026-07-16)
 
 
