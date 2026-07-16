@@ -409,9 +409,7 @@ class TestRenderExecution:
         process.wait.return_value = 0
         completed = MagicMock(returncode=0)
 
-        with patch.object(mod.os, "name", "nt"), patch.object(
-            mod.subprocess, "run", return_value=completed
-        ) as run:
+        with patch.object(mod.os, "name", "nt"), patch.object(mod.subprocess, "run", return_value=completed) as run:
             mod._terminate_process_tree(process)
 
         run.assert_called_once_with(
