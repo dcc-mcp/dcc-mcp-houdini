@@ -58,6 +58,7 @@ def _run_render_worker(
     include_launch_snapshot=True,
     ignore_inputs=False,
     job_kind="render",
+    rop_errors=(),
 ):
     mod = _load_render_worker()
     if pattern is _DEFAULT_PATTERN:
@@ -82,7 +83,7 @@ def _run_render_worker(
         )
     status_path.write_text(json.dumps(status), encoding="utf-8")
     rop = _node("/stage/karma", "karma", "usdrender_rop")
-    rop.errors.return_value = []
+    rop.errors.return_value = list(rop_errors)
     mock_hou = MagicMock()
     mock_hou.node.return_value = rop
     mock_hou.text.expandStringAtFrame.side_effect = lambda value, frame: value.replace(
@@ -707,6 +708,30 @@ class TestRenderExecution:
         )
         assert status["state"] == "completed"
         assert status["written_files"] == [str(tmp_path / "beauty.0005.exr")]
+
+    def test_background_worker_reports_partial_outputs_when_range_fails(self, tmp_path: Path) -> None:
+        expected = [tmp_path / "beauty.{:04d}.exr".format(frame) for frame in range(1, 8)]
+
+        def render(_rop, _frame_range):
+            for output in expected[:2]:
+                output.write_bytes(b"new")
+            return [1.0, 7.0], "execute"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1, 7, 1],
+            expected,
+            {},
+            render,
+            rop_errors=["Command Exit Code: 1"],
+        )
+
+        assert status["state"] == "failed"
+        assert status["output_verification"] == {
+            "state": "partial",
+            "expected_output_count": 7,
+            "written_file_count": 2,
+        }
 
     def test_background_worker_recovers_from_cached_launcher_without_snapshot(self, tmp_path: Path) -> None:
         output = tmp_path / "karma_beauty.1080.exr"
