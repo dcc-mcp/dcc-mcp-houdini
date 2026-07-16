@@ -125,8 +125,9 @@ tools:
 
   - name: build_node_chain
     description: >-
-      Build a small Houdini node chain from structured node specs and
-      connections. Mutates the scene and can cook the last created node.
+      Prevalidate and atomically build a small Houdini node chain from
+      structured node specs and connections. Supports dry-run, one-step undo,
+      explicit rollback evidence, and post-cook scene readback.
     input_schema:
       type: object
       required: [parent_path, nodes]
@@ -145,6 +146,12 @@ tools:
                 type: string
               node_name:
                 type: string
+                description: "Optional unique Houdini node name. Must not already exist under the parent."
+              ref:
+                type: string
+                description: >-
+                  Optional recipe-local unique reference for connections. Uses
+                  node_name when omitted, or node_<index> when both are omitted.
               parameters:
                 type: object
                 additionalProperties: true
@@ -156,10 +163,10 @@ tools:
             properties:
               input:
                 type: string
-                description: "Node name/path receiving the connection."
+                description: "Planned ref/name/path or existing node name/path receiving the connection."
               output:
                 type: string
-                description: "Node name/path providing the connection."
+                description: "Planned ref/name/path or existing node name/path providing the connection."
               input_index:
                 type: integer
                 minimum: 0
@@ -174,6 +181,12 @@ tools:
         cook_last:
           type: boolean
           default: true
+        dry_run:
+          type: boolean
+          default: false
+          description: >-
+            Validate the complete recipe and return predicted affected paths
+            without creating nodes, opening an undo group, laying out, or cooking.
     read_only: false
     destructive: false
     idempotent: false
@@ -183,7 +196,7 @@ tools:
     source_file: scripts/build_node_chain.py
     tool_role: action
     risk: medium
-    search_aliases: [build node chain, create network, node recipe, chain nodes]
+    search_aliases: [build node chain, atomic network, dry run node recipe, create network, node recipe, chain nodes]
     produces: [node_network]
     annotations:
       read_only_hint: false
