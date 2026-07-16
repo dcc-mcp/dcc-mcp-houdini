@@ -87,7 +87,9 @@ the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
 Isolated background ROP workers receive `DCC_MCP_BACKGROUND_RENDER=1` in their
 child environment. Package and custom `123.py`/`456.py` startup hooks must skip
 MCP adapter autostart when that marker is present; the parent Houdini environment
-is not modified.
+is not modified. Background render cancellation uses only live child-process
+handles owned by the current adapter process; status-file PIDs are never used
+as process ownership evidence.
 
 ## Usage
 
@@ -147,7 +149,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (30 packages, 183 tools)
+## Bundled Skills (30 packages, 185 tools)
 
 Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
@@ -192,7 +194,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 ### pipeline (load on demand)
 | Skill | Tools |
 |-------|-------|
-| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
+| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `get_render_job`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
 | `houdini-karma` | `configure_karma`, `set_material_override`, `configure_light_mixer`, `set_image_output` |
 | `houdini-husk` | `render_with_husk`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |

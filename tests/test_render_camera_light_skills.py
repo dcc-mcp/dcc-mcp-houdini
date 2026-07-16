@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
 
@@ -296,6 +299,138 @@ class TestRenderExecution:
         assert popen.call_args.args[0][0] == str(hython)
         assert popen.call_args.kwargs["env"]["PARENT_ONLY"] == "keep"
         assert popen.call_args.kwargs["env"]["DCC_MCP_BACKGROUND_RENDER"] == "1"
+        assert popen.call_args.kwargs["start_new_session"] is (mod.os.name != "nt")
+        assert mod._PROCESS_HANDLES[job["job_id"]] is process
+
+    def test_cancel_background_render_is_idempotent(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "a" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        status_path = job_dir / "status.json"
+        status_path.write_text(json.dumps({"job_id": job_id, "state": "running"}), encoding="utf-8")
+        process = MagicMock(pid=4321)
+        process.poll.side_effect = [None, 0, 0]
+        mod._PROCESS_HANDLES[job_id] = process
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree"
+        ) as terminate:
+            first = mod.cancel_render_job(job_id)
+            second = mod.cancel_render_job(job_id)
+
+        assert first["state"] == "cancelled"
+        assert first["cancel_requested"] is True
+        assert second["state"] == "cancelled"
+        assert second["cancel_requested"] is False
+        terminate.assert_called_once_with(process)
+
+    def test_cancel_never_uses_unowned_status_pid(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "b" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        (job_dir / "status.json").write_text(
+            json.dumps({"job_id": job_id, "state": "running", "pid": 999999}), encoding="utf-8"
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree"
+        ) as terminate:
+            result = mod.cancel_render_job(job_id)
+
+        assert result["state"] == "running"
+        assert result["cancel_requested"] is False
+        assert result["owned_by_current_process"] is False
+        terminate.assert_not_called()
+
+    def test_cancel_unknown_job_does_not_terminate_any_process(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree"
+        ) as terminate, pytest.raises(FileNotFoundError):
+            mod.cancel_render_job("e" * 32)
+
+        terminate.assert_not_called()
+
+    def test_get_render_job_reconciles_exited_owned_worker(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "c" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        (job_dir / "status.json").write_text(
+            json.dumps({"job_id": job_id, "state": "running", "started_at": 10.0}), encoding="utf-8"
+        )
+        process = MagicMock(pid=4321)
+        process.poll.return_value = 7
+        mod._PROCESS_HANDLES[job_id] = process
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod.time, "time", return_value=15.0
+        ):
+            result = mod.read_render_job(job_id)
+
+        assert result["state"] == "interrupted"
+        assert result["return_code"] == 7
+        assert result["elapsed_secs"] == 5.0
+        assert result["owned_by_current_process"] is False
+
+    def test_cancel_complete_race_preserves_completed_state(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "d" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        status_path = job_dir / "status.json"
+        status_path.write_text(json.dumps({"job_id": job_id, "state": "running"}), encoding="utf-8")
+        process = MagicMock(pid=4321)
+        process.poll.return_value = None
+        mod._PROCESS_HANDLES[job_id] = process
+
+        def finish(_process):
+            status_path.write_text(
+                json.dumps({"job_id": job_id, "state": "completed", "written_files": ["beauty.exr"]}),
+                encoding="utf-8",
+            )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree", side_effect=finish
+        ):
+            result = mod.cancel_render_job(job_id)
+
+        assert result["state"] == "completed"
+        assert result["written_files"] == ["beauty.exr"]
+        assert result["cancel_requested"] is True
+
+    def test_terminate_process_tree_uses_taskkill_on_windows(self) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        process = MagicMock(pid=4321)
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        completed = MagicMock(returncode=0)
+
+        with patch.object(mod.os, "name", "nt"), patch.object(mod.subprocess, "run", return_value=completed) as run:
+            mod._terminate_process_tree(process)
+
+        run.assert_called_once_with(
+            ["taskkill", "/PID", "4321", "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        process.wait.assert_called_once()
+
+    def test_terminate_process_tree_uses_process_group_on_posix(self) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        process = MagicMock(pid=4321)
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired("hython", 2), 0]
+
+        with patch.object(mod.os, "name", "posix"), patch.object(mod.os, "killpg", create=True) as killpg:
+            mod._terminate_process_tree(process)
+
+        assert killpg.call_args_list[0].args == (4321, mod._SIGTERM)
+        assert killpg.call_args_list[1].args == (4321, mod._SIGKILL)
 
     def test_background_worker_reports_only_updated_requested_outputs(self, tmp_path: Path) -> None:
         stale = tmp_path / "beauty.0001.exr"

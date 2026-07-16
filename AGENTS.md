@@ -90,7 +90,7 @@ When adding or changing bundled skills, load the project skill:
 ### pipeline stage (load on demand)
 | Skill | Key tools |
 |-------|-----------|
-| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
+| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `get_render_job`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
 | `houdini-karma` | `configure_karma`, `set_material_override`, `configure_light_mixer`, `set_image_output` |
 | `houdini-husk` | `render_with_husk`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
@@ -99,7 +99,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 30 skill packages, 183 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative index and ready-made task→skill chains.
+**Total: 30 skill packages, 185 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative index and ready-made task→skill chains.
 
 ## Key Env Vars
 

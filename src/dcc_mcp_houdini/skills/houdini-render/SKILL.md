@@ -21,7 +21,8 @@ metadata:
 
 # houdini-render
 
-Typed render and visual-verification tools. All tools are `affinity: main`.
+Typed render and visual-verification tools. Scene inspection and launch tools
+use `affinity: main`; background job polling and cancellation use `affinity: any`.
 Viewport tools are **UI-aware**: in a headless `hython` session they return a
 structured `warnings` payload with `captured: false` instead of failing, so an
 agent can detect and skip cleanly when rendering is unavailable.
@@ -32,8 +33,9 @@ agent can detect and skip cleanly when rendering is unavailable.
   clamp resolution to 4096 and return `written_files` / `skipped` / `warnings`.
 - **`render`:** `get_render_settings` (read-only), `set_render_settings`
   (reports `unsupported` fields per ROP type), `render_rop` (foreground or
-  isolated `hython` background job), `get_render_job` (polls status without
-  blocking the UI), `configure_aovs` (add/remove
+  isolated `hython` background job), `get_render_job` (polls and reconciles
+  status without blocking the UI), `cancel_render_job` (cancels only jobs
+  owned by the current adapter process), `configure_aovs` (add/remove
   AOVs with 15+ presets), `get_render_stats` (read resolution/samples/renderer/output).
 - **`render_layer`:** `create_render_layer` (Solaris RenderProduct or ROP merge),
   `manage_takes` (create/switch/delete/list takes for render layer variants).
@@ -61,8 +63,9 @@ agent can detect and skip cleanly when rendering is unavailable.
 3. `manage_takes(action="list")` → review all takes
 
 Interactive Houdini defaults to an isolated process; poll
-`get_render_job(job_id)`. Pass `background=false` only when foreground
-execution is intentional. Headless Houdini defaults to foreground execution.
+`get_render_job(job_id)` and use `cancel_render_job(job_id)` to stop a job
+started by the same adapter process. Pass `background=false` only when
+foreground execution is intentional. Headless Houdini defaults to foreground execution.
 The main thread only validates the ROP and launches the isolated process;
 Mantra/Karma work never occupies Houdini's event loop. Output-path and
 resolution parameter writes are defensive (candidate names) so Mantra, Karma,
