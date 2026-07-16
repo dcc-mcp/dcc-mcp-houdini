@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
@@ -171,6 +174,74 @@ def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
     assert matrix["core"] == "0.19.15"
     assert matrix["server"] == pkg.get_package_version()
     assert matrix["cli"] == pkg.get_package_version()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell 5.1")
+def test_windows_installer_writes_bomless_package_json(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    package_root = tmp_path / "quickinstall"
+    packages_dir = package_root / "packages"
+    packages_dir.mkdir(parents=True)
+    (package_root / "install.ps1").write_text(pkg._install_ps1(), encoding="utf-8")
+    (packages_dir / "dcc_mcp_houdini.json.template").write_text(pkg._package_json_template(), encoding="utf-8")
+
+    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    home = tmp_path / "home"
+    env = os.environ.copy()
+    env["USERPROFILE"] = str(home)
+    subprocess.run(
+        [
+            str(powershell),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(package_root / "install.ps1"),
+            "-HoudiniVersion",
+            "21.0",
+            "-PackageRoot",
+            str(package_root),
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    target = home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json"
+    raw = target.read_bytes()
+    assert raw[:1] == b"{"
+    expected = pkg._package_json_template().replace("__PACKAGE_ROOT__", package_root.as_posix())
+    assert json.loads(raw) == json.loads(expected)
+
+
+def test_startup_hook_uses_package_root_without_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pkg = _load_packaging_script()
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    marker = tmp_path / "bootstrap_calls"
+    (scripts / "dcc_mcp_houdini_bootstrap.py").write_text(
+        """from pathlib import Path
+
+class Server:
+    mcp_url = "http://127.0.0.1:8765/mcp"
+
+def bootstrap_and_start():
+    marker = Path({marker!r})
+    marker.write_text((marker.read_text() if marker.exists() else "") + "1")
+    return Server()
+""".format(marker=str(marker)),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DCC_MCP_HOUDINI_ROOT", str(tmp_path))
+
+    exec(compile(pkg._startup_py(), "<houdini-startup>", "exec"), {})
+
+    assert marker.read_text(encoding="utf-8") == "1"
 
 
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:

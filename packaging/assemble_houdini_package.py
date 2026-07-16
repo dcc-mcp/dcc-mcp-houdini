@@ -273,11 +273,19 @@ def _startup_py() -> str:
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 
 
 def _load_bootstrap():
-    path = Path(__file__).with_name("dcc_mcp_houdini_bootstrap.py")
+    root = os.environ.get("DCC_MCP_HOUDINI_ROOT")
+    script = globals().get("__file__")
+    if root:
+        path = Path(root) / "scripts/dcc_mcp_houdini_bootstrap.py"
+    elif script:
+        path = Path(script).with_name("dcc_mcp_houdini_bootstrap.py")
+    else:
+        raise RuntimeError("DCC_MCP_HOUDINI_ROOT is not set")
     spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", str(path))
     if spec is None or spec.loader is None:
         raise RuntimeError("Cannot load {}".format(path))
@@ -394,7 +402,7 @@ New-Item -ItemType Directory -Force -Path $packagesDir | Out-Null
 $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot "packages/dcc_mcp_houdini.json.template") -Raw
 $json = $template.Replace("__PACKAGE_ROOT__", $resolvedRoot)
 $target = Join-Path $packagesDir "dcc_mcp_houdini.json"
-Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+[IO.File]::WriteAllText($target, $json, [Text.UTF8Encoding]::new($false))
 
 Write-Host "Installed Houdini package: $target"
 Write-Host "Package root: $resolvedRoot"
