@@ -46,7 +46,7 @@ just say:
 
 The agent reads [`install.md`](install.md), runs the
 `dcc-mcp-houdini-setup` skill to install dependencies into Houdini's `hython`,
-generates an MCP host config, guides the Houdini package / `123.py` autostart
+generates an MCP host config, guides the Houdini package startup hooks
 step, and runs a smoke prompt to confirm the connection.
 
 ## Installation
@@ -81,8 +81,9 @@ chmod +x install.sh
 ```
 
 The package writes a Houdini package JSON into the user preferences folder.
-On startup, `scripts/123.py` extracts bundled wheels into `vendor/` and starts
-the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
+`scripts/123.py` handles an empty startup and `scripts/456.py` handles a loaded
+scene; both reuse one bootstrap that extracts bundled wheels into `vendor/` and
+starts the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
 
 Isolated background ROP workers receive `DCC_MCP_BACKGROUND_RENDER=1` in their
 child environment. Package and custom `123.py`/`456.py` startup hooks must skip

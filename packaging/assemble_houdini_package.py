@@ -5,7 +5,7 @@ The output ZIP contains:
 * the built ``dcc_mcp_houdini`` wheel from ``dist/``;
 * compatible ``dcc-mcp-core`` wheels from PyPI for the requested platform;
 * a Houdini package JSON template;
-* ``scripts/123.py`` autostart bootstrap;
+* ``scripts/123.py`` and ``scripts/456.py`` autostart hooks;
 * ``toolbar/DCC-MCP.shelf`` with basic user-visible controls;
 * PowerShell and POSIX installer scripts.
 
@@ -13,9 +13,9 @@ Install flow:
 
 1. Extract the ZIP anywhere stable.
 2. Run ``install.ps1 -HoudiniVersion 20.5`` or ``./install.sh 20.5``.
-3. Start Houdini. The package adds ``scripts/`` to ``HOUDINI_PATH``; ``123.py``
-   extracts bundled wheels into ``vendor/`` and starts the MCP server when
-   ``DCC_MCP_HOUDINI_AUTOSTART`` is not disabled.
+3. Start Houdini. The package adds ``scripts/`` to ``HOUDINI_PATH``; the
+   startup hooks extract bundled wheels into ``vendor/`` and start the MCP
+   server when ``DCC_MCP_HOUDINI_AUTOSTART`` is not disabled.
 """
 
 from __future__ import annotations
@@ -268,7 +268,7 @@ def bootstrap_and_start() -> object:
 
 
 def _startup_py() -> str:
-    return r'''"""Houdini 123.py autostart hook for dcc-mcp-houdini."""
+    return r'''"""Houdini autostart hook for dcc-mcp-houdini."""
 
 from __future__ import annotations
 
@@ -446,7 +446,8 @@ Install on Linux/macOS:
 
 The installer writes a Houdini package JSON into the user Houdini preferences
 folder and points it at this extracted package directory. On Houdini startup,
-scripts/123.py extracts bundled wheels into vendor/ and starts the MCP server.
+scripts/123.py handles empty startup and scripts/456.py handles loaded scenes;
+both reuse the same bootstrap to extract bundled wheels and start the MCP server.
 The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 
 Disable autostart by setting DCC_MCP_HOUDINI_AUTOSTART=0.
@@ -474,6 +475,7 @@ def verify_quickinstall_zip(
 
     required_suffixes = [
         "/scripts/123.py",
+        "/scripts/456.py",
         "/scripts/dcc_mcp_houdini_bootstrap.py",
         "/packages/dcc_mcp_houdini.json.template",
         "/README.txt",
@@ -563,7 +565,9 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path, core_version: Opti
 
         (packages_dir / "dcc_mcp_houdini.json.template").write_text(_package_json_template(), encoding="utf-8")
         (scripts_dir / "dcc_mcp_houdini_bootstrap.py").write_text(_bootstrap_py(), encoding="utf-8")
-        (scripts_dir / "123.py").write_text(_startup_py(), encoding="utf-8")
+        startup = _startup_py()
+        for hook in ("123.py", "456.py"):
+            (scripts_dir / hook).write_text(startup, encoding="utf-8")
         (toolbar_dir / "DCC-MCP.shelf").write_text(_shelf_file(), encoding="utf-8")
         (root / "install.ps1").write_text(_install_ps1(), encoding="utf-8")
         install_sh = root / "install.sh"

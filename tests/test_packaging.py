@@ -21,9 +21,11 @@ def _load_packaging_script():
     return module
 
 
-def _write_quickinstall_zip(zip_path: Path, *wheel_names: str) -> None:
+def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hook: bool = True) -> None:
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
+        if include_scene_hook:
+            zf.writestr("dcc_mcp_houdini/scripts/456.py", "")
         zf.writestr("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py", "")
         zf.writestr("dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template", "")
         zf.writestr("dcc_mcp_houdini/README.txt", "")
@@ -57,10 +59,14 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
         names = set(zf.namelist())
         shelf_xml = zf.read("dcc_mcp_houdini/toolbar/DCC-MCP.shelf").decode("utf-8")
         bootstrap = zf.read("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py").decode("utf-8")
+        startup = zf.read("dcc_mcp_houdini/scripts/123.py")
+        scene_load = zf.read("dcc_mcp_houdini/scripts/456.py")
     assert "dcc_mcp_houdini/wheels/{}".format(adapter_wheel.name) in names
     for core_wheel in core_wheels:
         assert "dcc_mcp_houdini/wheels/{}".format(core_wheel.name) in names
     assert "dcc_mcp_houdini/scripts/123.py" in names
+    assert "dcc_mcp_houdini/scripts/456.py" in names
+    assert startup == scene_load
     assert "dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py" in names
     assert "dcc_mcp_houdini/toolbar/DCC-MCP.shelf" in names
     assert "dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template" in names
@@ -131,6 +137,21 @@ def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> N
     )
 
     with pytest.raises(RuntimeError, match="Bundled core drift"):
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
+
+
+def test_verify_quickinstall_zip_requires_scene_load_hook(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+
+    zip_path = tmp_path / "dcc_mcp_houdini_quickinstall_win64.zip"
+    _write_quickinstall_zip(
+        zip_path,
+        "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.19.15-cp38-abi3-win_amd64.whl",
+        include_scene_hook=False,
+    )
+
+    with pytest.raises(RuntimeError, match="/scripts/456.py"):
         pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.15")
 
 
