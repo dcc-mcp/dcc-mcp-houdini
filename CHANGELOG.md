@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.16.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.1...v0.16.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* write Houdini package JSON without UTF-8 BOM ([#117](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/117)) ([8a622a7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8a622a7903850ace45c70cc7daac760cb37545c0))
+
 ## [0.16.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.16.0...v0.16.1) (2026-07-16)
 
 
