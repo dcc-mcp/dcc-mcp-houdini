@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.12.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.5...v0.12.0) (2026-07-16)
+
+
+### Features
+
+* add non-blocking ROP render jobs ([13d6fcf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/13d6fcff94714af7bf8ad867e37db05662257824))
+
+
+### Bug Fixes
+
+* keep interactive ROP renders off the UI thread ([#106](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/106)) ([4a6d244](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4a6d244bba821d32018fb219d0d858f7db2d1915))
+* recover mixed-version render jobs ([0bc0213](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0bc0213345bd6455f08c35ee93a435bd955088bc))
+* reject stale background render outputs ([c951caf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c951caf227c1624f61f4a073f23ee532d7d3b638))
+* suppress adapter startup in render workers ([94631f8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/94631f8c1ff42f459dc690cd7e206472a290c09d))
+
 ## [0.11.5](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.11.4...v0.11.5) (2026-07-14)
 
 
