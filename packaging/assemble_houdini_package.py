@@ -189,7 +189,6 @@ def _package_json_template() -> str:
     payload = {
         "env": [
             {"DCC_MCP_HOUDINI_ROOT": "__PACKAGE_ROOT__"},
-            {"DCC_MCP_HOUDINI_AUTOSTART": "1"},
             {"PYTHONPATH": "__PACKAGE_ROOT__/vendor;&"},
             {"HOUDINI_PATH": "__PACKAGE_ROOT__;&"},
         ]
