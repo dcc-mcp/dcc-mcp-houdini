@@ -85,6 +85,7 @@ from dcc_mcp_houdini.server import (
     HoudiniMcpServer,
     HoudiniServerOptions,
     get_server,
+    serve_headless,
     start_server,
     stop_server,
 )
@@ -147,6 +148,7 @@ __all__ = [
     "require_param",
     "resolve_enable_gateway_failover",
     "resolve_minimal_mode_enabled",
+    "serve_headless",
     "skills_for_stage",
     "start_server",
     "stop_server",

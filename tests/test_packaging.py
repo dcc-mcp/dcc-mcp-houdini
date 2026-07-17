@@ -103,6 +103,8 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
     assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
+    assert "not hou.isUIAvailable()" in bootstrap
+    assert "hython -m dcc_mcp_houdini" in bootstrap
     assert '[string]$PackagesDir = ""' in install_ps1
     assert "$env:DCC_MCP_HOUDINI_PACKAGES_DIR" in install_ps1
     assert "${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}" in install_sh

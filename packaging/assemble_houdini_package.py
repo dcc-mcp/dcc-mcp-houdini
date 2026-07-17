@@ -255,6 +255,18 @@ def bootstrap_and_start() -> object:
 
     import dcc_mcp_houdini
 
+    try:
+        import hou
+
+        if not hou.isUIAvailable():
+            print(
+                "dcc-mcp-houdini: headless startup hook skipped; "
+                "run `hython -m dcc_mcp_houdini` for the foreground main-thread pump"
+            )
+            return None
+    except ImportError:
+        pass
+
     gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
     gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
     registry_dir = os.environ.get("DCC_MCP_REGISTRY_DIR") or None

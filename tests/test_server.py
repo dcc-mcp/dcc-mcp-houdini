@@ -75,11 +75,12 @@ def test_houdini_ui_dispatcher_bridge_attaches_http_queue() -> None:
 
 def test_create_execution_stack_without_hou() -> None:
     from dcc_mcp_houdini.dispatcher import create_execution_stack
-    from dcc_mcp_houdini.dispatcher.standalone import HoudiniStandaloneDispatcher
+    from dcc_mcp_houdini.host import HoudiniCallableDispatcher, HoudiniHost
 
     dispatcher, host = create_execution_stack()
-    assert isinstance(dispatcher, HoudiniStandaloneDispatcher)
-    assert host is None
+    assert isinstance(dispatcher, HoudiniCallableDispatcher)
+    assert isinstance(host, HoudiniHost)
+    assert host.is_running is False
 
 
 def test_wait_until_ready_uses_urllib(monkeypatch: pytest.MonkeyPatch) -> None:

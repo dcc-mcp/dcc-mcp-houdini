@@ -112,6 +112,18 @@ server = dcc_mcp_houdini.start_server()
 print(server.mcp_url)  # Exact direct endpoint selected by the OS
 ```
 
+`start_server()` is the interactive Houdini API and uses Houdini's budgeted
+event-loop pump. Headless Hython must keep its owning thread available for HOM
+work; launch the foreground pump instead:
+
+```powershell
+hython -m dcc_mcp_houdini
+```
+
+or call `dcc_mcp_houdini.serve_headless(...)` from a dedicated Hython
+entrypoint. A plain headless `start_server()` fails before tools are registered
+instead of silently executing HOM on an HTTP worker.
+
 Default minimal mode (`DCC_MCP_MINIMAL=1`) loads only:
 
 - `houdini-scripting`

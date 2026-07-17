@@ -82,7 +82,9 @@ Use **`http://127.0.0.1:9765/mcp`** only when a separate gateway process owns th
 hython examples/houdini_bootstrap.py
 ```
 
-Prints `MCP_URL=...` when the server starts in background mode.
+Prints `MCP_URL=...` and then drives the bounded MCP queue on Hython's owning
+thread. Do not replace this foreground bootstrap with `start_server()` plus a
+sleep loop: that loop cannot satisfy main-thread affinity for HOM tools.
 
 ## 6. Quick checklist
 

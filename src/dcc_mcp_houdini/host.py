@@ -199,6 +199,59 @@ class HoudiniCallableDispatcher:
         handle = self._dispatcher.post(_invoke)
         return handle.wait(timeout_hint_secs)
 
+    def submit_async_callable(
+        self,
+        request_id: str,
+        task: Callable[[], Any],
+        *,
+        job_id: Optional[str] = None,
+        progress_token: Optional[str] = None,
+        on_complete: Optional[Callable[[dict], None]] = None,
+        affinity: str = "main",
+        timeout_ms: Optional[int] = None,
+    ) -> dict:
+        """Queue a readiness/lifecycle probe without executing off-thread."""
+        _ = (progress_token, timeout_ms)
+
+        def _invoke() -> dict:
+            try:
+                result = {
+                    "request_id": request_id,
+                    "job_id": job_id,
+                    "affinity": affinity,
+                    "success": True,
+                    "status": "completed",
+                    "output": task(),
+                    "error": None,
+                }
+            except Exception as exc:  # noqa: BLE001 - preserve dispatcher result contract
+                result = {
+                    "request_id": request_id,
+                    "job_id": job_id,
+                    "affinity": affinity,
+                    "success": False,
+                    "status": "failed",
+                    "output": None,
+                    "error": str(exc),
+                }
+            if on_complete is not None:
+                try:
+                    on_complete(result)
+                except Exception as exc:  # noqa: BLE001 - isolate lifecycle observers
+                    logger.warning("Houdini headless completion callback failed: %s", exc)
+            return result
+
+        self._dispatcher.post(_invoke)
+        return {
+            "request_id": request_id,
+            "job_id": job_id,
+            "affinity": affinity,
+            "success": True,
+            "status": "queued",
+            "output": None,
+            "error": None,
+        }
+
     def tick(self, max_jobs: int):
         """Drain queued callables from Houdini's main thread."""
         return self._dispatcher.tick(max_jobs)
@@ -315,6 +368,11 @@ class HoudiniHost(HostAdapter):
             return not bool(hou.isUIAvailable())
         except ImportError:
             return True
+
+    def run_headless(self, stop_event: Optional[threading.Event] = None) -> None:
+        """Pump on Hython's owning thread until shutdown is requested."""
+        self._tick_thread_ident = threading.get_ident()
+        super().run_headless(stop_event=stop_event)
 
     def attach_tick(self, tick_fn: TickFn) -> None:
         """Register ``tick_fn`` with ``hou.ui.addEventLoopCallback``."""
