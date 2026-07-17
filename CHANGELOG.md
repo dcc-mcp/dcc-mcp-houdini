@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.18.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.5...v0.18.0) (2026-07-17)
+
+
+### Features
+
+* complete reusable HDA lifecycle ([e17f5b9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e17f5b9582e38d5a1774e410b4ff7a6d5e65ffad))
+
 ## [0.17.5](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.4...v0.17.5) (2026-07-17)
 
 
