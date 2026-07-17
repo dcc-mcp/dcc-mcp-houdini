@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.21.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.0...v0.21.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* restore headless main-thread pump ([#153](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/153)) ([0c6f1d6](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0c6f1d6101fd0faae347cd6d94c327f264202c10))
+
 ## [0.21.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.20.1...v0.21.0) (2026-07-17)
 
 
