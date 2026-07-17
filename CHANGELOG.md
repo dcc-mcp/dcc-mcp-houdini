@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.19.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.3...v0.19.0) (2026-07-17)
+
+
+### Features
+
+* add reusable HDA authoring contracts ([#145](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/145)) ([2a2b60c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2a2b60c003c4471cc3aff6fe2662308cee13d2a2))
+
 ## [0.18.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.2...v0.18.3) (2026-07-17)
 
 
