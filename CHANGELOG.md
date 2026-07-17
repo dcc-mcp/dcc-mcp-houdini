@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.21.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.1...v0.21.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* **hda:** require explicit library overwrite ([#155](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/155)) ([99efd34](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/99efd348914d2529e0cfafe221102e82594ef6e6))
+
 ## [0.21.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.0...v0.21.1) (2026-07-17)
 
 
