@@ -129,7 +129,10 @@ def _terminate_handles(kernel32: Any, handles: Dict[int, Any]) -> None:
         if kernel32.WaitForSingleObject(handle, 0) == _WAIT_OBJECT_0:
             continue
         if error_code == _ERROR_ACCESS_DENIED:
-            _raise_windows_error("Access was denied while terminating an owned background process", error_code)
+            # TerminateProcess reports ERROR_ACCESS_DENIED for an already
+            # terminated process whose kernel handle is still open. The
+            # bounded WaitForSingleObject pass below remains authoritative.
+            continue
         _raise_windows_error("Failed to terminate an owned background process", error_code)
 
 
