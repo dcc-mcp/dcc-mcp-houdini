@@ -1,10 +1,10 @@
 ---
 name: houdini-hda
 description: >-
-  HDA skill - install, inspect, create, cook, publish, version, and synchronize
-  Houdini Digital Assets with typed public parameters. Use when loading .hda/.otl
-  assets, turning a node graph into a reusable HDA, or upgrading an HDA instance.
-  Not for generic node edits.
+  HDA skill - install, inspect, create, author, publish, validate, cook, and
+  synchronize Houdini Digital Assets with typed public parameters. Use when
+  loading .hda/.otl assets, building reusable interfaces, or publishing an HDA
+  library. Not for generic node edits.
 license: MIT
 compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.45+"
 allowed-tools: Bash Read Write Edit
@@ -15,15 +15,16 @@ metadata:
     stage: authoring
     version: "1.1.0"
     tags: [houdini, hda, otl, digital-asset, automation]
-    search-hint: "install hda, expose controls, publish definition, upgrade instance, save digital asset"
-    search-aliases: [use hda, install hda, load otl, run digital asset, instantiate hda, execute hda, save hda, create digital asset, promote hda parameters, update hda definition, sync hda instance]
+    search-hint: "install hda, expose controls, author interface, publish versioned hda, validate contract"
+    search-aliases: [use hda, install hda, load otl, run digital asset, instantiate hda, execute hda, save hda, create digital asset, promote hda parameters, author hda interface, publish hda, validate hda, update hda definition, sync hda instance]
     example-prompts:
       - "Install this .hda file and run the asset"
       - "Use the labs::my_asset HDA under /obj with these parameters"
       - "Save /obj/geo1 as a digital asset"
       - "Promote these internal controls and publish a new HDA definition version"
+      - "Publish this asset with a safe reusable interface and dependency manifest"
       - "Upgrade this HDA instance and run its version handler"
-    intent: "Install, inspect, instantiate, cook, publish, version, and synchronize Houdini Digital Assets."
+    intent: "Install, author, publish, validate, instantiate, cook, and synchronize Houdini Digital Assets."
     recall-context:
       app_type: houdini
       domain: assets
@@ -52,14 +53,15 @@ press button parms, and cook the node.
 ## Reusable asset lifecycle
 
 1. Build and test the internal node graph.
-2. Use `promote_hda_parameters` on an unlocked HDA or subnet to clone selected
-   parameter tuples onto its public interface and link the internal controls.
-3. Use `save_node_as_hda` for a new asset, or `update_hda_definition` to publish
-   unlocked edits and advance an existing definition version.
-4. Use `sync_hda_instance` to reload a library, match an instance to the current
+2. Use `author_hda_interface` for a complete callback-free declarative interface,
+   or `promote_hda_parameters` to clone selected internal parameter tuples.
+3. Use `save_node_as_hda` for a new asset, then `publish_hda_library` for an
+   explicitly namespaced/versioned library with metadata and dependencies.
+4. Gate the result with `validate_hda_contract`.
+5. Use `sync_hda_instance` to reload a library, match an instance to the current
    definition, and run its native `SyncNodeVersion` handler.
-5. Use `houdini-hda-automation` inspection and validation tools when a reusable
+6. Use `houdini-hda-automation` graph cooking tools when a reusable
    asset needs pipeline-level verification.
 
-`update_hda_definition` updates the current definition. Creating or migrating
-between separately namespaced operator types remains an explicit pipeline choice.
+`update_hda_definition` updates the current definition. `publish_hda_library`
+requires an explicit namespace, version, and overwrite policy.
