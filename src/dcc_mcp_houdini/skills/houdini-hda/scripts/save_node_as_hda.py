@@ -22,6 +22,7 @@ def save_node_as_hda(
     label: Optional[str] = None,
     version: Optional[str] = None,
     save_as_embedded: bool = False,
+    overwrite: bool = False,
 ) -> dict:
     """Create and save a digital asset from an existing node."""
     try:
@@ -34,6 +35,11 @@ def save_node_as_hda(
         if node is None:
             raise ValueError("Houdini node not found: {}".format(node_path))
         hda_path = validate_hda_path(hda_file_path, must_exist=False)
+        target_existed = hda_path.exists()
+        if target_existed and not overwrite:
+            raise FileExistsError(
+                "HDA file already exists: {}. Set overwrite=true to modify it in place.".format(hda_path)
+            )
         interface = hou.ParmTemplateGroup()
         for parm_tuple in node.parmTuples():
             parms = tuple(parm_tuple)
@@ -60,6 +66,7 @@ def save_node_as_hda(
             hda_file_path=str(hda_path),
             hda_name=hda_name,
             version=version,
+            overwritten=target_existed,
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to save Houdini node as Digital Asset")

@@ -254,7 +254,8 @@ tools:
   - name: save_node_as_hda
     description: >-
       Create a Houdini Digital Asset from an existing node and save it to an
-      HDA file. Mutates the source node type and writes a file.
+      HDA file. Mutates the source node type and writes a file. Existing files
+      are refused unless overwrite is explicitly true.
     input_schema:
       type: object
       required: [node_path, hda_file_path, hda_name]
@@ -278,8 +279,16 @@ tools:
           type: boolean
           default: false
           description: "Save embedded in hip instead of only writing to hda_file_path."
+        overwrite:
+          type: boolean
+          default: false
+          description: >-
+            Allow Houdini to modify the target library in place when it already
+            exists; Houdini may add or replace a definition. This write is not
+            atomic, so use a new versioned path when interruption-safe
+            publication is required.
     read_only: false
-    destructive: false
+    destructive: true
     idempotent: false
     execution: sync
     affinity: main
@@ -291,7 +300,7 @@ tools:
     produces: ["file:hda"]
     annotations:
       read_only_hint: false
-      destructive_hint: false
+      destructive_hint: true
       idempotent_hint: false
 
   - name: author_hda_interface

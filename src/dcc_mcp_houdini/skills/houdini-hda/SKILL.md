@@ -13,7 +13,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: authoring
-    version: "1.1.0"
+    version: "1.1.1"
     tags: [houdini, hda, otl, digital-asset, automation]
     search-hint: "install hda, expose controls, author interface, publish versioned hda, validate contract"
     search-aliases: [use hda, install hda, load otl, run digital asset, instantiate hda, execute hda, save hda, create digital asset, promote hda parameters, author hda interface, publish hda, validate hda, update hda definition, sync hda instance]
@@ -65,3 +65,8 @@ press button parms, and cook the node.
 
 `update_hda_definition` updates the current definition. `publish_hda_library`
 requires an explicit namespace, version, and overwrite policy.
+
+`save_node_as_hda` refuses an existing target by default. `overwrite=true`
+explicitly authorizes Houdini to add or replace definitions in that library
+in-place. The write is not atomic; use a new versioned path when an interrupted
+write must leave the previous file intact.

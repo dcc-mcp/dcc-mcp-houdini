@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -178,6 +179,54 @@ def test_save_node_as_hda_persists_promoted_subnet_interface() -> None:
     folder_template.clone.assert_not_called()
     definition.setParmTemplateGroup.assert_called_once_with(promoted_group)
     definition.save.assert_called_once_with(str(Path("/assets/solar.hda")))
+
+
+def test_save_node_as_hda_refuses_existing_library_without_explicit_overwrite(tmp_path: Path) -> None:
+    mod = _load_script("save_node_as_hda.py")
+    hda_path = tmp_path / "solar.hda"
+    hda_path.write_bytes(b"existing-library")
+    before_sha256 = hashlib.sha256(hda_path.read_bytes()).hexdigest()
+    node = MagicMock()
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.save_node_as_hda(
+            "/obj/solar_asset",
+            str(hda_path),
+            "studio::solar",
+        )
+
+    assert result["success"] is False
+    assert "already exists" in result["error"].lower()
+    assert hashlib.sha256(hda_path.read_bytes()).hexdigest() == before_sha256
+    node.createDigitalAsset.assert_not_called()
+
+
+def test_save_node_as_hda_allows_explicit_in_place_overwrite(tmp_path: Path) -> None:
+    mod = _load_script("save_node_as_hda.py")
+    hda_path = tmp_path / "solar.hda"
+    hda_path.write_bytes(b"existing-library")
+    definition = MagicMock()
+    hda_node = MagicMock()
+    hda_node.type.return_value.definition.return_value = definition
+    node = MagicMock()
+    node.parmTuples.return_value = []
+    node.createDigitalAsset.return_value = hda_node
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.save_node_as_hda(
+            "/obj/solar_asset",
+            str(hda_path),
+            "studio::solar",
+            overwrite=True,
+        )
+
+    assert result["success"] is True
+    assert result["context"]["overwritten"] is True
+    node.createDigitalAsset.assert_called_once()
 
 
 def test_update_hda_definition_saves_unlocked_contents_bumps_version_and_locks() -> None:
