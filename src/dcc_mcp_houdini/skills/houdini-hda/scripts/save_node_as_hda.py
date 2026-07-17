@@ -34,6 +34,13 @@ def save_node_as_hda(
         if node is None:
             raise ValueError("Houdini node not found: {}".format(node_path))
         hda_path = validate_hda_path(hda_file_path, must_exist=False)
+        interface = hou.ParmTemplateGroup()
+        for parm_tuple in node.parmTuples():
+            parms = tuple(parm_tuple)
+            if parms and all(parm.isSpare() for parm in parms):
+                template = parm_tuple.parmTemplate()
+                if not isinstance(template, hou.FolderSetParmTemplate):
+                    interface.append(template.clone())
         hda_node = node.createDigitalAsset(
             name=hda_name,
             hda_file_name=str(hda_path),
@@ -42,6 +49,8 @@ def save_node_as_hda(
             save_as_embedded=save_as_embedded,
         )
         definition = hda_node.type().definition()
+        if definition is not None:
+            definition.setParmTemplateGroup(interface)
         if definition is not None and hasattr(definition, "save"):
             definition.save(str(hda_path))
         return skill_success(
