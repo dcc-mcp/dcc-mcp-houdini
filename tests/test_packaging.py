@@ -94,6 +94,32 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.packaging
+def test_quickinstall_package_leaves_autostart_to_user_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pkg = _load_packaging_script()
+
+    version = pkg.get_package_version()
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    adapter_wheel = dist_dir / "dcc_mcp_houdini-{}-py3-none-any.whl".format(version)
+    adapter_wheel.write_bytes(b"adapter")
+    core_wheel = tmp_path / "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl"
+    core_wheel.write_bytes(b"core")
+
+    monkeypatch.setattr(pkg, "resolve_core_version", lambda min_version=pkg.MIN_CORE_VERSION: "0.18.2")
+    monkeypatch.setattr(pkg, "download_core_wheels", lambda version, platform, dest_dir: [core_wheel])
+
+    zip_path = pkg.assemble("win64", dist_dir, tmp_path / "out")
+
+    with zipfile.ZipFile(zip_path) as zf:
+        package_json = json.loads(zf.read("dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template").decode("utf-8"))
+    environment_names = {next(iter(entry)) for entry in package_json["env"]}
+    assert "DCC_MCP_HOUDINI_AUTOSTART" not in environment_names
+
+
+@pytest.mark.packaging
 def test_assemble_houdini_package_can_pin_validated_core(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
