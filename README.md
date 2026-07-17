@@ -195,7 +195,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 ### pipeline (load on demand)
 | Skill | Tools |
 |-------|-------|
-| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `render_rop`, `get_render_job`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
+| `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `validate_karma_stage`, `render_rop`, `get_render_job`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
 | `houdini-karma` | `configure_karma`, `set_material_override`, `configure_light_mixer`, `set_image_output` |
 | `houdini-husk` | `render_with_husk`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |

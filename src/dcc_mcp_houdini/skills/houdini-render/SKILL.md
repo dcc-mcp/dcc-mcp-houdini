@@ -38,7 +38,8 @@ agent can detect and skip cleanly when rendering is unavailable.
   isolated `hython` background job), `get_render_job` (polls and reconciles
   status without blocking the UI), `cancel_render_job` (cancels only jobs
   owned by the current adapter process), `configure_aovs` (add/remove
-  AOVs with 15+ presets), `get_render_stats` (read resolution/samples/renderer/output).
+  AOVs with 15+ presets), `validate_karma_stage` (read-only USD/Karma
+  preflight), `get_render_stats` (read resolution/samples/renderer/output).
 - **`render_layer`:** `create_render_layer` (Solaris RenderProduct or ROP merge),
   `manage_takes` (create/switch/delete/list takes for render layer variants).
 
@@ -57,7 +58,8 @@ agent can detect and skip cleanly when rendering is unavailable.
 
 1. `create_render_layer(name="beauty", parent_path="/stage", purpose="beauty", aovs=["diffuse","specular","normal","depth"])`
 2. `configure_aovs(rop_path="/stage/beauty", aovs=["motionvector","cryptomatte"], action="add")`
-3. `get_render_stats(rop_path="/stage/beauty")` → verify resolution/samples/output
+3. `validate_karma_stage(lop_path="/stage/OUT", renderer="karma_xpu")` → inspect instance and RenderVar diagnostics
+4. `get_render_stats(rop_path="/stage/beauty")` → verify resolution/samples/output
 
 ### Takes
 

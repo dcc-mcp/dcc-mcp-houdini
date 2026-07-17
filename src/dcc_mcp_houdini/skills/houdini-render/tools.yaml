@@ -125,6 +125,35 @@ tools:
           type: string
         image_format:
           type: string
+  - name: validate_karma_stage
+    description: >-
+      Read-only preflight of a composed Solaris USD Stage for known Karma
+      instance-property and RenderVar pixel-filter diagnostics. Reports the
+      Houdini host build and actionable fixes without changing the scene.
+    source_file: scripts/validate_karma_stage.py
+    execution: sync
+    affinity: main
+    group: render
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_path]
+      properties:
+        lop_path:
+          type: string
+          description: Absolute path of the LOP node whose composed USD Stage is validated.
+        renderer:
+          type: string
+          enum: [karma_xpu, karma_cpu]
+          default: karma_xpu
   - name: render_rop
     description: >-
       Render a ROP/output driver and report written files, elapsed time,
