@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.17.5](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.4...v0.17.5) (2026-07-17)
+
+
+### Bug Fixes
+
+* **packaging:** preserve Houdini autostart override ([#134](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/134)) ([deefcb1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/deefcb11558dfe61f0b56cc55bc08b3dc790da78))
+
 ## [0.17.4](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.3...v0.17.4) (2026-07-16)
 
 
