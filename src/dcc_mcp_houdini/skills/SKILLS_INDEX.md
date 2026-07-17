@@ -38,6 +38,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Material library & presets | `load_skill("houdini-material-library")` → `houdini_material_library__list_material_presets` → `houdini_material_library__save_material_preset` / `houdini_material_library__load_material_preset` → `houdini_material_library__assign_texture` |
 | Inspect textures & colors | `load_skill("houdini-material-library")` → `houdini_material_library__list_images` → `houdini_material_library__list_color_spaces` → `houdini_material_library__reload_image` |
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
+| Publish or revise an HDA | `load_skill("houdini-hda")` → `houdini_hda__promote_hda_parameters` → `houdini_hda__save_node_as_hda` / `houdini_hda__update_hda_definition` → `houdini_hda__sync_hda_instance` |
 | Cross-DCC asset import | `load_skill("houdini-import-to-scene")` → `houdini_import_to_scene__import_to_scene` (uses AssetDescriptor contract from dcc-mcp-core) |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | Inspect a Solaris USD Stage | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_prim_info` / `houdini_usd_lops__get_prim_attributes` |
