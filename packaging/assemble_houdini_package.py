@@ -390,17 +390,26 @@ except Exception:
 def _install_ps1() -> str:
     return r"""param(
   [string]$HoudiniVersion = "20.5",
-  [string]$PackageRoot = $PSScriptRoot
+  [string]$PackageRoot = $PSScriptRoot,
+  [string]$PackagesDir = ""
 )
 
 $ErrorActionPreference = "Stop"
 $resolvedRoot = (Resolve-Path -LiteralPath $PackageRoot).Path.Replace("\", "/")
-$packagesDir = Join-Path $HOME "Documents/houdini$HoudiniVersion/packages"
-New-Item -ItemType Directory -Force -Path $packagesDir | Out-Null
+$packagesDirOverride = $PackagesDir
+if ([string]::IsNullOrWhiteSpace($packagesDirOverride)) {
+  $packagesDirOverride = $env:DCC_MCP_HOUDINI_PACKAGES_DIR
+}
+if ([string]::IsNullOrWhiteSpace($packagesDirOverride)) {
+  $resolvedPackagesDir = Join-Path $HOME "Documents/houdini$HoudiniVersion/packages"
+} else {
+  $resolvedPackagesDir = [IO.Path]::GetFullPath($packagesDirOverride)
+}
+New-Item -ItemType Directory -Force -Path $resolvedPackagesDir | Out-Null
 
 $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot "packages/dcc_mcp_houdini.json.template") -Raw
 $json = $template.Replace("__PACKAGE_ROOT__", $resolvedRoot)
-$target = Join-Path $packagesDir "dcc_mcp_houdini.json"
+$target = Join-Path $resolvedPackagesDir "dcc_mcp_houdini.json"
 [IO.File]::WriteAllText($target, $json, [Text.UTF8Encoding]::new($false))
 
 Write-Host "Installed Houdini package: $target"
@@ -416,7 +425,7 @@ set -eu
 HOUDINI_VERSION="${1:-20.5}"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PACKAGE_ROOT="${PACKAGE_ROOT:-$SCRIPT_DIR}"
-PACKAGES_DIR="$HOME/houdini$HOUDINI_VERSION/packages"
+PACKAGES_DIR="${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}"
 
 mkdir -p "$PACKAGES_DIR"
 ROOT_ESCAPED="$(cd "$PACKAGE_ROOT" && pwd)"
@@ -446,10 +455,14 @@ Old-core pin: none.
 
 Install on Windows:
   powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
+  # Optional isolated/custom target: -PackagesDir C:\\path\\to\\houdini-packages
 
 Install on Linux/macOS:
   chmod +x install.sh
   ./install.sh 20.5
+
+Set DCC_MCP_HOUDINI_PACKAGES_DIR to override the target package directory.
+On Windows, -PackagesDir takes precedence over the environment variable.
 
 The installer writes a Houdini package JSON into the user Houdini preferences
 folder and points it at this extracted package directory. On Houdini startup,
