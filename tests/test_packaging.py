@@ -24,6 +24,19 @@ def _load_packaging_script():
     return module
 
 
+def _write_windows_installer_fixture(pkg, tmp_path: Path) -> Path:
+    package_root = tmp_path / "quickinstall"
+    templates_dir = package_root / "packages"
+    templates_dir.mkdir(parents=True)
+    (package_root / "install.ps1").write_text(pkg._install_ps1(), encoding="utf-8")
+    (templates_dir / "dcc_mcp_houdini.json.template").write_text(pkg._package_json_template(), encoding="utf-8")
+    return package_root
+
+
+def _windows_powershell() -> Path:
+    return Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+
+
 def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hook: bool = True) -> None:
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
@@ -62,6 +75,8 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
         names = set(zf.namelist())
         shelf_xml = zf.read("dcc_mcp_houdini/toolbar/DCC-MCP.shelf").decode("utf-8")
         bootstrap = zf.read("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py").decode("utf-8")
+        install_ps1 = zf.read("dcc_mcp_houdini/install.ps1").decode("utf-8")
+        install_sh = zf.read("dcc_mcp_houdini/install.sh").decode("utf-8")
         startup = zf.read("dcc_mcp_houdini/scripts/123.py")
         scene_load = zf.read("dcc_mcp_houdini/scripts/456.py")
     assert "dcc_mcp_houdini/wheels/{}".format(adapter_wheel.name) in names
@@ -88,6 +103,9 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
     assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
+    assert '[string]$PackagesDir = ""' in install_ps1
+    assert "$env:DCC_MCP_HOUDINI_PACKAGES_DIR" in install_ps1
+    assert "${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}" in install_sh
     assert "get_server" in shelf_xml
     assert "setStatusMessage" in shelf_xml
     assert "displayMessage" not in shelf_xml
@@ -205,13 +223,9 @@ def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell 5.1")
 def test_windows_installer_writes_bomless_package_json(tmp_path: Path) -> None:
     pkg = _load_packaging_script()
-    package_root = tmp_path / "quickinstall"
-    packages_dir = package_root / "packages"
-    packages_dir.mkdir(parents=True)
-    (package_root / "install.ps1").write_text(pkg._install_ps1(), encoding="utf-8")
-    (packages_dir / "dcc_mcp_houdini.json.template").write_text(pkg._package_json_template(), encoding="utf-8")
+    package_root = _write_windows_installer_fixture(pkg, tmp_path)
 
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = _windows_powershell()
     home = tmp_path / "home"
     env = os.environ.copy()
     env["USERPROFILE"] = str(home)
@@ -233,6 +247,7 @@ def test_windows_installer_writes_bomless_package_json(tmp_path: Path) -> None:
         env=env,
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
     target = home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json"
@@ -240,6 +255,101 @@ def test_windows_installer_writes_bomless_package_json(tmp_path: Path) -> None:
     assert raw[:1] == b"{"
     expected = pkg._package_json_template().replace("__PACKAGE_ROOT__", package_root.as_posix())
     assert json.loads(raw) == json.loads(expected)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell 5.1")
+def test_windows_installer_explicit_packages_dir_isolated_from_home(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    package_root = _write_windows_installer_fixture(pkg, tmp_path)
+
+    powershell = _windows_powershell()
+    automatic_home = tmp_path / "automatic-home"
+    environment_home = tmp_path / "environment-home"
+    environment_override = tmp_path / "environment-override"
+    explicit_override = tmp_path / "explicit-override"
+    automatic_home.mkdir()
+    environment_home.mkdir()
+    env = os.environ.copy()
+    env["USERPROFILE"] = str(automatic_home)
+    env["HOME"] = str(environment_home)
+    env["DCC_MCP_HOUDINI_PACKAGES_DIR"] = str(environment_override)
+
+    probe = subprocess.run(
+        [str(powershell), "-NoProfile", "-NonInteractive", "-Command", "[Console]::Out.Write($HOME)"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert Path(probe.stdout) == automatic_home
+    assert Path(probe.stdout) != environment_home
+
+    subprocess.run(
+        [
+            str(powershell),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(package_root / "install.ps1"),
+            "-HoudiniVersion",
+            "21.0",
+            "-PackageRoot",
+            str(package_root),
+            "-PackagesDir",
+            str(explicit_override),
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert (explicit_override / "dcc_mcp_houdini.json").is_file()
+    assert not (environment_override / "dcc_mcp_houdini.json").exists()
+    assert not (automatic_home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json").exists()
+    assert not (environment_home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json").exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell 5.1")
+def test_windows_installer_uses_packages_dir_environment_override(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    package_root = _write_windows_installer_fixture(pkg, tmp_path)
+
+    powershell = _windows_powershell()
+    automatic_home = tmp_path / "automatic-home"
+    environment_override = tmp_path / "environment-override"
+    automatic_home.mkdir()
+    env = os.environ.copy()
+    env["USERPROFILE"] = str(automatic_home)
+    env["DCC_MCP_HOUDINI_PACKAGES_DIR"] = str(environment_override)
+
+    subprocess.run(
+        [
+            str(powershell),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(package_root / "install.ps1"),
+            "-HoudiniVersion",
+            "21.0",
+            "-PackageRoot",
+            str(package_root),
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert (environment_override / "dcc_mcp_houdini.json").is_file()
+    assert not (automatic_home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json").exists()
 
 
 def test_startup_hook_uses_package_root_without_file(

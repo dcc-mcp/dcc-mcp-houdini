@@ -73,6 +73,17 @@ it to a stable folder, then run:
 powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
 ```
 
+For an isolated or custom package location, pass `-PackagesDir` explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5 -PackagesDir C:\temp\houdini-packages
+```
+
+`DCC_MCP_HOUDINI_PACKAGES_DIR` provides the same override on every platform;
+on Windows, the explicit `-PackagesDir` argument takes precedence. Changing the
+`HOME` environment variable inside PowerShell does not redirect its automatic
+`$HOME` variable, so use this override for deterministic isolated installs.
+
 On Linux/macOS:
 
 ```bash
