@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.21.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.20.1...v0.21.0) (2026-07-17)
+
+
+### Features
+
+* **animation:** add bounded loop contract validation ([#151](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/151)) ([95a6760](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/95a6760b2cb2f59da95924379329160238060f99))
+
 ## [0.20.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.20.0...v0.20.1) (2026-07-17)
 
 
