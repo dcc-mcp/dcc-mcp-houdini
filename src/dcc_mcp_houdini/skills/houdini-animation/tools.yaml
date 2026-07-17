@@ -144,6 +144,70 @@ tools:
       properties:
         node_path:
           type: string
+  - name: validate_loop_contract
+    description: >-
+      Bounded, read-only OBJ animation-loop validation for a playback range of
+      unique samples. Temporarily reads the first three frames plus end-step,
+      end, and virtual end+step; restores the original frame; and reports both
+      end-vs-start duplicate and end+step-vs-start periodic deltas, plus
+      velocity/acceleration residuals, without inspecting or cooking geometry.
+    source_file: scripts/validate_loop_contract.py
+    execution: sync
+    affinity: main
+    group: validation
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [node_paths, start_frame, end_frame]
+      properties:
+        node_paths:
+          type: array
+          description: Unique OBJ node paths to validate; geometry is never inspected.
+          items:
+            type: string
+            pattern: '^/obj/\S+$'
+            maxLength: 512
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+        start_frame:
+          type: number
+          minimum: -1000000
+          maximum: 1000000
+        end_frame:
+          type: number
+          description: Last unique playback sample; the validator also reads end_frame + sample_step.
+          minimum: -1000000
+          maximum: 1000000
+        sample_step:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1000
+          default: 1.0
+        tolerances:
+          type: object
+          additionalProperties: false
+          properties:
+            matrix_max_abs: {type: number, minimum: 0, default: 0.0001}
+            translation: {type: number, minimum: 0, default: 0.0001}
+            angular_degrees: {type: number, minimum: 0, default: 0.1}
+            scale: {type: number, minimum: 0, default: 0.0001}
+            linear_velocity: {type: number, minimum: 0, default: 0.001}
+            angular_velocity_degrees: {type: number, minimum: 0, default: 0.5}
+            linear_acceleration: {type: number, minimum: 0, default: 0.01}
+            angular_acceleration_degrees: {type: number, minimum: 0, default: 2.0}
+        max_expression_chars:
+          type: integer
+          minimum: 0
+          maximum: 512
+          default: 160
   - name: get_channel_info
     description: >-
       Inspect a parameter channel: expression, language, keyframe count, time

@@ -209,7 +209,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-render` | `capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `validate_karma_stage`, `render_rop`, `get_render_job`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats` |
 | `houdini-karma` | `configure_karma`, `set_material_override`, `configure_light_mixer`, `set_image_output` |
 | `houdini-husk` | `render_with_husk`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
-| `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
+| `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `validate_loop_contract`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
 | `houdini-hda-automation` | `scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain` |
 | `houdini-pipeline` | `set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package` |
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
