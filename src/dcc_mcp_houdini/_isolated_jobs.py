@@ -13,6 +13,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
+if os.name == "nt":
+    from dcc_mcp_houdini._windows_process import terminate_process_tree as _terminate_windows_process_tree
+else:
+    _terminate_windows_process_tree = None
+
 _JOB_ROOT_NAME = "dcc-mcp-houdini-render-jobs"
 _PROCESS_HANDLES: Dict[str, Any] = {}
 _PROCESS_LOCK = threading.RLock()
@@ -134,14 +139,10 @@ def _terminate_process_tree(process: Any) -> None:
     if process.poll() is not None:
         return
     if os.name == "nt":
-        completed = subprocess.run(  # noqa: S603
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if completed.returncode and process.poll() is None:
-            raise RuntimeError("Failed to terminate the background process tree")
+        if _terminate_windows_process_tree is None:
+            raise RuntimeError("Windows process-tree termination is unavailable")
+        _terminate_windows_process_tree(process, timeout_secs=_CANCEL_GRACE_SECS)
+        return
     else:
         killpg = getattr(os, "killpg", None)
         if killpg is None:
