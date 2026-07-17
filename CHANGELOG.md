@@ -16,6 +16,14 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.18.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.1...v0.18.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* preserve promoted HDA interfaces ([#140](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/140)) ([a89a3d4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a89a3d49c7586424076a0631a00fcc4f8b848196))
+* wait through Windows termination races ([#141](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/141)) ([fb94523](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fb94523764f3e897e0210aca78e02d4f4bd35de1))
+
 ## [0.18.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.0...v0.18.1) (2026-07-17)
 
 
