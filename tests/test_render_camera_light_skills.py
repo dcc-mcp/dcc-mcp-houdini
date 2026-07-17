@@ -1097,7 +1097,8 @@ class TestRenderExecution:
         rop.parmTuple.return_value = None
         rop.parm.side_effect = lambda n: picture if n == "picture" else None
         rop.render.side_effect = lambda verbose=False: out.write_bytes(b"exr")
-        rop.errors.return_value = []
+        rop.errors.return_value = ["missing texture"]
+        rop.warnings.return_value = ["low sample count"]
         mock_hou = MagicMock()
         mock_hou.node.return_value = rop
         mock_hou.isUIAvailable.return_value = False
@@ -1109,6 +1110,32 @@ class TestRenderExecution:
         assert result["context"]["rendered"] is True
         assert result["context"]["written_files"] == [str(out)]
         assert "elapsed_secs" in result["context"]
+        assert result["context"]["errors"] == ["missing texture"]
+        assert result["context"]["warnings"] == ["low sample count"]
+
+    def test_render_rop_reports_render_exception_as_error(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "beauty.exr"))
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        rop.render.side_effect = RuntimeError("renderer unavailable")
+        rop.errors.return_value = ["driver failed"]
+        rop.warnings.return_value = ["fallback disabled"]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.render_rop("/out/mantra1")
+
+        assert result["success"] is True
+        assert result["context"]["rendered"] is False
+        assert result["context"]["errors"] == [
+            "Render failed: renderer unavailable",
+            "driver failed",
+        ]
+        assert result["context"]["warnings"] == ["fallback disabled"]
 
     def test_render_rop_uses_solaris_execute_and_outputimage(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")

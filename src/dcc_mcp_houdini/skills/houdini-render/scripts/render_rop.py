@@ -1,4 +1,4 @@
-"""Render a ROP node and report written files, elapsed time, and warnings."""
+"""Render a ROP node and report written files, elapsed time, and diagnostics."""
 
 from __future__ import annotations
 
@@ -51,6 +51,7 @@ def render_rop(
                 background=True,
                 **job,
             )
+        errors: List[str] = []
         warnings: List[str] = []
         start = time.time()
         rendered = True
@@ -60,10 +61,14 @@ def render_rop(
             rendered = False
             applied_range = None
             execution_mode = None
-            warnings.append("Render failed: {}".format(render_exc))
+            errors.append("Render failed: {}".format(render_exc))
         elapsed = round(time.time() - start, 3)
-        if hasattr(rop, "errors"):
-            warnings.extend(list(rop.errors()))
+        rop_errors = getattr(rop, "errors", None)
+        if callable(rop_errors):
+            errors.extend(str(error) for error in rop_errors())
+        rop_warnings = getattr(rop, "warnings", None)
+        if callable(rop_warnings):
+            warnings.extend(str(warning) for warning in rop_warnings())
         written = expanded_outputs(output_pattern)
         return skill_success(
             "Rendered ROP",
@@ -75,6 +80,7 @@ def render_rop(
             output_pattern=output_pattern,
             written_files=written,
             skipped=[] if written or not output_pattern else [output_pattern],
+            errors=errors,
             warnings=warnings,
         )
     except Exception as exc:

@@ -3,7 +3,8 @@ name: houdini-render
 description: >-
   Pipeline skill — viewport capture/flipbook plus ROP render settings and
   render execution through typed, runtime-aware tools. Exports report
-  written_files, elapsed time, and warnings without hanging the host. Pair with
+  written_files, elapsed time, and separate error/warning diagnostics without
+  hanging the host. Pair with
   houdini-camera-light to set up cameras and lights first.
 license: MIT
 compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
