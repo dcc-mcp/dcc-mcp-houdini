@@ -79,6 +79,107 @@ def test_promote_hda_parameters_clones_interface_and_links_internal_tuple() -> N
     source_tuple.set.assert_called_once_with(target_tuple, language=mock_hou.exprLanguage.Hscript)
 
 
+def test_promote_hda_parameters_reacquires_tuple_after_definition_interface_change() -> None:
+    mod = _load_script("promote_hda_parameters.py")
+    template = MagicMock()
+    template.clone.return_value = MagicMock()
+    stale_source_tuple = MagicMock()
+    stale_source_tuple.parmTemplate.return_value = template
+    fresh_source_tuple = MagicMock()
+    fresh_source_tuple.eval.return_value = (2.5,)
+    target_tuple = MagicMock()
+    group = MagicMock()
+    group.find.return_value = None
+
+    definition = MagicMock()
+    definition.parmTemplateGroup.return_value = group
+    node_type = MagicMock()
+    node_type.definition.return_value = definition
+    parent = MagicMock()
+    parent.path.return_value = "/obj/solar_asset"
+    parent.type.return_value = node_type
+    parent.matchesCurrentDefinition.return_value = False
+    parent.parmTuple.return_value = target_tuple
+    source = MagicMock()
+    source.path.return_value = "/obj/solar_asset/bloom"
+    source.parmTuple.side_effect = [stale_source_tuple, fresh_source_tuple]
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = lambda path: {
+        "/obj/solar_asset": parent,
+        "/obj/solar_asset/bloom": source,
+    }.get(path)
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.promote_hda_parameters(
+            "/obj/solar_asset",
+            [{"source_node_path": "/obj/solar_asset/bloom", "source_parm": "gain"}],
+        )
+
+    assert result["success"] is True
+    definition.setParmTemplateGroup.assert_called_once_with(group)
+    fresh_source_tuple.eval.assert_called_once_with()
+    fresh_source_tuple.set.assert_called_once_with(target_tuple, language=mock_hou.exprLanguage.Hscript)
+    stale_source_tuple.set.assert_not_called()
+
+
+def test_save_node_as_hda_persists_promoted_subnet_interface() -> None:
+    mod = _load_script("save_node_as_hda.py")
+
+    class _FolderSetParmTemplate:
+        def __init__(self) -> None:
+            self.clone = MagicMock()
+
+    promoted_group = MagicMock()
+    promoted_template = MagicMock()
+    promoted_clone = MagicMock()
+    promoted_template.clone.return_value = promoted_clone
+    promoted_parm = MagicMock()
+    promoted_parm.isSpare.return_value = True
+    promoted_tuple = MagicMock()
+    promoted_tuple.__iter__.return_value = iter([promoted_parm])
+    promoted_tuple.parmTemplate.return_value = promoted_template
+    built_in_parm = MagicMock()
+    built_in_parm.isSpare.return_value = False
+    built_in_tuple = MagicMock()
+    built_in_tuple.__iter__.return_value = iter([built_in_parm])
+    folder_template = _FolderSetParmTemplate()
+    folder_parm = MagicMock()
+    folder_parm.isSpare.return_value = True
+    folder_tuple = MagicMock()
+    folder_tuple.__iter__.return_value = iter([folder_parm])
+    folder_tuple.parmTemplate.return_value = folder_template
+    definition = MagicMock()
+    hda_type = MagicMock()
+    hda_type.definition.return_value = definition
+    hda_node = MagicMock()
+    hda_node.type.return_value = hda_type
+    hda_node.path.return_value = "/obj/solar_asset"
+    hda_node.name.return_value = "solar_asset"
+    node = MagicMock()
+    node.parmTuples.return_value = [built_in_tuple, folder_tuple, promoted_tuple]
+    node.createDigitalAsset.return_value = hda_node
+    mock_hou = MagicMock()
+    mock_hou.FolderSetParmTemplate = _FolderSetParmTemplate
+    mock_hou.node.return_value = node
+    mock_hou.ParmTemplateGroup.return_value = promoted_group
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        with patch.object(mod, "validate_hda_path", return_value=Path("/assets/solar.hda")):
+            result = mod.save_node_as_hda(
+                "/obj/solar_asset",
+                "/assets/solar.hda",
+                "studio::solar",
+                version="1.0.0",
+            )
+
+    assert result["success"] is True
+    promoted_group.append.assert_called_once_with(promoted_clone)
+    built_in_tuple.parmTemplate.assert_not_called()
+    folder_template.clone.assert_not_called()
+    definition.setParmTemplateGroup.assert_called_once_with(promoted_group)
+    definition.save.assert_called_once_with(str(Path("/assets/solar.hda")))
+
+
 def test_update_hda_definition_saves_unlocked_contents_bumps_version_and_locks() -> None:
     mod = _load_script("update_hda_definition.py")
     definition = MagicMock()

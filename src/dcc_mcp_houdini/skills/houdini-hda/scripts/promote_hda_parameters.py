@@ -56,14 +56,21 @@ def promote_hda_parameters(node_path: str, promotions: List[Dict[str, Any]]) -> 
             label = promotion.get("label") or template.label()
             template.setName(target_name)
             template.setLabel(label)
-            prepared.append((source, source_tuple, source_parm_name, target_name, label, template))
+            prepared.append((source.path(), source_parm_name, target_name, label, template))
 
-        for _source, _source_tuple, _source_name, _target_name, _label, template in prepared:
+        for _source_path, _source_name, _target_name, _label, template in prepared:
             group.append(template)
         interface_owner.setParmTemplateGroup(group)
 
+        node = hou.node(node_path)
+        if node is None:
+            raise RuntimeError("HDA node disappeared while updating its parameter interface: {}".format(node_path))
         promoted = []
-        for source, source_tuple, source_parm_name, target_name, label, _template in prepared:
+        for source_path, source_parm_name, target_name, label, _template in prepared:
+            source = hou.node(source_path)
+            source_tuple = source.parmTuple(source_parm_name) if source is not None else None
+            if source_tuple is None:
+                raise RuntimeError("Source parameter tuple disappeared: {}/{}".format(source_path, source_parm_name))
             values = source_tuple.eval()
             target_tuple = node.parmTuple(target_name)
             if target_tuple is None:
@@ -74,7 +81,7 @@ def promote_hda_parameters(node_path: str, promotions: List[Dict[str, Any]]) -> 
                 {
                     "name": target_name,
                     "label": label,
-                    "source": "{}/{}".format(source.path(), source_parm_name),
+                    "source": "{}/{}".format(source_path, source_parm_name),
                     "component_count": len(values),
                 }
             )
