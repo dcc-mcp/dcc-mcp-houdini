@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.20.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.19.0...v0.20.0) (2026-07-17)
+
+
+### Features
+
+* validate known Karma stage diagnostics ([#147](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/147)) ([da4c17a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/da4c17a8b55c43ba07765cd595d519be4c16afc6))
+
 ## [0.19.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.3...v0.19.0) (2026-07-17)
 
 
