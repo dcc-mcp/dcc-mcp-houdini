@@ -111,6 +111,146 @@ tools:
       on-failure:
         - houdini_hda__list_hda_definitions
 
+  - name: promote_hda_parameters
+    description: >-
+      Promote parameter tuples from child nodes onto an unlocked HDA or subnet
+      interface and create native channel references back to the public controls.
+    input_schema:
+      type: object
+      required: [node_path, promotions]
+      properties:
+        node_path:
+          type: string
+          description: "Unlocked HDA instance or subnet that owns the public interface."
+        promotions:
+          type: array
+          minItems: 1
+          description: "Internal parameter tuples to expose on the asset interface."
+          items:
+            type: object
+            required: [source_node_path, source_parm]
+            properties:
+              source_node_path:
+                type: string
+                description: "Path to a child node inside node_path."
+              source_parm:
+                type: string
+                description: "Source parameter tuple name."
+              name:
+                type: string
+                description: "Optional public parameter name; defaults to source_parm."
+              label:
+                type: string
+                description: "Optional public label; defaults to the source label."
+            additionalProperties: false
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 60
+    source_file: scripts/promote_hda_parameters.py
+    tool_role: action
+    risk: medium
+    search_aliases: [promote hda parameter, expose hda control, create hda interface, link internal parameter]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_hda__save_node_as_hda
+        - houdini_hda__update_hda_definition
+      on-failure:
+        - houdini_parameters__list_parms
+
+  - name: update_hda_definition
+    description: >-
+      Publish unlocked instance contents into its HDA definition, set the
+      definition version, and optionally match the instance to the new definition.
+    input_schema:
+      type: object
+      required: [node_path, version]
+      properties:
+        node_path:
+          type: string
+          description: "Existing HDA instance whose definition will be updated."
+        version:
+          type: string
+          description: "Non-empty definition version metadata."
+        update_contents:
+          type: boolean
+          default: true
+          description: "Publish unlocked instance contents before setting the version."
+        match_current:
+          type: boolean
+          default: true
+          description: "Match and lock the instance to the updated definition."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/update_hda_definition.py
+    tool_role: action
+    risk: high
+    search_aliases: [update hda definition, publish hda changes, bump hda version, save hda definition]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_hda__sync_hda_instance
+      on-failure:
+        - houdini_hda_automation__inspect_hda_definition
+
+  - name: sync_hda_instance
+    description: >-
+      Reload or install an optional HDA library, match an instance to its current
+      definition, and run the asset's native version synchronization handler.
+    input_schema:
+      type: object
+      required: [node_path, from_version]
+      properties:
+        node_path:
+          type: string
+          description: "HDA instance to synchronize."
+        from_version:
+          type: string
+          description: "Previous instance version passed to the SyncNodeVersion handler."
+        hda_file:
+          type: string
+          description: "Optional HDA/OTL library to install or reload first."
+        match_current:
+          type: boolean
+          default: true
+          description: "Match the instance to the loaded current definition."
+        sync_delayed:
+          type: boolean
+          default: true
+          description: "Load delayed definition contents before synchronization."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/sync_hda_instance.py
+    tool_role: action
+    risk: high
+    search_aliases: [sync hda instance, upgrade hda instance, match current definition, run hda version handler]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_hda_automation__validate_hda
+      on-failure:
+        - houdini_hda_automation__inspect_hda_definition
+
   - name: save_node_as_hda
     description: >-
       Create a Houdini Digital Asset from an existing node and save it to an
