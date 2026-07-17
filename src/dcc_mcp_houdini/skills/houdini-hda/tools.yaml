@@ -293,3 +293,251 @@ tools:
       read_only_hint: false
       destructive_hint: false
       idempotent_hint: false
+
+  - name: author_hda_interface
+    description: >-
+      Declaratively author a safe HDA/subnet parameter interface with folders,
+      numeric ranges, toggles, strings, static menus, and native channel
+      promotion. Executable callbacks and menu-generator scripts are rejected.
+    input_schema:
+      type: object
+      required: [node_path, templates]
+      properties:
+        node_path:
+          type: string
+          description: "HDA instance or subnet that owns the parameter interface."
+        templates:
+          type: array
+          minItems: 1
+          description: "Safe declarative parameter templates; folder entries may contain child entries."
+          items:
+            type: object
+            required: [type, name]
+            additionalProperties: false
+            properties:
+              type:
+                type: string
+                enum: [folder, float, int, toggle, string, menu]
+              name:
+                type: string
+              label:
+                type: string
+              help:
+                type: string
+              components:
+                type: integer
+                minimum: 1
+                maximum: 4
+                default: 1
+              default:
+                description: "Scalar or component list; menu defaults use a declared token or zero-based index."
+              min:
+                type: number
+              max:
+                type: number
+              min_is_strict:
+                type: boolean
+                default: false
+              max_is_strict:
+                type: boolean
+                default: false
+              items:
+                type: array
+                items:
+                  type: object
+                  required: [token]
+                  additionalProperties: false
+                  properties:
+                    token: {type: string}
+                    label: {type: string}
+              children:
+                type: array
+                items: {type: object}
+              promotion:
+                type: object
+                required: [source_node_path, source_parm]
+                additionalProperties: false
+                properties:
+                  source_node_path: {type: string}
+                  source_parm: {type: string}
+        conflict_policy:
+          type: string
+          enum: [error, replace]
+          default: error
+          description: "Reject existing top-level names, or explicitly replace them."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/author_hda_interface.py
+    tool_role: action
+    risk: high
+    search_aliases: [author hda interface, create hda controls, hda parameter template, promote hda control]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_hda__publish_hda_library
+      on-failure:
+        - houdini_parameters__get_parm_templates
+
+  - name: publish_hda_library
+    description: >-
+      Publish an existing HDA definition under an explicit namespace and
+      version, with an explicit conflict policy, icon/help, safe dcc_mcp/
+      metadata sections, dependency manifest, and bounded embedded resources.
+      Event-handler and arbitrary executable sections are not accepted.
+    input_schema:
+      type: object
+      required: [node_path, hda_file_path, namespace, asset_name, version]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+        hda_file_path:
+          type: string
+        namespace:
+          type: string
+        asset_name:
+          type: string
+        version:
+          type: string
+        label:
+          type: string
+        icon:
+          type: string
+          description: "Houdini icon name or search-path reference."
+        help_text:
+          type: string
+          description: "Static embedded Help section text."
+        dependencies:
+          type: array
+          items: {type: string}
+          default: []
+        custom_sections:
+          type: object
+          description: "Static text sections whose names must start with dcc_mcp/."
+          additionalProperties: {type: string}
+        embedded_resources:
+          type: array
+          default: []
+          items:
+            type: object
+            required: [file_path, section_name]
+            additionalProperties: false
+            properties:
+              file_path: {type: string}
+              section_name:
+                type: string
+                description: "Relative name stored below dcc_mcp/resources/."
+        conflict_policy:
+          type: string
+          enum: [error, overwrite]
+          default: error
+        update_contents:
+          type: boolean
+          default: true
+          description: "Publish unlocked instance contents before copying the definition."
+        install:
+          type: boolean
+          default: true
+          description: "Install the published library in the current Houdini session."
+        make_preferred:
+          type: boolean
+          default: false
+          description: "Mark the installed definition preferred; requires install=true."
+    read_only: false
+    destructive: true
+    idempotent: false
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 300
+    source_file: scripts/publish_hda_library.py
+    tool_role: action
+    risk: high
+    search_aliases: [publish hda library, version hda, namespace hda, embed hda resources, hda manifest]
+    produces: ["file:hda"]
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_hda__validate_hda_contract
+      on-failure:
+        - houdini_hda__list_hda_definitions
+
+  - name: validate_hda_contract
+    description: >-
+      Validate an HDA definition's namespace/version, safe parameter interface,
+      required sections, dependency/resource manifest, and exact temporary
+      instantiation. Returns structured diagnostics and removes the probe node.
+    input_schema:
+      type: object
+      required: [node_type_name]
+      additionalProperties: false
+      properties:
+        node_type_name:
+          type: string
+        hda_file:
+          type: string
+          description: "Optional HDA file to inspect and temporarily install for instantiation."
+        expected_version:
+          type: string
+        required_parameters:
+          type: array
+          default: []
+          items:
+            type: object
+            required: [name]
+            additionalProperties: false
+            properties:
+              name: {type: string}
+              type:
+                type: string
+                enum: [folder, float, int, toggle, string, menu]
+        required_sections:
+          type: array
+          items: {type: string}
+          default: []
+        require_namespace:
+          type: boolean
+          default: true
+        require_type_version:
+          type: boolean
+          default: true
+        require_manifest:
+          type: boolean
+          default: false
+        check_dependencies:
+          type: boolean
+          default: true
+        instantiate:
+          type: boolean
+          default: true
+        parent_path:
+          type: string
+          default: /obj
+    read_only: false
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 120
+    source_file: scripts/validate_hda_contract.py
+    tool_role: action
+    risk: medium
+    search_aliases: [validate hda contract, check hda interface, verify hda dependencies, test hda instantiation]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    next-tools:
+      on-success:
+        - houdini_hda__execute_hda
+      on-failure:
+        - houdini_hda_automation__inspect_hda_definition
