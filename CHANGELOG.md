@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.18.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.18.0...v0.18.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* terminate Windows render jobs without taskkill ([#138](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/138)) ([fa8474e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fa8474ea9e92b3d6578e230567b26786d811402e))
+
 ## [0.18.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.17.5...v0.18.0) (2026-07-17)
 
 
