@@ -20,7 +20,8 @@ def create_execution_stack():
 
     Returns:
         ``(dispatcher, host)`` where interactive Houdini receives a started
-        :class:`HoudiniUiPump`, while headless ``hython`` uses inline dispatch.
+        :class:`HoudiniUiPump`, while headless ``hython`` receives an unstarted
+        :class:`HoudiniHost` that its foreground entry point must pump.
     """
     try:
         import hou  # noqa: PLC0415
@@ -30,7 +31,10 @@ def create_execution_stack():
         ui_available = False
 
     if not ui_available:
-        return HoudiniStandaloneDispatcher(), None
+        from dcc_mcp_core.host import BlockingDispatcher
+
+        blocking = BlockingDispatcher()
+        return HoudiniCallableDispatcher(blocking), HoudiniHost(blocking)
 
     dispatcher = HoudiniUiDispatcher()
     host = HoudiniUiPump(dispatcher)

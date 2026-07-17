@@ -7,7 +7,7 @@ import logging
 import sys
 from typing import Optional
 
-from dcc_mcp_houdini import start_server, stop_server
+from dcc_mcp_houdini import serve_headless
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -23,19 +23,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    server = start_server(port=args.port, gateway_port=args.gateway_port)
-
-    print(f"Houdini MCP server started: {server.mcp_url}")
-    print("Press Ctrl+C to stop...")
-
     try:
-        import time
 
-        while True:
-            time.sleep(1)
+        def _announce(server) -> None:
+            print(f"Houdini MCP server started: {server.mcp_url}", flush=True)
+            print("Press Ctrl+C to stop...", flush=True)
+
+        serve_headless(port=args.port, gateway_port=args.gateway_port, on_started=_announce)
     except KeyboardInterrupt:
         print("\nShutting down...")
-        stop_server()
 
     return 0
 

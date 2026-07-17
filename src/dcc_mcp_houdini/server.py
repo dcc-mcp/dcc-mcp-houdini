@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from dcc_mcp_core import DccServerOptions, HostExecutionBridge, MinimalModeConfig
 from dcc_mcp_core.server_base import DccServerBase
@@ -160,7 +161,7 @@ class HoudiniMcpServer(DccServerBase):
         super().__init__(options=options.to_core_options())
 
         self._extra_skill_paths: List[str] = list(options.extra_skill_paths or [])
-        self._houdini_dispatcher = self._dcc_dispatcher
+        self._houdini_dispatcher = options.dispatcher or self._dcc_dispatcher
         self._houdini_host: Any = None
         self.readiness: Any = None
 
@@ -584,6 +585,75 @@ _server_instance: Optional[HoudiniMcpServer] = None
 _host_instance: Any = None
 
 
+def _start_server_with_stack(
+    *,
+    dispatcher: Any,
+    host: Any,
+    port: Optional[int] = None,
+    extra_skill_paths: Optional[List[str]] = None,
+    register_builtins: bool = True,
+    include_bundled: bool = True,
+    enable_hot_reload: bool = False,
+    gateway_port: Optional[int] = None,
+    registry_dir: Optional[str] = None,
+    dcc_version: Optional[str] = None,
+    scene: Optional[str] = None,
+    enable_gateway_failover: Optional[bool] = None,
+    metrics_enabled: Optional[bool] = None,
+    job_storage_path: Optional[str] = None,
+    enable_workflows: Optional[bool] = None,
+    wait_ready: bool = True,
+    readiness_timeout_secs: Optional[int] = None,
+) -> HoudiniMcpServer:
+    """Start the process singleton using an already-selected host stack."""
+    global _server_instance, _host_instance  # noqa: PLW0603
+
+    if _server_instance is not None and _server_instance.is_running:
+        return _server_instance
+
+    _host_instance = host
+    try:
+        _server_instance = HoudiniMcpServer(
+            port=port,
+            extra_skill_paths=extra_skill_paths,
+            gateway_port=gateway_port,
+            registry_dir=registry_dir,
+            dcc_version=dcc_version,
+            scene=scene,
+            enable_gateway_failover=enable_gateway_failover,
+            metrics_enabled=metrics_enabled,
+            job_storage_path=job_storage_path,
+            enable_workflows=enable_workflows,
+            dispatcher=dispatcher,
+        )
+        if host is not None:
+            _server_instance.attach_host(host)
+
+        if register_builtins:
+            _server_instance.register_builtin_actions(include_bundled=include_bundled)
+        if enable_hot_reload:
+            _server_instance.enable_hot_reload()
+
+        _server_instance.start()
+
+        if wait_ready:
+            from dcc_mcp_houdini._readiness import resolve_readiness_timeout_secs, wait_until_ready
+
+            wait_until_ready(_server_instance, timeout=resolve_readiness_timeout_secs(readiness_timeout_secs) or 30)
+
+        logger.info("[%s] MCP server listening on %s", _DCC_NAME, _server_instance.mcp_url)
+        return _server_instance
+    except Exception:
+        if _server_instance is not None:
+            try:
+                _server_instance.stop()
+            except Exception:  # noqa: BLE001 - preserve the startup error
+                pass
+        _server_instance = None
+        _host_instance = None
+        raise
+
+
 def start_server(
     port: Optional[int] = None,
     extra_skill_paths: Optional[List[str]] = None,
@@ -601,20 +671,33 @@ def start_server(
     wait_ready: bool = True,
     readiness_timeout_secs: Optional[int] = None,
 ) -> HoudiniMcpServer:
-    """Start the Houdini MCP server (creates a process-level singleton)."""
-    global _server_instance, _host_instance  # noqa: PLW0603
+    """Start an interactive Houdini server driven by the UI event loop.
 
+    Headless Hython has no native event loop that can safely own HOM calls.
+    Use :func:`serve_headless` so the calling thread becomes the cooperative
+    queue pump instead of executing tools on an HTTP worker.
+    """
     if _server_instance is not None and _server_instance.is_running:
         return _server_instance
 
     from dcc_mcp_houdini.dispatcher import create_execution_stack
+    from dcc_mcp_houdini.host import HoudiniHost
 
     dispatcher, host = create_execution_stack()
-    _host_instance = host
-
-    _server_instance = HoudiniMcpServer(
+    if isinstance(host, HoudiniHost):
+        host.stop()
+        raise RuntimeError(
+            "Headless Hython cannot use start_server(); use serve_headless() "
+            "or the dcc-mcp-houdini CLI so HOM tools run on Hython's owning thread"
+        )
+    return _start_server_with_stack(
+        dispatcher=dispatcher,
+        host=host,
         port=port,
         extra_skill_paths=extra_skill_paths,
+        register_builtins=register_builtins,
+        include_bundled=include_bundled,
+        enable_hot_reload=enable_hot_reload,
         gateway_port=gateway_port,
         registry_dir=registry_dir,
         dcc_version=dcc_version,
@@ -623,25 +706,66 @@ def start_server(
         metrics_enabled=metrics_enabled,
         job_storage_path=job_storage_path,
         enable_workflows=enable_workflows,
-        dispatcher=dispatcher,
+        wait_ready=wait_ready,
+        readiness_timeout_secs=readiness_timeout_secs,
     )
-    if host is not None:
-        _server_instance.attach_host(host)
 
-    if register_builtins:
-        _server_instance.register_builtin_actions(include_bundled=include_bundled)
-    if enable_hot_reload:
-        _server_instance.enable_hot_reload()
 
-    _server_instance.start()
+def serve_headless(
+    port: Optional[int] = None,
+    extra_skill_paths: Optional[List[str]] = None,
+    register_builtins: bool = True,
+    include_bundled: bool = True,
+    enable_hot_reload: bool = False,
+    gateway_port: Optional[int] = None,
+    registry_dir: Optional[str] = None,
+    dcc_version: Optional[str] = None,
+    scene: Optional[str] = None,
+    enable_gateway_failover: Optional[bool] = None,
+    metrics_enabled: Optional[bool] = None,
+    job_storage_path: Optional[str] = None,
+    enable_workflows: Optional[bool] = None,
+    stop_event: Optional[threading.Event] = None,
+    on_started: Optional[Callable[[HoudiniMcpServer], None]] = None,
+) -> None:
+    """Serve headless Hython while pumping MCP jobs on the calling thread."""
+    if _server_instance is not None and _server_instance.is_running:
+        raise RuntimeError("A Houdini MCP server is already running in this process")
 
-    if wait_ready:
-        from dcc_mcp_houdini._readiness import resolve_readiness_timeout_secs, wait_until_ready
+    from dcc_mcp_houdini.dispatcher import create_execution_stack
+    from dcc_mcp_houdini.host import HoudiniHost
 
-        wait_until_ready(_server_instance, timeout=resolve_readiness_timeout_secs(readiness_timeout_secs) or 30)
+    dispatcher, host = create_execution_stack()
+    if not isinstance(host, HoudiniHost):
+        raise RuntimeError("serve_headless() requires Hython without the Houdini UI; use start_server() in the GUI")
 
-    logger.info("[%s] MCP server listening on %s", _DCC_NAME, _server_instance.mcp_url)
-    return _server_instance
+    server = _start_server_with_stack(
+        dispatcher=dispatcher,
+        host=host,
+        port=port,
+        extra_skill_paths=extra_skill_paths,
+        register_builtins=register_builtins,
+        include_bundled=include_bundled,
+        enable_hot_reload=enable_hot_reload,
+        gateway_port=gateway_port,
+        registry_dir=registry_dir,
+        dcc_version=dcc_version,
+        scene=scene,
+        enable_gateway_failover=enable_gateway_failover,
+        metrics_enabled=metrics_enabled,
+        job_storage_path=job_storage_path,
+        enable_workflows=enable_workflows,
+        wait_ready=False,
+    )
+    try:
+        if on_started is not None:
+            on_started(server)
+        host.run_headless(stop_event=stop_event)
+    finally:
+        if get_server() is server:
+            stop_server()
+        else:
+            server.stop()
 
 
 def stop_server() -> None:
@@ -649,9 +773,11 @@ def stop_server() -> None:
     global _server_instance, _host_instance  # noqa: PLW0603
     if _server_instance is None:
         return
-    _server_instance.stop()
-    _server_instance = None
-    _host_instance = None
+    try:
+        _server_instance.stop()
+    finally:
+        _server_instance = None
+        _host_instance = None
 
 
 def get_server() -> Optional[HoudiniMcpServer]:
