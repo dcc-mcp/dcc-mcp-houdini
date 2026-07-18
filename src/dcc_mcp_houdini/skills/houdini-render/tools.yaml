@@ -339,8 +339,9 @@ tools:
   - name: manage_takes
     description: >-
       Create, switch, delete, or list takes, and add or remove a parameter
-      tuple override on a child take. Override actions restore the previously
-      current take even when the update fails.
+      tuple override on a child take. add_override can set the take-local
+      parameter value in the same call. Override actions restore the
+      previously current take even when the update fails.
     source_file: scripts/manage_takes.py
     execution: sync
     affinity: main
@@ -368,6 +369,11 @@ tools:
         parm_name:
           type: string
           description: Parameter or parameter-tuple name required for override actions.
+        value:
+          description: >-
+            Optional scalar or list written inside the target take by
+            add_override. Scalars target one-component tuples; lists target
+            multi-component tuples.
   - name: get_render_stats
     description: >-
       Read render statistics (resolution, samples, renderer, output, frame
