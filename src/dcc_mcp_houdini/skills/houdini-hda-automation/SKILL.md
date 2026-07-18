@@ -51,8 +51,9 @@ definition introspection, instantiation, validation, and graph-level cooking.
   to render only the named driver. Interactive Houdini defaults to isolated
   `hython`, while headless Houdini defaults to foreground. Interactive isolated
   launch requires a saved, clean HIP and never auto-saves the GUI scene.
-  Explicit headless isolated launch requires an existing HIP and saves its
-  current state before spawning the worker. A chain can complete without a
+  Explicit headless isolated launch requires an existing HIP and captures its
+  current state in a job-owned temporary snapshot without saving the source
+  scene. A chain can complete without a
   discoverable output path when it has no execution/cook errors;
   inspect `output_verification` to distinguish this from verified file output.
 

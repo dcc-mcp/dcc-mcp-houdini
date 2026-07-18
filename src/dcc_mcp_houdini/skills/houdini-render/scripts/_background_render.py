@@ -20,4 +20,4 @@ _terminate_process_tree = _isolated_jobs._terminate_process_tree
 
 
 def cancel_render_job(job_id: str) -> dict:
-    return _isolated_jobs.cancel_job(job_id, terminate=_terminate_process_tree)
+    return _rop_jobs.cancel_render_job(job_id, terminate=_terminate_process_tree)

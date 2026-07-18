@@ -81,6 +81,7 @@ defaults to isolated `hython`; poll its `job_id` with
 `houdini_render__cancel_render_job`. Pass `background=false` for intentional
 foreground execution. Interactive background launch requires an explicitly
 saved, clean HIP and never auto-saves the GUI scene. Explicit headless
-background launch requires an existing HIP and saves its current state before
-spawning the worker. Output-path parm names are probed defensively so File
+background launch requires an existing HIP and captures its current state in a
+job-owned temporary snapshot without saving the source scene. Output-path parm
+names are probed defensively so File
 Cache, DOP I/O, and Geometry ROPs are all tolerated.
