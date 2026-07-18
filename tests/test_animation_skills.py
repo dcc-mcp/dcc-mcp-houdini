@@ -42,6 +42,7 @@ def _hou_with_keyframe_class():
             self.frame = None
             self.value = None
             self.expression = None
+            self.expression_language = None
 
         def setFrame(self, f):
             self.frame = f
@@ -51,6 +52,7 @@ def _hou_with_keyframe_class():
 
         def setExpression(self, e, lang):
             self.expression = e
+            self.expression_language = lang
 
     mock_hou.Keyframe.side_effect = _KF
     mock_hou.exprLanguage.Hscript = "hscript"
@@ -102,6 +104,29 @@ class TestKeyframes:
         applied_kf = parm.setKeyframe.call_args[0][0]
         assert applied_kf.frame == 10.0
         assert applied_kf.value == 5.0
+        assert applied_kf.expression is None
+
+    def test_set_keyframe_value_uses_requested_interpolation(self) -> None:
+        mod = _load_script("set_keyframe.py")
+        for interpolation in ("bezier", "linear", "constant"):
+            parm = MagicMock()
+            node = MagicMock()
+            node.path.return_value = "/obj/geo1"
+            node.parm.return_value = parm
+            mock_hou = _hou_with_keyframe_class()
+            mock_hou.node.return_value = node
+            with patch.dict(sys.modules, {"hou": mock_hou}):
+                result = mod.set_keyframe(
+                    "/obj/geo1",
+                    "tx",
+                    frame=10,
+                    value=5.0,
+                    interpolation=interpolation,
+                )
+            assert result["success"] is True
+            applied_kf = parm.setKeyframe.call_args[0][0]
+            assert applied_kf.expression == "{}()".format(interpolation)
+            assert applied_kf.expression_language == "hscript"
 
     def test_set_keyframe_requires_value_or_expression(self) -> None:
         mod = _load_script("set_keyframe.py")

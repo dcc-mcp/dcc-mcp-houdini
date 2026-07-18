@@ -52,6 +52,10 @@ Typed animation tools for agents. All tools are `affinity: main`.
 6. `export_channels("/obj/geo1", ["tx"], "/tmp/tx.json")` → `import_channels` to retarget
 7. `bake_channels("/obj/geo1", ["tx"], frame_range=[1,48])` to flatten expressions
 
+For numeric keys, `set_keyframe` accepts optional `interpolation`: `bezier`,
+`linear`, or `constant`. It controls the segment starting at that key; omit it
+to preserve Houdini's default. Use `constant` for discrete one-frame switches.
+
 ## Loop range contract
 
 `validate_loop_contract` treats `[start_frame, end_frame]` as **N unique

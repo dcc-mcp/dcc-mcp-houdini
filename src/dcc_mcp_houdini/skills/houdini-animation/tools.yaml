@@ -78,6 +78,12 @@ tools:
           type: string
           enum: [hscript, python]
           default: hscript
+        interpolation:
+          type: string
+          description: >-
+            Optional segment interpolation starting at this numeric value key.
+            Omit to preserve Houdini's default.
+          enum: [bezier, linear, constant]
   - name: get_keyframes
     description: List keyframes on a node parameter (frame, value, expression).
     source_file: scripts/get_keyframes.py
