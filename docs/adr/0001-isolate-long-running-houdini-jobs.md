@@ -32,8 +32,8 @@ adapter instance.
 - Retain each launched `Popen` handle in the adapter process and cancel only through that owned handle.
 - Persist job status for observation, but never treat a persisted PID as process ownership evidence.
 - Reject interactive isolated launch when the HIP is unsaved or has unsaved
-  changes; never auto-save the user's GUI scene. For explicit headless isolated
-  launch, require an existing HIP and capture its current state with an owned
+  changes; never auto-save the user's GUI scene. For headless isolated launch,
+  require an existing HIP and capture its current state with an owned
   temporary `saveAsBackup()` snapshot. Never overwrite or rename the source HIP.
   The worker restores the source name for `$HIP` resolution after loading the
   snapshot, then removes the snapshot. Reject the launch when capture fails.
@@ -60,9 +60,9 @@ adapter instance.
 
 - Jobs started by an adapter instance cannot be cancelled after that instance restarts.
 - Process-tree termination remains platform-specific (`taskkill /T` on Windows, process groups on POSIX).
-- Explicit headless isolated launch briefly consumes enough temporary storage
-  for one HIP snapshot; normal headless execution remains foreground and does
-  not add a snapshot.
+- Headless `render_rop` launch defaults to isolation and briefly consumes enough
+  temporary storage for one HIP snapshot. Callers can explicitly request
+  `background=false` when foreground execution is intentional.
 - Poll progress is output-file progress, so jobs without a discoverable output
   pattern report unknown progress/ETA.
 - ROP chains use execution/cook errors as their completion contract. They may

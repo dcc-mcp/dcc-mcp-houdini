@@ -157,12 +157,13 @@ tools:
   - name: render_rop
     description: >-
       Render a ROP/output driver and report written files, elapsed time,
-      warnings/errors. Interactive Houdini defaults to an isolated job so the
-      UI stays responsive; headless Houdini defaults to foreground execution.
+      warnings/errors. Houdini defaults to an isolated job so UI and headless
+      calls stay responsive. Plain calls return that render job_id directly;
+      explicit MCP async metadata still returns a core job that must be resolved
+      first. Pass background=false only for intentional foreground execution.
     source_file: scripts/render_rop.py
-    execution: async
+    execution: sync
     affinity: main
-    timeout_hint_secs: 1800
     group: render
     read_only: false
     destructive: false
@@ -186,10 +187,9 @@ tools:
           type: boolean
           description: >-
             Explicitly select isolated hython (true) or foreground (false)
-            execution. When omitted, interactive Houdini uses an isolated job
-            and headless Houdini renders in the foreground. Explicit headless
-            isolation uses a job-owned temporary HIP snapshot without saving the
-            source scene.
+            execution. When omitted, both interactive and headless Houdini use
+            an isolated job. Headless isolation uses a job-owned temporary HIP
+            snapshot without saving the source scene.
   - name: get_render_job
     description: >-
       Read bounded status, output progress, elapsed time, and ETA for a background

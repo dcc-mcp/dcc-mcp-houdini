@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -1314,18 +1315,142 @@ class TestRenderExecution:
             summary = mod.read_render_job(job_id)
             details = mod.read_render_job(job_id, include_details=True)
 
-        assert summary["completed"] == 25
+        assert summary["completed"] == 24
         assert summary["total"] == 30
-        assert summary["progress"] == pytest.approx(25.0 / 30.0)
+        assert summary["progress"] == pytest.approx(24.0 / 30.0)
         assert summary["elapsed_secs"] == 30.0
-        assert summary["eta_secs"] == 6.0
-        assert summary["written_file_count"] == 25
-        assert summary["recent_written_files"] == [str(output) for output in outputs[15:25]]
+        assert summary["eta_secs"] == 7.5
+        assert summary["written_file_count"] == 24
+        assert summary["recent_written_files"] == [str(output) for output in outputs[14:24]]
         assert "expected_outputs" not in summary
         assert "output_snapshot" not in summary
         assert details["expected_outputs"] == [str(path) for path in outputs]
         assert details["output_snapshot"] == snapshot
-        assert details["written_files"] == [str(output) for output in outputs[:25]]
+        assert details["written_files"] == [str(output) for output in outputs[:24]]
+
+    def test_get_render_job_does_not_complete_latest_output_while_worker_runs(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "1" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in range(1, 4)]
+        for output, mtime_ns in zip(outputs, (3_000_000_000, 2_000_000_000, 1_000_000_000)):
+            output.write_bytes(b"render output")
+            os.utime(output, ns=(mtime_ns, mtime_ns))
+        status_path = job_dir / "status.json"
+        status = {
+            "job_id": job_id,
+            "state": "running",
+            "expected_outputs": [str(output) for output in outputs],
+            "output_snapshot": {},
+        }
+        status_path.write_text(json.dumps(status), encoding="utf-8")
+        process = MagicMock(pid=4321)
+        process.poll.return_value = None
+        mod._PROCESS_HANDLES[job_id] = process
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            running = mod.read_render_job(job_id)
+            status["state"] = "completed"
+            status["written_files"] = [str(output) for output in outputs]
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            completed = mod.read_render_job(job_id)
+
+        assert running["completed"] == 2
+        assert running["total"] == 3
+        assert running["progress"] == pytest.approx(2.0 / 3.0)
+        assert running["recent_written_files"] == [str(output) for output in outputs[:2]]
+        assert completed["completed"] == 3
+        assert completed["progress"] == 1.0
+
+    def test_get_render_job_completes_legacy_terminal_job_without_written_files(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "3" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in range(1, 4)]
+        for output in outputs:
+            output.write_bytes(b"completed output")
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "completed",
+                    "expected_outputs": [str(output) for output in outputs],
+                    "output_snapshot": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            result = mod.read_render_job(job_id)
+
+        assert result["completed"] == 3
+        assert result["total"] == 3
+        assert result["progress"] == 1.0
+        assert result["written_file_count"] == 3
+        assert result["recent_written_files"] == [str(output) for output in outputs]
+
+    def test_get_render_job_does_not_claim_unverified_failed_outputs(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "2" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in range(1, 5)]
+        for output in outputs[:2]:
+            output.write_bytes(b"completed output")
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "failed",
+                    "expected_outputs": [str(output) for output in outputs],
+                    "output_snapshot": {},
+                    "written_files": [],
+                    "output_verification": {"state": "pending"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            result = mod.read_render_job(job_id)
+
+        assert result["completed"] == 0
+        assert result["total"] == 4
+        assert result["progress"] == 0.0
+        assert result["written_file_count"] == 0
+        assert result["recent_written_files"] == []
+
+    @pytest.mark.parametrize("state", ["failed", "cancelled", "interrupted"])
+    def test_get_render_job_keeps_latest_legacy_terminal_output_pending(self, tmp_path: Path, state: str) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = {"failed": "f", "cancelled": "c", "interrupted": "e"}[state] * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outputs = [job_dir / "beauty.{:04d}.exr".format(frame) for frame in range(1, 4)]
+        for output in outputs:
+            output.write_bytes(b"possibly incomplete output")
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": state,
+                    "expected_outputs": [str(output) for output in outputs],
+                    "output_snapshot": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            result = mod.read_render_job(job_id)
+
+        assert result["completed"] == 2
+        assert result["total"] == 3
+        assert result["progress"] == pytest.approx(2.0 / 3.0)
+        assert result["recent_written_files"] == [str(output) for output in outputs[:2]]
 
     def test_cancel_complete_race_preserves_completed_state(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -1613,6 +1738,39 @@ class TestRenderExecution:
         assert status["state"] == "completed"
         assert status["written_files"] == [str(tmp_path / "beauty.0005.exr")]
 
+    def test_get_render_job_counts_new_output_without_explicit_frame_range(self, tmp_path: Path) -> None:
+        output = tmp_path / "beauty.0001.exr"
+
+        def render(_rop, _frame_range):
+            output.write_bytes(b"new output")
+            return None, "render"
+
+        status = _run_render_worker(tmp_path, None, [], {}, render)
+
+        assert status["state"] == "completed"
+        assert status["expected_outputs"] == []
+        assert status["written_files"] == [str(output)]
+        assert status["output_verification"] == {
+            "state": "verified",
+            "expected_output_count": 1,
+            "written_file_count": 1,
+        }
+
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "4" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        status["job_id"] = job_id
+        (job_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            result = mod.read_render_job(job_id)
+
+        assert result["completed"] == 1
+        assert result["total"] == 1
+        assert result["progress"] == 1.0
+        assert result["written_file_count"] == 1
+        assert result["recent_written_files"] == [str(output)]
+
     def test_background_worker_reports_partial_outputs_when_range_fails(self, tmp_path: Path) -> None:
         expected = [tmp_path / "beauty.{:04d}.exr".format(frame) for frame in range(1, 8)]
 
@@ -1636,6 +1794,38 @@ class TestRenderExecution:
             "expected_output_count": 7,
             "written_file_count": 2,
         }
+
+    def test_background_worker_verifies_partial_outputs_when_render_raises(self, tmp_path: Path) -> None:
+        expected = [tmp_path / "beauty.{:04d}.exr".format(frame) for frame in range(1, 5)]
+
+        def render(_rop, _frame_range):
+            for output in expected[:2]:
+                output.write_bytes(b"completed output")
+            raise RuntimeError("render failed")
+
+        status = _run_render_worker(tmp_path, [1, 4, 1], expected, {}, render)
+
+        assert status["state"] == "failed"
+        assert status["written_files"] == [str(output) for output in expected[:2]]
+        assert status["output_verification"] == {
+            "state": "partial",
+            "expected_output_count": 4,
+            "written_file_count": 2,
+        }
+
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "3" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        status["job_id"] = job_id
+        (job_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            result = mod.read_render_job(job_id)
+
+        assert result["completed"] == 2
+        assert result["total"] == 4
+        assert result["progress"] == 0.5
+        assert result["written_file_count"] == 2
 
     def test_background_worker_recovers_from_cached_launcher_without_snapshot(self, tmp_path: Path) -> None:
         output = tmp_path / "karma_beauty.1080.exr"
@@ -1797,6 +1987,28 @@ class TestRenderExecution:
         launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 100000, 1], str(tmp_path / "beauty.$F4.exr"))
         rop.render.assert_not_called()
 
+    def test_render_rop_defaults_to_background_in_headless(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "beauty.$F4.exr"))
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
+        job = {"job_id": "b" * 32, "state": "queued", "pid": 4321}
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
+            result = mod.render_rop("/out/mantra1", frame_range=[1, 720, 1])
+
+        assert result["success"] is True
+        assert result["context"]["background"] is True
+        assert result["context"]["job_id"] == "b" * 32
+        launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 720, 1], str(tmp_path / "beauty.$F4.exr"))
+        rop.render.assert_not_called()
+
     def test_render_rop_reports_written_and_elapsed(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.exr"
@@ -1812,7 +2024,7 @@ class TestRenderExecution:
         mock_hou.isUIAvailable.return_value = False
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.render_rop("/out/mantra1")
+            result = mod.render_rop("/out/mantra1", background=False)
 
         assert result["success"] is True
         assert result["context"]["rendered"] is True
@@ -1835,7 +2047,7 @@ class TestRenderExecution:
         mock_hou.isUIAvailable.return_value = False
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.render_rop("/out/mantra1")
+            result = mod.render_rop("/out/mantra1", background=False)
 
         assert result["success"] is True
         assert result["context"]["rendered"] is False

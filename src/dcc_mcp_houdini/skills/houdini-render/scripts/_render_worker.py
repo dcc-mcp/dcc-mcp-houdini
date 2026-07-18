@@ -44,6 +44,20 @@ def _remove_owned_hip_snapshot(status_path: Path, status: dict, hip_path: Path) 
             pass
 
 
+def _verify_outputs(candidates: list, before: dict, output_pattern) -> tuple:
+    written_files = updated_outputs(candidates, before)
+    verification_state = "not_observed"
+    if written_files:
+        verification_state = "verified" if len(written_files) == len(candidates) else "partial"
+    if not output_pattern:
+        verification_state = "unavailable"
+    return written_files, {
+        "state": verification_state,
+        "expected_output_count": len(candidates),
+        "written_file_count": len(written_files),
+    }
+
+
 def main() -> None:
     import hou  # Lazy import: requires Houdini's embedded Python.
 
@@ -64,6 +78,7 @@ def main() -> None:
         "expected_output_count": 0,
         "written_file_count": 0,
     }
+    verification_ready = False
     try:
         hou.hipFile.load(str(hip_path), suppress_save_prompt=True)
         if status.get("hip_snapshot_owned") is True:
@@ -82,6 +97,7 @@ def main() -> None:
             before = output_snapshot(expected_outputs)
         status.update({"expected_outputs": expected_outputs, "output_snapshot": before})
         write_status(status_path, status)
+        verification_ready = True
         if ignore_inputs:
             _, execution_mode = render_node(rop, frame_range, ignore_inputs=True)
         else:
@@ -89,17 +105,7 @@ def main() -> None:
         rop_errors = [str(error) for error in rop.errors()] if hasattr(rop, "errors") else []
         logged_cook_errors = _cook_errors(status)
         candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
-        written_files = updated_outputs(candidates, before)
-        verification_state = "not_observed"
-        if written_files:
-            verification_state = "verified" if len(written_files) == len(candidates) else "partial"
-        if not output_pattern:
-            verification_state = "unavailable"
-        output_verification = {
-            "state": verification_state,
-            "expected_output_count": len(candidates),
-            "written_file_count": len(written_files),
-        }
+        written_files, output_verification = _verify_outputs(candidates, before, output_pattern)
         if logged_cook_errors:
             raise RuntimeError("ROP cook error: {}".format("; ".join(logged_cook_errors[:3])))
         if rop_errors:
@@ -117,6 +123,9 @@ def main() -> None:
             }
         )
     except Exception as exc:  # noqa: BLE001
+        if verification_ready:
+            candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
+            written_files, output_verification = _verify_outputs(candidates, before, output_pattern)
         status.update(
             {
                 "state": "failed",
