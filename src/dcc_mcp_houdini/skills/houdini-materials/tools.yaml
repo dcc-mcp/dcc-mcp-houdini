@@ -86,3 +86,140 @@ tools:
     next-tools:
       on-failure:
         - houdini_scene__get_node_info
+
+  - name: build_materialx_pbr
+    description: >-
+      Build a Karma-compatible MaterialX standard-surface material with typed
+      base-color, roughness, metallic, normal, and displacement connections.
+      Removes the partial subnet if authoring fails.
+    source_file: scripts/build_materialx_pbr.py
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 30
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          default: "/mat"
+          description: Material network that receives the MaterialX builder.
+        material_name:
+          type: string
+          default: "materialx_pbr"
+          minLength: 1
+        base_color:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          default: [0.18, 0.18, 0.18]
+        roughness:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.5
+        metallic:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.0
+        base_color_texture:
+          type: string
+          description: Optional color texture path; read with base_color_space.
+        roughness_texture:
+          type: string
+          description: Optional scalar roughness texture path.
+        metallic_texture:
+          type: string
+          description: Optional scalar metallic texture path.
+        normal_texture:
+          type: string
+          description: Optional tangent-space normal texture path.
+        displacement_texture:
+          type: string
+          description: Optional scalar height/displacement texture path.
+        normal_scale:
+          type: number
+          default: 1.0
+        displacement_scale:
+          type: number
+          default: 0.01
+        base_color_space:
+          type: string
+          default: "srgb_texture"
+          description: MaterialX image color space for base color.
+        data_color_space:
+          type: string
+          default: "Raw"
+          description: MaterialX image color space for non-color data maps.
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        context: {type: object}
+    read_only: false
+    destructive: false
+    idempotent: false
+    tool_role: action
+    risk: medium
+    search_aliases: [build materialx pbr, create karma material, wire pbr textures, materialx standard surface]
+    produces: [material]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+      open_world_hint: true
+    next-tools:
+      on-success:
+        - houdini_materials__validate_materialx_pbr
+        - houdini_materials__assign_material
+      on-failure:
+        - houdini_scene__list_child_nodes
+
+  - name: validate_materialx_pbr
+    description: >-
+      Inspect a dcc-mcp MaterialX PBR material and report whether its standard
+      surface, outputs, and required texture channels are connected. Read-only.
+    source_file: scripts/validate_materialx_pbr.py
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 15
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [material_path]
+      properties:
+        material_path:
+          type: string
+          minLength: 1
+        required_channels:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [base_color, roughness, metallic, normal, displacement]
+    output_schema:
+      type: object
+      additionalProperties: true
+      required: [success]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        context: {type: object}
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [validate materialx, inspect pbr material, check shader channels, verify karma material]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    next-tools:
+      on-failure:
+        - houdini_scene__get_node_info
