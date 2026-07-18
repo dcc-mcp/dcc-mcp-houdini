@@ -27,8 +27,7 @@
 ### Bug Fixes
 
 * **render:** isolate headless background HIP snapshots ([#161](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/161)) ([bc0aca7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bc0aca73ed907161d76b6a9513bfd11b08e43f6d))
-* **render:** preserve background job identity and progress ([ac28cb4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ac28cb4a8257755c9b79de2d22ab23c5a2b62468))
-* **render:** preserve background job identity and progress ([3eea1ef](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3eea1efc0ef650d3ea4c59632d12325da7e13a17))
+* **render:** preserve background job identity and progress ([#162](https://github.com/dcc-mcp/dcc-mcp-houdini/pull/162)) ([ac28cb4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ac28cb4a8257755c9b79de2d22ab23c5a2b62468))
 
 ## [0.22.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.2...v0.22.0) (2026-07-18)
 
