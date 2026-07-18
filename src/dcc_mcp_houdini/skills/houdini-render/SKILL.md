@@ -84,7 +84,9 @@ to ten `recent_written_files`. `output_verification.state` distinguishes
 `verified`, `partial`, `failed`, `not_observed`, and `unavailable` output
 evidence. `verified` requires every expected output to be newly written,
 readable, non-empty, and produced without an execution/cook failure. Pass
-`include_details=true` only when the full
+an explicit frame range when exact completeness matters; render and cache jobs
+with only part of that requested range written fail with bounded output counts.
+Pass `include_details=true` only when the full
 expected-output snapshot, complete written-file and warning lists, error, and
 traceback are needed. The same job lifecycle also observes `cache_simulation` and
 `execute_rop_chain` jobs.
