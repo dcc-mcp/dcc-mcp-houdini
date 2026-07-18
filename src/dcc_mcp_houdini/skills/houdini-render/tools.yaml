@@ -97,12 +97,12 @@ tools:
     affinity: main
     group: render
     read_only: false
-    destructive: false
-    idempotent: true
+    destructive: true
+    idempotent: false
     annotations:
       read_only_hint: false
-      destructive_hint: false
-      idempotent_hint: true
+      destructive_hint: true
+      idempotent_hint: false
     input_schema:
       type: object
       required: [rop_path]
@@ -239,8 +239,9 @@ tools:
           type: string
   - name: create_render_layer
     description: >-
-      Create a render layer (Render Product in Solaris /stage or merge in ROP
-      context) with optional AOVs. Supports Solaris and traditional networks.
+      Create a Solaris Render Product, or clone a Mantra ifd ROP into a real
+      render layer with a required dedicated output, optional object masks,
+      and AOV planes. The source Mantra ROP remains unchanged.
     source_file: scripts/create_render_layer.py
     execution: sync
     affinity: main
@@ -261,54 +262,94 @@ tools:
         parent_path:
           type: string
           default: /stage
+          description: >-
+            Parent network for the new layer. Paths under /stage create a
+            Solaris Render Product; other paths require a Mantra source ROP.
         aovs:
           type: array
           items: {type: string}
+          description: >-
+            Optional RenderVars for Solaris or deduplicated Mantra auxiliary
+            planes on the cloned ROP.
         purpose:
           type: string
           default: beauty
+          description: Solaris Render Product purpose; returned as layer metadata for Mantra.
+        source_rop_path:
+          type: string
+          description: >-
+            Required outside /stage. Absolute path of the Mantra ifd ROP to
+            clone; the source node is not modified.
+        output_path:
+          type: string
+          description: >-
+            Required outside /stage. Dedicated vm_picture path for the cloned
+            ROP; choose a path distinct from the source layer output.
+        candidate_objects:
+          type: string
+          description: Optional Mantra candidate-object mask written to vobject.
+        force_objects:
+          type: string
+          description: Optional Mantra forced-object mask written to forceobject.
+        matte_objects:
+          type: string
+          description: Optional Mantra matte-object mask written to matte_objects.
+        exclude_objects:
+          type: string
+          description: Optional Mantra exclusion mask written to excludeobject.
+        phantom_objects:
+          type: string
+          description: Optional Mantra phantom-object mask written to phantom_objects.
   - name: configure_aovs
     description: >-
-      Add or remove AOVs (diffuse, specular, normal, depth, motionvector, etc.)
-      on a ROP or Solaris render product. Supports 15+ preset AOV types.
+      Add or remove AOVs on a Solaris Render Product or Mantra ROP. Mantra
+      edits the native auxiliary-plane multiparm, deduplicates requested and
+      existing planes on add, writes native quantization and filter settings,
+      and compacts the multiparm on remove.
     source_file: scripts/configure_aovs.py
     execution: sync
     affinity: main
     group: render
     read_only: false
-    destructive: false
-    idempotent: true
+    destructive: true
+    idempotent: false
     annotations:
       read_only_hint: false
-      destructive_hint: false
-      idempotent_hint: true
+      destructive_hint: true
+      idempotent_hint: false
     input_schema:
       type: object
       required: [rop_path, aovs]
       properties:
         rop_path:
           type: string
+          description: Absolute path of the Solaris Render Product or Mantra ROP.
         aovs:
           type: array
           items: {type: string}
+          description: >-
+            AOV preset names or Solaris RenderVar names. Unsupported Mantra
+            names are returned without changing the existing planes.
         action:
           type: string
           enum: [add, remove]
           default: add
+          description: Add missing planes or remove matching planes by preset/source/channel.
   - name: manage_takes
     description: >-
-      Create, switch, delete, or list takes. Takes isolate parameter overrides
-      for render layer / lighting variant workflows.
+      Create, switch, delete, or list takes, and add or remove a parameter
+      tuple override on a child take. Override actions restore the previously
+      current take even when the update fails.
     source_file: scripts/manage_takes.py
     execution: sync
     affinity: main
     group: render_layer
     read_only: false
-    destructive: false
+    destructive: true
     idempotent: false
     annotations:
       read_only_hint: false
-      destructive_hint: false
+      destructive_hint: true
       idempotent_hint: false
     input_schema:
       type: object
@@ -316,9 +357,16 @@ tools:
       properties:
         action:
           type: string
-          enum: [list, create, switch, delete]
+          enum: [list, create, switch, delete, add_override, remove_override]
         take_name:
           type: string
+          description: Required for every action except list.
+        node_path:
+          type: string
+          description: Absolute Houdini node path required for override actions.
+        parm_name:
+          type: string
+          description: Parameter or parameter-tuple name required for override actions.
   - name: get_render_stats
     description: >-
       Read render statistics (resolution, samples, renderer, output, frame

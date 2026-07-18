@@ -70,6 +70,228 @@ def _scalar_parm(value):
     return parm
 
 
+class _FakeMantraParm:
+    def __init__(self, owner, name):
+        self._owner = owner
+        self._name = name
+
+    def eval(self):
+        return self._owner.values[self._name]
+
+    def unexpandedString(self):
+        return str(self._owner.values[self._name])
+
+    def set(self, value):
+        if self._name in self._owner.set_failures:
+            raise RuntimeError("cannot set {}".format(self._name))
+        if self._name == "vm_numaux":
+            self._owner.resize_aux(int(value))
+        else:
+            self._owner.values[self._name] = value
+
+    def removeMultiParmInstance(self, index):
+        self._owner.remove_aux(index)
+
+    def multiParmStartOffset(self):
+        return 1
+
+
+class _FakeMantraRop:
+    _AUX_DEFAULTS = {
+        "vm_variable_plane{}": "",
+        "vm_vextype_plane{}": "vector",
+        "vm_channel_plane{}": "",
+        "vm_quantize_plane{}": "half",
+        "vm_pfilter_plane{}": "",
+        "vm_sfilter_plane{}": "alpha",
+    }
+
+    def __init__(self, path="/out/mantra1"):
+        self._path = path
+        self._parent = None
+        self.set_failures = set()
+        self.values = {
+            "vm_numaux": 0,
+            "vm_picture": "",
+            "vobject": "*",
+            "forceobject": "",
+            "matte_objects": "",
+            "excludeobject": "",
+            "phantom_objects": "",
+        }
+
+    def path(self):
+        return self._path
+
+    def name(self):
+        return self._path.rsplit("/", 1)[-1]
+
+    def setName(self, name, unique_name=False):
+        del unique_name
+        old_name = self.name()
+        self._path = self._path.rsplit("/", 1)[0] + "/" + name
+        if self._parent is not None:
+            self._parent.children.pop(old_name, None)
+            self._parent.children[name] = self
+
+    def copyTo(self, parent):
+        clone_name = self.name()
+        suffix = 1
+        while parent.node(clone_name) is not None:
+            clone_name = "{}{}".format(self.name(), suffix)
+            suffix += 1
+        clone = _FakeMantraRop(parent.path() + "/" + clone_name)
+        clone.values = dict(self.values)
+        clone.set_failures = set(self.set_failures)
+        parent.add(clone)
+        return clone
+
+    def destroy(self):
+        if self._parent is not None:
+            self._parent.children.pop(self.name(), None)
+            self._parent = None
+
+    def type(self):
+        node_type = MagicMock()
+        node_type.name.return_value = "ifd"
+        return node_type
+
+    def parm(self, name):
+        return _FakeMantraParm(self, name) if name in self.values else None
+
+    def parmTuple(self, _name):
+        return None
+
+    def resize_aux(self, count):
+        previous = self.values["vm_numaux"]
+        for index in range(previous + 1, count + 1):
+            for pattern, default in self._AUX_DEFAULTS.items():
+                self.values[pattern.format(index)] = default
+        for index in range(count + 1, previous + 1):
+            for pattern in self._AUX_DEFAULTS:
+                self.values.pop(pattern.format(index), None)
+        self.values["vm_numaux"] = count
+
+    def remove_aux(self, index):
+        planes = [
+            {pattern: self.values[pattern.format(plane_index)] for pattern in self._AUX_DEFAULTS}
+            for plane_index in range(1, self.values["vm_numaux"] + 1)
+        ]
+        planes.pop(index)
+        self.resize_aux(0)
+        self.resize_aux(len(planes))
+        for plane_index, plane in enumerate(planes, 1):
+            for pattern, value in plane.items():
+                self.values[pattern.format(plane_index)] = value
+
+    def aux_planes(self):
+        return [
+            {
+                "variable": self.values["vm_variable_plane{}".format(index)],
+                "type": self.values["vm_vextype_plane{}".format(index)],
+                "channel": self.values["vm_channel_plane{}".format(index)],
+            }
+            for index in range(1, self.values["vm_numaux"] + 1)
+        ]
+
+
+class _FakeOutNetwork:
+    def __init__(self):
+        self.children = {}
+
+    def path(self):
+        return "/out"
+
+    def name(self):
+        return "out"
+
+    def type(self):
+        node_type = MagicMock()
+        node_type.name.return_value = "ropnet"
+        return node_type
+
+    def add(self, node):
+        node._parent = self
+        self.children[node.name()] = node
+
+    def node(self, name):
+        return self.children.get(name)
+
+
+def _fake_hou_for_out(out, hip_dir="C:/show/shot"):
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = lambda path: out if path == "/out" else out.node(path.rsplit("/", 1)[-1])
+    mock_hou.frame.return_value = 1.0
+    mock_hou.text.expandStringAtFrame.side_effect = lambda path, frame: path.replace("$HIP", hip_dir).replace(
+        "$F4", "{:04d}".format(int(frame))
+    )
+    mock_hou.text.abspath.side_effect = lambda path: (
+        path if path.startswith("/") or ":" in path[:3] else "{}/{}".format(hip_dir, path)
+    )
+    mock_hou.text.normpath.side_effect = lambda path: path.replace("\\", "/")
+    return mock_hou
+
+
+class _FakeTake:
+    def __init__(self, takes, name, parent=None):
+        self._takes = takes
+        self._name = name
+        self._parent = parent
+        self._overrides = set()
+
+    def name(self):
+        return self._name
+
+    def parent(self):
+        return self._parent
+
+    def nodes(self):
+        return ()
+
+    def addChildTake(self, name):
+        return self._takes.add(name, parent=self)
+
+    def hasParmTuple(self, parm_tuple):
+        return parm_tuple in self._overrides
+
+    def addParmTuple(self, parm_tuple):
+        if self._takes.currentTake() is not self:
+            raise RuntimeError("take is not current")
+        self._overrides.add(parm_tuple)
+
+    def removeParmTuple(self, parm_tuple):
+        if self._takes.currentTake() is not self:
+            raise RuntimeError("take is not current")
+        self._overrides.discard(parm_tuple)
+
+
+class _FakeTakes:
+    def __init__(self):
+        self._root = _FakeTake(self, "main")
+        self._current = self._root
+        self._takes = {"main": self._root}
+
+    def currentTake(self):
+        return self._current
+
+    def setCurrentTake(self, take):
+        self._current = take
+
+    def rootTake(self):
+        return self._root
+
+    def findTake(self, name):
+        return self._takes.get(name)
+
+    def takes(self):
+        return tuple(self._takes.values())
+
+    def add(self, name, parent=None):
+        take = _FakeTake(self, name, parent or self._root)
+        self._takes[name] = take
+        return take
+
+
 def _run_render_worker(
     tmp_path,
     frame_range,
@@ -386,6 +608,345 @@ class TestRenderSettings:
         camera_parm.set.assert_called_once_with("/obj/cam1")
         assert result["context"]["applied"]["camera"] == "/obj/cam1"
         assert "output_path" in result["context"]["unsupported"]
+
+
+class TestRenderPassAuthoring:
+    def test_mantra_component_presets_use_complete_light_path_expressions(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+
+        assert mod.MANTRA_AOV_PRESETS["diffuse"]["source"] == "lpe:C<RD>.*L"
+        assert mod.MANTRA_AOV_PRESETS["specular"]["source"] == "lpe:C<RG>.*[LO]"
+        assert mod.MANTRA_AOV_PRESETS["transmission"]["source"] == "lpe:C<TG>.*[LO]"
+        assert mod.MANTRA_AOV_PRESETS["volume"]["source"] == "lpe:CV.*L"
+
+    def test_configure_aovs_adds_real_mantra_planes_and_deduplicates(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal", "depth", "normal"])
+            repeated = mod.configure_aovs("/out/mantra1", ["normal", "depth"])
+
+        assert result["success"] is True
+        assert [item["name"] for item in result["context"]["configured"]] == ["normal", "depth"]
+        assert result["context"]["unsupported"] == []
+        assert repeated["context"]["configured"] == []
+        assert repeated["context"]["unsupported"] == []
+        assert rop.aux_planes() == [
+            {"variable": "N", "type": "unitvector", "channel": "normal"},
+            {"variable": "Pz", "type": "float", "channel": "depth"},
+        ]
+
+    def test_configure_aovs_applies_h21_plane_processing_contract(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal", "emission"])
+
+        assert result["success"] is True
+        assert rop.values["vm_quantize_plane1"] == "float"
+        assert rop.values["vm_pfilter_plane1"] == "minmax omedian"
+        assert rop.values["vm_sfilter_plane1"] == "alpha"
+        assert rop.values["vm_quantize_plane2"] == "half"
+        assert rop.values["vm_pfilter_plane2"] == ""
+        assert rop.values["vm_sfilter_plane2"] == "fullopacity"
+
+    def test_configure_aovs_removes_named_mantra_plane_and_compacts(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/out/mantra1", ["normal", "depth", "worldpos"])
+            result = mod.configure_aovs("/out/mantra1", ["depth", "missing", "depth"], action="remove")
+
+        assert result["success"] is True
+        assert result["context"]["configured"] == [
+            {"name": "depth", "action": "removed", "source": "Pz", "channel": "depth"}
+        ]
+        assert result["context"]["unsupported"] == ["missing"]
+        assert rop.aux_planes() == [
+            {"variable": "N", "type": "unitvector", "channel": "normal"},
+            {"variable": "P", "type": "vector", "channel": "worldpos"},
+        ]
+
+    def test_configure_aovs_remove_clears_all_matching_planes(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        rop.resize_aux(2)
+        rop.values.update(
+            {
+                "vm_variable_plane1": "N",
+                "vm_channel_plane1": "normal",
+                "vm_variable_plane2": "N",
+                "vm_channel_plane2": "normal_copy",
+            }
+        )
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal"], action="remove")
+
+        assert result["success"] is True
+        assert rop.aux_planes() == []
+
+    def test_configure_aovs_unknown_remove_never_matches_empty_plane_field(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        rop.resize_aux(1)
+        rop.values["vm_variable_plane1"] = "custom_export"
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["missing"], action="remove")
+
+        assert result["success"] is True
+        assert result["context"]["unsupported"] == ["missing"]
+        assert rop.values["vm_numaux"] == 1
+
+    def test_configure_aovs_rolls_back_new_plane_when_parameter_write_fails(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        rop.set_failures.add("vm_channel_plane1")
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal"])
+
+        assert result["success"] is False
+        assert rop.values["vm_numaux"] == 0
+
+    def test_configure_aovs_rolls_back_all_planes_when_later_write_fails(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        rop.set_failures.add("vm_channel_plane2")
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal", "depth"])
+
+        assert result["success"] is False
+        assert rop.values["vm_numaux"] == 0
+
+    def test_configure_aovs_rejects_unknown_action_without_mutation(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        rop = _FakeMantraRop()
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/out/mantra1", ["normal"], action="replace")
+
+        assert result["success"] is False
+        assert rop.values["vm_numaux"] == 0
+
+    def test_create_render_layer_clones_mantra_with_masks_and_output(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        source.values["vm_picture"] = "/renders/base.$F4.exr"
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+                output_path="/renders/solar_fx.$F4.exr",
+                candidate_objects="/obj/SolarFX*",
+                force_objects="/obj/SunCorona",
+                matte_objects="/obj/planets/*",
+                exclude_objects="/obj/labels/*",
+                phantom_objects="/obj/holdouts/*",
+                aovs=["normal", "depth"],
+            )
+
+        assert result["success"] is True
+        layer = out.node("solar_fx")
+        assert layer is not None
+        assert layer.values["vm_picture"] == "/renders/solar_fx.$F4.exr"
+        assert layer.values["vobject"] == "/obj/SolarFX*"
+        assert layer.values["forceobject"] == "/obj/SunCorona"
+        assert layer.values["matte_objects"] == "/obj/planets/*"
+        assert layer.values["excludeobject"] == "/obj/labels/*"
+        assert layer.values["phantom_objects"] == "/obj/holdouts/*"
+        assert layer.aux_planes() == [
+            {"variable": "N", "type": "unitvector", "channel": "normal"},
+            {"variable": "Pz", "type": "float", "channel": "depth"},
+        ]
+        assert source.values["vm_picture"] == "/renders/base.$F4.exr"
+        assert result["context"]["node"]["type"] == "ifd"
+
+    def test_create_render_layer_removes_partial_clone_when_required_parm_is_missing(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        source.values.pop("matte_objects")
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+                output_path="/renders/solar_fx.$F4.exr",
+                matte_objects="/obj/planets/*",
+            )
+
+        assert result["success"] is False
+        assert out.node("solar_fx") is None
+        assert out.node("mantra_base") is source
+
+    def test_create_render_layer_rejects_missing_output_before_cloning(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+            )
+
+        assert result["success"] is False
+        assert set(out.children) == {"mantra_base"}
+
+    def test_create_render_layer_rejects_source_output_path_before_cloning(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        source.values["vm_picture"] = "/renders/shared.$F4.exr"
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+                output_path="/renders/shared.$F4.exr",
+            )
+
+        assert result["success"] is False
+        assert set(out.children) == {"mantra_base"}
+
+    def test_create_render_layer_rejects_expanded_variable_alias_before_cloning(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        source.values["vm_picture"] = "$HIP/render/shared.$F4.exr"
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+                output_path="C:/show/shot/render/shared.$F4.exr",
+            )
+
+        assert result["success"] is False
+        assert set(out.children) == {"mantra_base"}
+
+    def test_create_render_layer_removes_clone_when_requested_aov_is_unsupported(self) -> None:
+        mod = _load_script("houdini-render", "create_render_layer.py")
+        out = _FakeOutNetwork()
+        source = _FakeMantraRop("/out/mantra_base")
+        out.add(source)
+        mock_hou = _fake_hou_for_out(out)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_render_layer(
+                "solar_fx",
+                parent_path="/out",
+                source_rop_path="/out/mantra_base",
+                output_path="/renders/solar_fx.$F4.exr",
+                aovs=["normal", "cryptomatte"],
+            )
+
+        assert result["success"] is False
+        assert set(out.children) == {"mantra_base"}
+
+    def test_manage_takes_create_uses_root_child_take_api(self) -> None:
+        mod = _load_script("houdini-render", "manage_takes.py")
+        takes = _FakeTakes()
+        mock_hou = MagicMock()
+        mock_hou.takes = takes
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.manage_takes("create", take_name="solar_fx")
+
+        assert result["success"] is True
+        assert takes.findTake("solar_fx").parent() is takes.rootTake()
+        assert takes.currentTake() is takes.rootTake()
+
+    def test_manage_takes_adds_and_removes_override_without_changing_current_take(self) -> None:
+        mod = _load_script("houdini-render", "manage_takes.py")
+        takes = _FakeTakes()
+        variant = takes.add("solar_fx")
+        parm_tuple = MagicMock()
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.parmTuple.return_value = parm_tuple
+        mock_hou = MagicMock()
+        mock_hou.takes = takes
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            added = mod.manage_takes(
+                "add_override",
+                take_name="solar_fx",
+                node_path="/out/mantra1",
+                parm_name="vm_picture",
+            )
+            removed = mod.manage_takes(
+                "remove_override",
+                take_name="solar_fx",
+                node_path="/out/mantra1",
+                parm_name="vm_picture",
+            )
+
+        assert added["success"] is True
+        assert removed["success"] is True
+        assert variant.hasParmTuple(parm_tuple) is False
+        assert takes.currentTake().name() == "main"
+
+    def test_manage_takes_restores_current_take_when_override_update_fails(self) -> None:
+        mod = _load_script("houdini-render", "manage_takes.py")
+        takes = _FakeTakes()
+        variant = takes.add("solar_fx")
+        variant.addParmTuple = MagicMock(side_effect=RuntimeError("write failed"))
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.parmTuple.return_value = MagicMock()
+        mock_hou = MagicMock()
+        mock_hou.takes = takes
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.manage_takes(
+                "add_override",
+                take_name="solar_fx",
+                node_path="/out/mantra1",
+                parm_name="vm_picture",
+            )
+
+        assert result["success"] is False
+        assert takes.currentTake() is takes.rootTake()
 
 
 class TestRenderExecution:
