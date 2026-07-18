@@ -16,6 +16,20 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.23.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.22.0...v0.23.0) (2026-07-18)
+
+
+### Features
+
+* **render:** support production Mantra pass authoring ([#159](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/159)) ([b1f596c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b1f596c6c5cc76be0374ef14bd662ecf2ae82273))
+
+
+### Bug Fixes
+
+* **render:** isolate headless background HIP snapshots ([#161](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/161)) ([bc0aca7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bc0aca73ed907161d76b6a9513bfd11b08e43f6d))
+* **render:** preserve background job identity and progress ([ac28cb4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ac28cb4a8257755c9b79de2d22ab23c5a2b62468))
+* **render:** preserve background job identity and progress ([3eea1ef](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3eea1efc0ef650d3ea4c59632d12325da7e13a17))
+
 ## [0.22.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.2...v0.22.0) (2026-07-18)
 
 
