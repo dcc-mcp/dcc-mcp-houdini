@@ -45,7 +45,14 @@ def _remove_owned_hip_snapshot(status_path: Path, status: dict, hip_path: Path) 
 
 
 def _verify_outputs(candidates: list, before: dict, output_pattern) -> tuple:
-    written_files = updated_outputs(candidates, before)
+    written_files = []
+    for output in updated_outputs(candidates, before):
+        try:
+            with Path(output).open("rb") as stream:
+                if stream.read(1):
+                    written_files.append(output)
+        except OSError:
+            continue
     verification_state = "not_observed"
     if written_files:
         verification_state = "verified" if len(written_files) == len(candidates) else "partial"
@@ -126,6 +133,8 @@ def main() -> None:
         if verification_ready:
             candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
             written_files, output_verification = _verify_outputs(candidates, before, output_pattern)
+            if output_verification["state"] == "verified":
+                output_verification["state"] = "failed"
         status.update(
             {
                 "state": "failed",

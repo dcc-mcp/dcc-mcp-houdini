@@ -81,7 +81,9 @@ default to isolated background execution.
 The default poll response is bounded: it reports `completed`, `total`,
 fractional `progress`, `elapsed_secs`, `eta_secs`, `written_file_count`, and up
 to ten `recent_written_files`. `output_verification.state` distinguishes
-`verified`, `not_observed`, and `unavailable` output evidence. Pass
+`verified`, `partial`, `failed`, `not_observed`, and `unavailable` output
+evidence. `verified` requires every expected output to be newly written,
+readable, non-empty, and produced without an execution/cook failure. Pass
 `include_details=true` only when the full
 expected-output snapshot, complete written-file and warning lists, error, and
 traceback are needed. The same job lifecycle also observes `cache_simulation` and

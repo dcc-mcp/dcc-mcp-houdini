@@ -1795,6 +1795,47 @@ class TestRenderExecution:
             "written_file_count": 2,
         }
 
+    def test_background_worker_does_not_verify_outputs_when_render_fails(self, tmp_path: Path) -> None:
+        output = tmp_path / "beauty.0001.exr"
+
+        def render(_rop, _frame_range):
+            output.write_bytes(b"truncated output")
+            return [1.0, 1.0], "execute"
+
+        status = _run_render_worker(
+            tmp_path,
+            [1, 1, 1],
+            [output],
+            {},
+            render,
+            rop_errors=["Command Exit Code: 139"],
+        )
+
+        assert status["state"] == "failed"
+        assert status["written_files"] == [str(output)]
+        assert status["output_verification"] == {
+            "state": "failed",
+            "expected_output_count": 1,
+            "written_file_count": 1,
+        }
+
+    def test_background_worker_rejects_empty_output(self, tmp_path: Path) -> None:
+        output = tmp_path / "beauty.0001.exr"
+
+        def render(_rop, _frame_range):
+            output.write_bytes(b"")
+            return [1.0, 1.0], "execute"
+
+        status = _run_render_worker(tmp_path, [1, 1, 1], [output], {}, render)
+
+        assert status["state"] == "failed"
+        assert status["written_files"] == []
+        assert status["output_verification"] == {
+            "state": "not_observed",
+            "expected_output_count": 1,
+            "written_file_count": 0,
+        }
+
     def test_background_worker_verifies_partial_outputs_when_render_raises(self, tmp_path: Path) -> None:
         expected = [tmp_path / "beauty.{:04d}.exr".format(frame) for frame in range(1, 5)]
 
