@@ -37,11 +37,13 @@ agent can detect and skip cleanly when rendering is unavailable.
   (reports `unsupported` fields per ROP type), `render_rop` (foreground or
   isolated `hython` background job), `get_render_job` (polls and reconciles
   status without blocking the UI), `cancel_render_job` (cancels only jobs
-  owned by the current adapter process), `configure_aovs` (add/remove
-  AOVs with 15+ presets), `validate_karma_stage` (read-only USD/Karma
+  owned by the current adapter process), `configure_aovs` (add/remove Solaris
+  RenderVars or native Mantra auxiliary planes with renderer-correct processing),
+  `validate_karma_stage` (read-only USD/Karma
   preflight), `get_render_stats` (read resolution/samples/renderer/output).
-- **`render_layer`:** `create_render_layer` (Solaris RenderProduct or ROP merge),
-  `manage_takes` (create/switch/delete/list takes for render layer variants).
+- **`render_layer`:** `create_render_layer` (Solaris RenderProduct or cloned
+  Mantra ifd ROP with its own output and object masks), `manage_takes`
+  (take lifecycle plus parameter-tuple overrides for render variants).
 
 ## Tracer-bullet flow
 
@@ -56,16 +58,20 @@ agent can detect and skip cleanly when rendering is unavailable.
 
 ### Render Layers & AOVs
 
-1. `create_render_layer(name="beauty", parent_path="/stage", purpose="beauty", aovs=["diffuse","specular","normal","depth"])`
-2. `configure_aovs(rop_path="/stage/beauty", aovs=["motionvector","cryptomatte"], action="add")`
-3. `validate_karma_stage(lop_path="/stage/OUT", renderer="karma_xpu")` → inspect instance and RenderVar diagnostics
-4. `get_render_stats(rop_path="/stage/beauty")` → verify resolution/samples/output
+1. For Solaris, `create_render_layer(name="beauty", parent_path="/stage", purpose="beauty", aovs=["diffuse","specular","normal","depth"])`.
+2. For Mantra, clone a real pass with an output distinct from its source:
+   `create_render_layer(name="solar_fx", parent_path="/out", source_rop_path="/out/mantra1", output_path="/tmp/solar_fx.$F4.exr", candidate_objects="/obj/sun_fx", exclude_objects="/obj/labels", aovs=["emission","depth"])`.
+3. `configure_aovs(rop_path="/out/solar_fx", aovs=["normal","depth","normal"], action="add")` adds only missing Mantra planes; `action="remove"` removes matching preset/source/channel planes and compacts the multiparm.
+4. `validate_karma_stage(lop_path="/stage/OUT", renderer="karma_xpu")` → inspect instance and RenderVar diagnostics.
+5. `get_render_stats(rop_path="/out/solar_fx")` → verify resolution/samples/output.
 
 ### Takes
 
 1. `manage_takes(action="create", take_name="lighting_variant_a")`
-2. `manage_takes(action="switch", take_name="lighting_variant_a")`
-3. `manage_takes(action="list")` → review all takes
+2. `manage_takes(action="add_override", take_name="lighting_variant_a", node_path="/out/solar_fx", parm_name="vm_picture")` → add the parameter tuple while restoring the previously current take.
+3. `manage_takes(action="remove_override", take_name="lighting_variant_a", node_path="/out/solar_fx", parm_name="vm_picture")` → remove it with the same restoration guarantee.
+4. `manage_takes(action="switch", take_name="lighting_variant_a")`
+5. `manage_takes(action="list")` → review all takes
 
 Interactive Houdini defaults to an isolated process; poll
 `get_render_job(job_id)` and use `cancel_render_job(job_id)` to stop a job
