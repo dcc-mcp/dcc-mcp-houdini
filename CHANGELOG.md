@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.22.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.2...v0.22.0) (2026-07-18)
+
+
+### Features
+
+* add typed MaterialX PBR authoring ([#157](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/157)) ([66bafd1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/66bafd1e29818b5636cabbdadd5e8f696e80ea71))
+
 ## [0.21.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.21.1...v0.21.2) (2026-07-17)
 
 
