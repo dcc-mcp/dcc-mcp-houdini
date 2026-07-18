@@ -14,6 +14,12 @@ if _SCRIPT_DIR not in sys.path:
 
 from _anim_common import get_node, get_parm  # noqa: E402
 
+_INTERPOLATION_EXPRESSIONS = {
+    "bezier": "bezier()",
+    "linear": "linear()",
+    "constant": "constant()",
+}
+
 
 def set_keyframe(
     node_path: str,
@@ -22,11 +28,13 @@ def set_keyframe(
     value: Optional[float] = None,
     expression: Optional[str] = None,
     language: str = "hscript",
+    interpolation: Optional[str] = None,
 ) -> dict:
     """Set a keyframe on ``node_path/parm_name`` at *frame*.
 
-    Provide ``value`` for a constant key or ``expression`` for an expression
-    key (``language`` is "hscript" or "python").
+    Provide ``value`` for a numeric key or ``expression`` for an expression
+    key (``language`` is "hscript" or "python"). For numeric keys, optional
+    ``interpolation`` selects the segment function starting at this key.
     """
     try:
         import hou  # noqa: PLC0415
@@ -35,6 +43,19 @@ def set_keyframe(
 
     if value is None and expression is None:
         return skill_error("Nothing to set", "Provide value or expression")
+    if expression is not None and interpolation is not None:
+        return skill_error(
+            "Conflicting keyframe options",
+            "interpolation applies only to numeric value keys",
+        )
+
+    normalized_interpolation = interpolation.lower() if interpolation is not None else None
+    if normalized_interpolation is not None and normalized_interpolation not in _INTERPOLATION_EXPRESSIONS:
+        return skill_error(
+            "Unsupported interpolation",
+            "interpolation must be 'bezier', 'linear', or 'constant'",
+            requested=interpolation,
+        )
 
     try:
         node = get_node(hou, node_path)
@@ -46,6 +67,11 @@ def set_keyframe(
             kf.setExpression(expression, lang)
         else:
             kf.setValue(float(value))
+            if normalized_interpolation is not None:
+                kf.setExpression(
+                    _INTERPOLATION_EXPRESSIONS[normalized_interpolation],
+                    hou.exprLanguage.Hscript,
+                )
         parm.setKeyframe(kf)
         return skill_success(
             "Set keyframe",
@@ -54,6 +80,7 @@ def set_keyframe(
             frame=float(frame),
             value=value,
             expression=expression,
+            interpolation=normalized_interpolation,
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to set keyframe")
