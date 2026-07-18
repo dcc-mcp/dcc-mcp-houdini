@@ -16,6 +16,22 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.24.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.23.1...v0.24.0) (2026-07-18)
+
+
+### Features
+
+* allow setting take override values ([#165](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/165)) ([1ffcf82](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1ffcf820737520b70050ed7452ef619c63ff7b6a))
+* support keyframe interpolation modes ([#167](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/167)) ([4d643f9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4d643f937fa030a4dc447d347d1c203be085ac43))
+
+
+### Bug Fixes
+
+* adjust _OUTPUT_PARMS order - outputimage before lopoutput for Solaris ([6bfef55](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6bfef55d1612b26daddb165e97be8a185dfcf135))
+* forward explicit frame ranges to ROP renders ([b0f9892](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b0f989240a27589a8ca1dd5d64c91599618d5e88))
+* **render:** verify background output completeness ([#169](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/169)) ([61a203d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/61a203d54343d8738196ba4f99217d4fb320d076))
+* resolve merge conflict - use render_node with _OUTPUT_PARMS reorder ([25ffdcb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/25ffdcbdd7082e07536539fc17e494949eb4019f))
+
 ## [0.23.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.23.0...v0.23.1) (2026-07-18)
 
 
