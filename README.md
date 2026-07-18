@@ -198,7 +198,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-geometry` | `create_primitive`, `get_geometry_info`, `list_attributes`, `list_groups`, `get_cook_status` |
 | `houdini-mesh-ops` | `transform_geometry`, `merge_geometry`, `blast_geometry`, `group_geometry`, `add_normals`, `triangulate_geometry`, `convert_geometry` |
 | `houdini-camera-light` | `list_cameras`, `create_camera`, `update_camera`, `frame_view`, `get_view_state`, `create_light`, `update_light` |
-| `houdini-materials` | `create_material`, `assign_material` |
+| `houdini-materials` | `create_material`, `assign_material`, `build_materialx_pbr`, `validate_materialx_pbr` |
 | `houdini-lookdev` | `list_materials`, `list_assignments`, `get_material_parms`, `set_material_parms`, `get_shader_connections`, `connect_shader`, `disconnect_shader`, `reset_material`, `save_preset`, `list_presets`, `load_preset`, `delete_preset` |
 | `houdini-hda` | `install_hda_file`, `list_hda_definitions`, `execute_hda`, `save_node_as_hda`, `promote_hda_parameters`, `author_hda_interface`, `publish_hda_library`, `validate_hda_contract`, `update_hda_definition`, `sync_hda_instance` |
 | `houdini-chops` | `create_chop_network`, `create_motionclip`, `create_audio_driven`, `apply_filter`, `export_to_keyframes`, `get_channel_info` |

@@ -34,6 +34,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Texture bake (lighting) | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__bake_lighting` |
 | Transfer high→low maps | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__transfer_maps` |
 | Create and assign material | `load_skill("houdini-materials")` → `houdini_materials__create_material` → `houdini_materials__assign_material` |
+| Build MaterialX PBR | `load_skill("houdini-materials")` → `houdini_materials__build_materialx_pbr` → `houdini_materials__validate_materialx_pbr` → `houdini_materials__assign_material` |
 | Animate & bake | `load_skill("houdini-animation")` → `houdini_animation__set_timeline` → `houdini_animation__set_keyframe` → `houdini_animation__get_keyframes` → `houdini_animation__bake_channels` / `houdini_animation__cache_simulation` |
 | Validate an animation loop | `load_skill("houdini-animation")` → `houdini_animation__validate_loop_contract` (unique playback samples; periodic seam uses virtual `end+step`) |
 | Lookdev & shader networks | `load_skill("houdini-lookdev")` → `houdini_lookdev__list_materials` → `houdini_lookdev__get_material_parms` → `houdini_lookdev__set_material_parms` → `houdini_lookdev__save_preset` / `houdini_lookdev__load_preset` |
