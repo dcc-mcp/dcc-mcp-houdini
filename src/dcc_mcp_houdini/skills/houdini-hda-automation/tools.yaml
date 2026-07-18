@@ -164,4 +164,5 @@ tools:
             Explicitly select isolated hython (true) or foreground (false)
             execution. When omitted, interactive Houdini uses an isolated job
             and headless Houdini runs in the foreground. Explicit headless
-            isolation saves the existing HIP before spawning the worker.
+            isolation uses a job-owned temporary HIP snapshot without saving the
+            source scene.

@@ -33,9 +33,10 @@ adapter instance.
 - Persist job status for observation, but never treat a persisted PID as process ownership evidence.
 - Reject interactive isolated launch when the HIP is unsaved or has unsaved
   changes; never auto-save the user's GUI scene. For explicit headless isolated
-  launch, require an existing HIP and save its current state before spawning the
-  worker because Houdini 21 may retain a dirty flag after a successful headless
-  save. Reject the launch when that save fails.
+  launch, require an existing HIP and capture its current state with an owned
+  temporary `saveAsBackup()` snapshot. Never overwrite or rename the source HIP.
+  The worker restores the source name for `$HIP` resolution after loading the
+  snapshot, then removes the snapshot. Reject the launch when capture fails.
 - Derive output completion and ETA while polling from expected file signatures;
   do not send a callback to the interactive process for every frame.
 - Return bounded poll summaries by default. Full expected-output snapshots,
@@ -59,8 +60,9 @@ adapter instance.
 
 - Jobs started by an adapter instance cannot be cancelled after that instance restarts.
 - Process-tree termination remains platform-specific (`taskkill /T` on Windows, process groups on POSIX).
-- Explicit headless isolated launch saves the current HIP before spawning its
-  worker; normal headless execution remains foreground and does not add a save.
+- Explicit headless isolated launch briefly consumes enough temporary storage
+  for one HIP snapshot; normal headless execution remains foreground and does
+  not add a snapshot.
 - Poll progress is output-file progress, so jobs without a discoverable output
   pattern report unknown progress/ETA.
 - ROP chains use execution/cook errors as their completion contract. They may
@@ -83,6 +85,7 @@ adapter instance.
 - https://www.sidefx.com/docs/houdini/hwebserver/index.html
 - https://www.sidefx.com/docs/houdini/hwebserver/apiFunction.html
 - https://www.sidefx.com/docs/houdini/hom/hou/ui.html
+- https://www.sidefx.com/docs/houdini/hom/hou/hipFile.html
 - https://www.sidefx.com/docs/houdini/hom/rpc
 - https://www.sidefx.com/docs/hengine/_h_a_p_i__sessions.html
 - https://www.sidefx.com/docs/houdini/ref/henginesessionsync.html

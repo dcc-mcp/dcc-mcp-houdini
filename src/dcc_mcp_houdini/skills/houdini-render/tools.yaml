@@ -188,7 +188,8 @@ tools:
             Explicitly select isolated hython (true) or foreground (false)
             execution. When omitted, interactive Houdini uses an isolated job
             and headless Houdini renders in the foreground. Explicit headless
-            isolation saves the existing HIP before spawning the worker.
+            isolation uses a job-owned temporary HIP snapshot without saving the
+            source scene.
   - name: get_render_job
     description: >-
       Read bounded status, output progress, elapsed time, and ETA for a background

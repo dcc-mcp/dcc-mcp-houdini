@@ -91,7 +91,8 @@ to `unavailable`. Render and cache jobs still require a new or updated output.
 Interactive background launch requires a saved HIP with no unsaved changes and
 never auto-saves the GUI scene. Headless Houdini defaults to foreground; when
 `background=true` is explicitly requested, the adapter requires an existing HIP
-and saves its current state before spawning the isolated worker.
+and captures its current state in a job-owned temporary HIP snapshot without
+saving or renaming the source scene.
 The main thread only validates the ROP and launches the isolated process;
 Mantra/Karma work never occupies Houdini's event loop. Output-path and
 resolution parameter writes are defensive (candidate names) so Mantra, Karma,

@@ -1029,6 +1029,7 @@ class TestRenderExecution:
         assert mod._PROCESS_HANDLES[job["job_id"]] is process
         assert status["ignore_inputs"] is True
         assert status["job_kind"] == "rop_chain"
+        mock_hou.hipFile.saveAsBackup.assert_not_called()
 
     def test_background_render_gui_rejects_dirty_hip_without_saving(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
@@ -1043,9 +1044,54 @@ class TestRenderExecution:
             mod.launch_background_render(mock_hou, "/out/mantra1", [1, 2, 1], "beauty.$F4.exr")
 
         mock_hou.hipFile.save.assert_not_called()
+        mock_hou.hipFile.saveAsBackup.assert_not_called()
         popen.assert_not_called()
 
-    def test_background_render_headless_saves_current_hip_before_launch(self, tmp_path: Path) -> None:
+    def test_background_render_headless_launches_from_owned_snapshot_without_saving_source(
+        self, tmp_path: Path
+    ) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"source")
+        hython = tmp_path / ("hython.exe" if mod.os.name == "nt" else "hython")
+        hython.write_bytes(b"exe")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+        mock_hou.isUIAvailable.return_value = False
+        backup_env = {}
+        mock_hou.getenv.return_value = None
+        mock_hou.putenv.side_effect = lambda name, value: backup_env.__setitem__(name, value)
+        mock_hou.unsetenv.side_effect = lambda name: backup_env.pop(name, None)
+
+        def save_snapshot():
+            snapshot = Path(backup_env["HOUDINI_BACKUP_DIR"]) / "scene_bak1.hip"
+            snapshot.write_bytes(b"snapshot")
+            return str(snapshot)
+
+        mock_hou.hipFile.saveAsBackup.side_effect = save_snapshot
+        mock_hou.hipFile.save.side_effect = lambda: hip.write_bytes(b"overwritten")
+
+        with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
+            mod.tempfile, "gettempdir", return_value=str(tmp_path)
+        ), patch.object(mod.subprocess, "Popen", return_value=MagicMock(pid=4321)) as popen:
+            job = mod.launch_background_render(mock_hou, "/out/geometry1", [1, 2, 1], "cache.$F4.bgeo.sc")
+
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.save.assert_not_called()
+        mock_hou.hipFile.saveAsBackup.assert_called_once_with()
+        mock_hou.hipFile.setName.assert_not_called()
+        assert hip.read_bytes() == b"source"
+        status = json.loads((tmp_path / "dcc-mcp-houdini-render-jobs" / job["job_id"] / "status.json").read_text())
+        snapshot = Path(status["hip_path"])
+        assert snapshot.parent == tmp_path / "dcc-mcp-houdini-render-jobs" / job["job_id"]
+        assert snapshot.read_bytes() == b"snapshot"
+        assert status["source_hip_path"] == str(hip)
+        assert status["hip_snapshot_owned"] is True
+        assert Path(popen.call_args.args[0][2]) == snapshot
+        popen.assert_called_once()
+
+    def test_background_render_headless_rejects_failed_snapshot(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
         hip = tmp_path / "scene.hip"
         hip.write_bytes(b"hip")
@@ -1053,30 +1099,17 @@ class TestRenderExecution:
         hython.write_bytes(b"exe")
         mock_hou = MagicMock()
         mock_hou.hipFile.path.return_value = str(hip)
-        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+        mock_hou.getenv.return_value = None
+        mock_hou.hipFile.saveAsBackup.side_effect = RuntimeError("snapshot failed")
         mock_hou.isUIAvailable.return_value = False
 
         with patch.object(mod.sys, "executable", str(tmp_path / "houdini.exe")), patch.object(
             mod.tempfile, "gettempdir", return_value=str(tmp_path)
-        ), patch.object(mod.subprocess, "Popen", return_value=MagicMock(pid=4321)) as popen:
+        ), patch.object(mod.subprocess, "Popen") as popen, pytest.raises(ValueError, match="snapshot"):
             mod.launch_background_render(mock_hou, "/out/geometry1", [1, 2, 1], "cache.$F4.bgeo.sc")
 
-        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
-        mock_hou.hipFile.save.assert_called_once_with()
-        popen.assert_called_once()
-
-    def test_background_render_headless_rejects_failed_save(self, tmp_path: Path) -> None:
-        mod = _load_script("houdini-render", "_background_render.py")
-        hip = tmp_path / "scene.hip"
-        hip.write_bytes(b"hip")
-        mock_hou = MagicMock()
-        mock_hou.hipFile.path.return_value = str(hip)
-        mock_hou.hipFile.save.side_effect = RuntimeError("save failed")
-        mock_hou.isUIAvailable.return_value = False
-
-        with patch.object(mod.subprocess, "Popen") as popen, pytest.raises(ValueError, match="failed to save"):
-            mod.launch_background_render(mock_hou, "/out/geometry1", [1, 2, 1], "cache.$F4.bgeo.sc")
-
+        mock_hou.hipFile.save.assert_not_called()
+        mock_hou.hipFile.saveAsBackup.assert_called_once_with()
         popen.assert_not_called()
 
     def test_background_render_headless_rejects_missing_hip(self, tmp_path: Path) -> None:
@@ -1113,6 +1146,64 @@ class TestRenderExecution:
         assert second["cancel_requested"] is False
         terminate.assert_called_once_with(process)
         assert job_id not in mod._PROCESS_HANDLES
+
+    def test_cancel_background_render_removes_only_job_owned_hip_snapshot(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "8" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        snapshot = job_dir / "scene_bak1.hip"
+        snapshot.write_bytes(b"snapshot")
+        source = tmp_path / "scene.hip"
+        source.write_bytes(b"source")
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "running",
+                    "hip_path": str(snapshot),
+                    "source_hip_path": str(source),
+                    "hip_snapshot_owned": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        process = MagicMock(pid=4321)
+        process.poll.side_effect = [None, 0]
+        mod._PROCESS_HANDLES[job_id] = process
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod, "_terminate_process_tree"
+        ):
+            result = mod.cancel_render_job(job_id)
+
+        assert result["state"] == "cancelled"
+        assert not snapshot.exists()
+        assert source.read_bytes() == b"source"
+
+    def test_terminal_status_never_removes_snapshot_path_outside_owned_job_directory(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "7" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        outside = tmp_path / "scene.hip"
+        outside.write_bytes(b"source")
+        (job_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "state": "completed",
+                    "hip_path": str(outside),
+                    "hip_snapshot_owned": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)):
+            mod.read_render_job(job_id)
+
+        assert outside.read_bytes() == b"source"
 
     def test_concurrent_cancel_terminates_owned_process_once(self, tmp_path: Path) -> None:
         from concurrent.futures import ThreadPoolExecutor
@@ -1445,6 +1536,62 @@ class TestRenderExecution:
 
         assert killpg.call_args_list[0].args == (4321, mod._SIGTERM)
         assert killpg.call_args_list[1].args == (4321, mod._SIGKILL)
+
+    def test_background_worker_restores_source_hip_name_and_removes_owned_snapshot(self, tmp_path: Path) -> None:
+        mod = _load_render_worker()
+        source = tmp_path / "source.hip"
+        source.write_bytes(b"source")
+        snapshot = tmp_path / "snapshot.hip"
+        snapshot.write_bytes(b"snapshot")
+        output = tmp_path / "beauty.0001.exr"
+        stdout = tmp_path / "stdout.log"
+        stderr = tmp_path / "stderr.log"
+        stdout.write_text("", encoding="utf-8")
+        stderr.write_text("", encoding="utf-8")
+        status_path = tmp_path / "status.json"
+        status_path.write_text(
+            json.dumps(
+                {
+                    "state": "queued",
+                    "job_kind": "render",
+                    "stdout_path": str(stdout),
+                    "stderr_path": str(stderr),
+                    "source_hip_path": str(source),
+                    "hip_snapshot_owned": True,
+                    "expected_outputs": [str(output)],
+                    "output_snapshot": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        def render(_rop, _frame_range):
+            output.write_bytes(b"new")
+            return [1.0, 1.0], "render"
+
+        argv = [
+            "_render_worker.py",
+            str(snapshot),
+            "/out/mantra1",
+            json.dumps([1, 1, 1]),
+            str(status_path),
+            json.dumps(str(tmp_path / "beauty.$F4.exr")),
+            "false",
+        ]
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod.sys, "argv", argv), patch.object(
+            mod, "render_node", side_effect=render
+        ):
+            mod.main()
+
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status["state"] == "completed"
+        mock_hou.hipFile.load.assert_called_once_with(str(snapshot), suppress_save_prompt=True)
+        mock_hou.hipFile.setName.assert_called_once_with(str(source))
+        assert not snapshot.exists()
+        assert source.read_bytes() == b"source"
 
     def test_background_worker_reports_only_updated_requested_outputs(self, tmp_path: Path) -> None:
         stale = tmp_path / "beauty.0001.exr"

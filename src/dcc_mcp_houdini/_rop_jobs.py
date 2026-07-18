@@ -27,27 +27,52 @@ def _hython_executable() -> Path:
     return executable
 
 
-def _validate_saved_hip(hou: Any) -> Path:
+def _validate_saved_hip(hou: Any) -> tuple:
     hip_path = Path(hou.hipFile.path())
     if not hip_path.is_file():
         raise ValueError("Background rendering requires the current HIP file to be saved")
-    if hou.isUIAvailable():
+    is_ui_available = bool(hou.isUIAvailable())
+    if is_ui_available:
         has_unsaved_changes = getattr(hou.hipFile, "hasUnsavedChanges", None)
         if callable(has_unsaved_changes) and has_unsaved_changes() is True:
             raise ValueError("Background rendering rejects unsaved changes; save the HIP file explicitly first")
-        return hip_path
+    return hip_path, is_ui_available
 
-    # Houdini 21.0.631 hython may keep hasUnsavedChanges() true after save, so
-    # persist the current state explicitly instead of trusting that flag or
-    # launching a worker against an older disk snapshot.
+
+def _save_owned_hip_snapshot(hou: Any, job_dir: Path) -> Path:
+    """Save a headless copy without changing or overwriting the current HIP."""
+    backup_dir = hou.getenv("HOUDINI_BACKUP_DIR")
+    snapshot_path = None
+    hou.putenv("HOUDINI_BACKUP_DIR", str(job_dir))
     try:
-        hou.hipFile.save()
+        snapshot_path = Path(hou.hipFile.saveAsBackup())
     except Exception as exc:
-        raise ValueError("Headless background rendering failed to save the current HIP file") from exc
-    hip_path = Path(hou.hipFile.path())
-    if not hip_path.is_file():
-        raise ValueError("Headless background rendering did not produce a saved HIP file")
-    return hip_path
+        raise ValueError("Headless background rendering failed to create an isolated HIP snapshot") from exc
+    finally:
+        if backup_dir is None:
+            hou.unsetenv("HOUDINI_BACKUP_DIR")
+        else:
+            hou.putenv("HOUDINI_BACKUP_DIR", backup_dir)
+    if snapshot_path.resolve().parent != job_dir.resolve() or not snapshot_path.is_file():
+        raise ValueError("Headless background rendering did not produce an owned HIP snapshot")
+    return snapshot_path
+
+
+def _remove_owned_hip_snapshot(status_path: Path, status: Dict[str, Any]) -> bool:
+    """Remove only a snapshot located directly inside this job's directory."""
+    if status.get("hip_snapshot_owned") is not True:
+        return False
+    snapshot_value = status.get("hip_path")
+    if not snapshot_value:
+        return False
+    snapshot_path = Path(str(snapshot_value))
+    if snapshot_path.resolve().parent != status_path.parent.resolve():
+        return False
+    try:
+        snapshot_path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def launch_background_render(
@@ -59,18 +84,34 @@ def launch_background_render(
     job_kind: str = "render",
 ) -> Dict[str, Any]:
     """Launch one saved ROP job in an isolated hython process."""
-    hip_path = _validate_saved_hip(hou)
+    source_hip_path, is_ui_available = _validate_saved_hip(hou)
     executable = _hython_executable()
     initial, status_path = _isolated_jobs.create_job(
         {
             "job_kind": job_kind,
-            "hip_path": str(hip_path),
+            "hip_path": str(source_hip_path),
             "rop_path": rop_path,
             "frame_range": frame_range,
             "output_pattern": output_pattern,
             "ignore_inputs": bool(ignore_inputs),
         }
     )
+    hip_path = source_hip_path
+    if not is_ui_available:
+        try:
+            hip_path = _save_owned_hip_snapshot(hou, status_path.parent)
+        except Exception as exc:
+            initial.update({"state": "failed", "finished_at": time.time(), "error": str(exc)})
+            _isolated_jobs.write_status(status_path, initial)
+            raise
+        initial.update(
+            {
+                "hip_path": str(hip_path),
+                "source_hip_path": str(source_hip_path),
+                "hip_snapshot_owned": True,
+            }
+        )
+        _isolated_jobs.write_status(status_path, initial)
     worker_path = Path(__file__).resolve().parent / "skills" / "houdini-render" / "scripts" / "_render_worker.py"
     command = [
         str(executable),
@@ -84,7 +125,11 @@ def launch_background_render(
     ]
     child_env = dict(os.environ)
     child_env["DCC_MCP_BACKGROUND_RENDER"] = "1"
-    return _isolated_jobs.launch_job(initial["job_id"], command, child_env)
+    try:
+        return _isolated_jobs.launch_job(initial["job_id"], command, child_env)
+    except Exception:
+        _remove_owned_hip_snapshot(status_path, initial)
+        raise
 
 
 def _file_signature(path: str) -> Optional[Dict[str, int]]:
@@ -177,6 +222,8 @@ def _warning_lines(status: Dict[str, Any]) -> List[Any]:
 
 def read_render_job(job_id: str, include_details: bool = False) -> Dict[str, Any]:
     result = _with_progress(_isolated_jobs.read_job(job_id))
+    if result.get("state") in _isolated_jobs._TERMINAL_STATES:
+        _remove_owned_hip_snapshot(_isolated_jobs._status_path(job_id), result)
     warnings = _warning_lines(result)
     result["warning_count"] = len(warnings)
     if include_details:
@@ -198,5 +245,8 @@ def read_render_job(job_id: str, include_details: bool = False) -> Dict[str, Any
     return result
 
 
-def cancel_render_job(job_id: str) -> Dict[str, Any]:
-    return _isolated_jobs.cancel_job(job_id)
+def cancel_render_job(job_id: str, terminate: Any = None) -> Dict[str, Any]:
+    result = _isolated_jobs.cancel_job(job_id, terminate=terminate)
+    if result.get("state") in _isolated_jobs._TERMINAL_STATES:
+        _remove_owned_hip_snapshot(_isolated_jobs._status_path(job_id), result)
+    return result

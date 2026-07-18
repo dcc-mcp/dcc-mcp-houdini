@@ -35,11 +35,21 @@ def _cook_errors(status: dict) -> list:
     return lines
 
 
+def _remove_owned_hip_snapshot(status_path: Path, status: dict, hip_path: Path) -> None:
+    """Remove only the snapshot created inside this job's directory."""
+    if status.get("hip_snapshot_owned") is True and hip_path.resolve().parent == status_path.parent.resolve():
+        try:
+            hip_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def main() -> None:
     import hou  # Lazy import: requires Houdini's embedded Python.
 
-    hip_path, rop_path, range_json, status_arg, output_json = sys.argv[1:6]
+    hip_arg, rop_path, range_json, status_arg, output_json = sys.argv[1:6]
     ignore_inputs = json.loads(sys.argv[6]) if len(sys.argv) > 6 else False
+    hip_path = Path(hip_arg)
     status_path = Path(status_arg)
     frame_range = json.loads(range_json)
     output_pattern = json.loads(output_json)
@@ -55,7 +65,10 @@ def main() -> None:
         "written_file_count": 0,
     }
     try:
-        hou.hipFile.load(hip_path, suppress_save_prompt=True)
+        hou.hipFile.load(str(hip_path), suppress_save_prompt=True)
+        if status.get("hip_snapshot_owned") is True:
+            hou.hipFile.setName(status["source_hip_path"])
+            _remove_owned_hip_snapshot(status_path, status, hip_path)
         rop = hou.node(rop_path)
         if rop is None:
             raise ValueError("ROP node not found: {}".format(rop_path))
@@ -116,6 +129,7 @@ def main() -> None:
             }
         )
     finally:
+        _remove_owned_hip_snapshot(status_path, status, hip_path)
         status["finished_at"] = time.time()
         write_status(status_path, status)
 
