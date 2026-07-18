@@ -927,6 +927,62 @@ class TestRenderPassAuthoring:
         assert variant.hasParmTuple(parm_tuple) is False
         assert takes.currentTake().name() == "main"
 
+    def test_manage_takes_adds_override_value_inside_target_take(self) -> None:
+        mod = _load_script("houdini-render", "manage_takes.py")
+        takes = _FakeTakes()
+        variant = takes.add("solar_fx")
+        parm_tuple = MagicMock()
+
+        def assert_target_current(_values):
+            assert takes.currentTake() is variant
+
+        parm_tuple.set.side_effect = assert_target_current
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.parmTuple.return_value = parm_tuple
+        mock_hou = MagicMock()
+        mock_hou.takes = takes
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.manage_takes(
+                "add_override",
+                take_name="solar_fx",
+                node_path="/out/mantra1",
+                parm_name="vm_picture",
+                value="/renders/solar_fx.$F4.exr",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["value_applied"] is True
+        assert variant.hasParmTuple(parm_tuple) is True
+        parm_tuple.set.assert_called_once_with(("/renders/solar_fx.$F4.exr",))
+        assert takes.currentTake().name() == "main"
+
+    def test_manage_takes_rolls_back_new_override_when_value_write_fails(self) -> None:
+        mod = _load_script("houdini-render", "manage_takes.py")
+        takes = _FakeTakes()
+        variant = takes.add("solar_fx")
+        parm_tuple = MagicMock()
+        parm_tuple.set.side_effect = RuntimeError("value rejected")
+        node = _node("/out/mantra1", "mantra1", "ifd")
+        node.parmTuple.return_value = parm_tuple
+        mock_hou = MagicMock()
+        mock_hou.takes = takes
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.manage_takes(
+                "add_override",
+                take_name="solar_fx",
+                node_path="/out/mantra1",
+                parm_name="vm_picture",
+                value="/renders/solar_fx.$F4.exr",
+            )
+
+        assert result["success"] is False
+        assert variant.hasParmTuple(parm_tuple) is False
+        assert takes.currentTake().name() == "main"
+
     def test_manage_takes_restores_current_take_when_override_update_fails(self) -> None:
         mod = _load_script("houdini-render", "manage_takes.py")
         takes = _FakeTakes()

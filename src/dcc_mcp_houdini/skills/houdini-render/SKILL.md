@@ -68,7 +68,7 @@ agent can detect and skip cleanly when rendering is unavailable.
 ### Takes
 
 1. `manage_takes(action="create", take_name="lighting_variant_a")`
-2. `manage_takes(action="add_override", take_name="lighting_variant_a", node_path="/out/solar_fx", parm_name="vm_picture")` → add the parameter tuple while restoring the previously current take.
+2. `manage_takes(action="add_override", take_name="lighting_variant_a", node_path="/out/solar_fx", parm_name="vm_picture", value="/tmp/lighting_variant_a.$F4.exr")` → add and set the take-local parameter while restoring the previously current take.
 3. `manage_takes(action="remove_override", take_name="lighting_variant_a", node_path="/out/solar_fx", parm_name="vm_picture")` → remove it with the same restoration guarantee.
 4. `manage_takes(action="switch", take_name="lighting_variant_a")`
 5. `manage_takes(action="list")` → review all takes

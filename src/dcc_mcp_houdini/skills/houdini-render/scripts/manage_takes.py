@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -18,6 +18,7 @@ def manage_takes(
     take_name: Optional[str] = None,
     node_path: Optional[str] = None,
     parm_name: Optional[str] = None,
+    value: Any = None,
 ) -> dict:
     """Manage takes and their parameter-tuple overrides."""
     try:
@@ -63,6 +64,12 @@ def manage_takes(
             )
 
         if action in ("add_override", "remove_override"):
+            if action == "remove_override" and value is not None:
+                return skill_error(
+                    "Invalid value",
+                    "value is supported only for action=add_override",
+                    action=action,
+                )
             if not take_name:
                 return skill_error("Missing take_name", "take_name is required for action={}".format(action))
             target = takes.findTake(take_name)
@@ -94,6 +101,7 @@ def manage_takes(
                 )
 
             changed = False
+            value_applied = False
             takes.setCurrentTake(target)
             try:
                 included = target.hasParmTuple(parm_tuple)
@@ -103,6 +111,15 @@ def manage_takes(
                 elif action == "remove_override" and included:
                     target.removeParmTuple(parm_tuple)
                     changed = True
+                if action == "add_override" and value is not None:
+                    values = tuple(value) if isinstance(value, (list, tuple)) else (value,)
+                    try:
+                        parm_tuple.set(values)
+                    except Exception:
+                        if changed:
+                            target.removeParmTuple(parm_tuple)
+                        raise
+                    value_applied = True
                 return skill_success(
                     "Updated take parameter override",
                     action=action,
@@ -110,6 +127,7 @@ def manage_takes(
                     node_path=node_path,
                     parm_name=parm_name,
                     changed=changed,
+                    value_applied=value_applied,
                 )
             finally:
                 if takes.currentTake() != current:
