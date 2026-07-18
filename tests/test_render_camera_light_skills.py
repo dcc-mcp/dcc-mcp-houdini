@@ -305,6 +305,7 @@ def _run_render_worker(
     ignore_inputs=False,
     job_kind="render",
     rop_errors=(),
+    expand_string=None,
 ):
     mod = _load_render_worker()
     if pattern is _DEFAULT_PATTERN:
@@ -332,6 +333,7 @@ def _run_render_worker(
     rop.errors.return_value = list(rop_errors)
     mock_hou = MagicMock()
     mock_hou.node.return_value = rop
+    mock_hou.text.expandString.side_effect = expand_string or (lambda value: value)
     mock_hou.text.expandStringAtFrame.side_effect = lambda value, frame: value.replace(
         "$F4", "{:04d}".format(int(frame))
     )
@@ -1774,7 +1776,7 @@ class TestRenderExecution:
         assert not snapshot.exists()
         assert source.read_bytes() == b"source"
 
-    def test_background_worker_reports_only_updated_requested_outputs(self, tmp_path: Path) -> None:
+    def test_background_worker_rejects_partial_requested_outputs(self, tmp_path: Path) -> None:
         stale = tmp_path / "beauty.0001.exr"
         stale.write_bytes(b"stale")
         outside = tmp_path / "beauty.0002.exr"
@@ -1791,8 +1793,14 @@ class TestRenderExecution:
             {str(stale): {"mtime_ns": stale.stat().st_mtime_ns, "size": stale.stat().st_size}},
             render,
         )
-        assert status["state"] == "completed"
+        assert status["state"] == "failed"
         assert status["written_files"] == [str(tmp_path / "beauty.0005.exr")]
+        assert status["output_verification"] == {
+            "state": "partial",
+            "expected_output_count": 3,
+            "written_file_count": 1,
+        }
+        assert status["error"] == "Render produced 1 of 3 expected outputs"
 
     def test_get_render_job_counts_new_output_without_explicit_frame_range(self, tmp_path: Path) -> None:
         output = tmp_path / "beauty.0001.exr"
@@ -1826,6 +1834,32 @@ class TestRenderExecution:
         assert result["progress"] == 1.0
         assert result["written_file_count"] == 1
         assert result["recent_written_files"] == [str(output)]
+
+    def test_background_worker_expands_houdini_variables_without_explicit_frame_range(self, tmp_path: Path) -> None:
+        output = tmp_path / "renders" / "beauty.0001.exr"
+
+        def render(_rop, _frame_range):
+            output.parent.mkdir()
+            output.write_bytes(b"new output")
+            return None, "render"
+
+        status = _run_render_worker(
+            tmp_path,
+            None,
+            [],
+            {},
+            render,
+            pattern="$HIP/renders/beauty.$F4.exr",
+            expand_string=lambda value: value.replace("$HIP", str(tmp_path)),
+        )
+
+        assert status["state"] == "completed"
+        assert [Path(path) for path in status["written_files"]] == [output]
+        assert status["output_verification"] == {
+            "state": "verified",
+            "expected_output_count": 1,
+            "written_file_count": 1,
+        }
 
     def test_background_worker_reports_partial_outputs_when_range_fails(self, tmp_path: Path) -> None:
         expected = [tmp_path / "beauty.{:04d}.exr".format(frame) for frame in range(1, 8)]

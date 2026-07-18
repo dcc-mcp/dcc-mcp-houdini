@@ -9,7 +9,14 @@ import time
 import traceback
 from pathlib import Path
 
-from _render_common import expanded_outputs, output_snapshot, render_node, requested_outputs, updated_outputs
+from _render_common import (
+    expand_output_variables,
+    expanded_outputs,
+    output_snapshot,
+    render_node,
+    requested_outputs,
+    updated_outputs,
+)
 
 
 def write_status(path: Path, payload: dict) -> None:
@@ -91,13 +98,16 @@ def main() -> None:
         if status.get("hip_snapshot_owned") is True:
             hou.hipFile.setName(status["source_hip_path"])
             _remove_owned_hip_snapshot(status_path, status, hip_path)
+        resolved_output_pattern = output_pattern
+        if not frame_range:
+            resolved_output_pattern = expand_output_variables(hou, output_pattern)
         rop = hou.node(rop_path)
         if rop is None:
             raise ValueError("ROP node not found: {}".format(rop_path))
         expected_outputs = (
             status["expected_outputs"]
             if frame_range and "expected_outputs" in status
-            else requested_outputs(hou, output_pattern, frame_range)
+            else requested_outputs(hou, resolved_output_pattern, frame_range)
         )
         before = status.get("output_snapshot")
         if before is None:
@@ -111,12 +121,23 @@ def main() -> None:
             _, execution_mode = render_node(rop, frame_range)
         rop_errors = [str(error) for error in rop.errors()] if hasattr(rop, "errors") else []
         logged_cook_errors = _cook_errors(status)
-        candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
-        written_files, output_verification = _verify_outputs(candidates, before, output_pattern)
+        candidates = expected_outputs if frame_range else expanded_outputs(resolved_output_pattern)
+        written_files, output_verification = _verify_outputs(candidates, before, resolved_output_pattern)
         if logged_cook_errors:
             raise RuntimeError("ROP cook error: {}".format("; ".join(logged_cook_errors[:3])))
         if rop_errors:
             raise RuntimeError("ROP errors: {}".format("; ".join(rop_errors)))
+        if (
+            frame_range
+            and output_verification["state"] == "partial"
+            and status.get("job_kind", "render") != "rop_chain"
+        ):
+            raise RuntimeError(
+                "Render produced {} of {} expected outputs".format(
+                    output_verification["written_file_count"],
+                    output_verification["expected_output_count"],
+                )
+            )
         if not written_files and status.get("job_kind", "render") != "rop_chain":
             raise RuntimeError("Render produced no new or updated output for the requested frame range")
         status.update(
@@ -131,8 +152,8 @@ def main() -> None:
         )
     except Exception as exc:  # noqa: BLE001
         if verification_ready:
-            candidates = expected_outputs if frame_range else expanded_outputs(output_pattern)
-            written_files, output_verification = _verify_outputs(candidates, before, output_pattern)
+            candidates = expected_outputs if frame_range else expanded_outputs(resolved_output_pattern)
+            written_files, output_verification = _verify_outputs(candidates, before, resolved_output_pattern)
             if output_verification["state"] == "verified":
                 output_verification["state"] = "failed"
         status.update(

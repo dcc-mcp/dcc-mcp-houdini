@@ -149,6 +149,24 @@ def expanded_outputs(pattern: Optional[str]) -> list:
     return [pattern] if os.path.isfile(pattern) else []
 
 
+def expand_output_variables(hou: Any, pattern: Optional[str]) -> Optional[str]:
+    """Expand Houdini variables while preserving frame tokens for discovery."""
+    if not pattern:
+        return pattern
+    tokens = {}
+
+    def protect_frame_token(match: re.Match) -> str:
+        placeholder = "__DCC_MCP_FRAME_TOKEN_{}__".format(len(tokens))
+        tokens[placeholder] = match.group(0)
+        return placeholder
+
+    protected = re.sub(r"\$F\d*", protect_frame_token, pattern)
+    expanded = hou.text.expandString(protected)
+    for placeholder, token in tokens.items():
+        expanded = expanded.replace(placeholder, token)
+    return expanded
+
+
 def requested_outputs(hou: Any, pattern: Optional[str], frame_range: Optional[Sequence[float]]) -> list:
     """Expand the output paths for the exact requested frame range."""
     if not pattern:
