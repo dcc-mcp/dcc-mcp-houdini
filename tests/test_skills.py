@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 import yaml
+from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
 _SKILL_DIRS = tuple(sorted(d.name for d in _SKILLS_ROOT.iterdir() if (d / "SKILL.md").is_file()))
@@ -21,7 +22,8 @@ def _load_script(skill_name: str, script_name: str) -> ModuleType:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
     return module
 
 

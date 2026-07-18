@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import List
-
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _library_common import (  # noqa: E402
     find_image_filepath,
@@ -19,6 +12,7 @@ from _library_common import (  # noqa: E402
     is_image_node,
     iter_nodes_recursive,
 )
+from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
 def list_images(parent_path: str = "/mat") -> dict:

@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _render_common import eval_first_parm, get_node, node_summary  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def get_render_settings(rop_path: str) -> dict:

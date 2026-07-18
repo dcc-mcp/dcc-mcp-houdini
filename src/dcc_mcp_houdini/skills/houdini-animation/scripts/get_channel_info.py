@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _anim_common import get_node, get_parm  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def get_channel_info(node_path: str, parm_name: str) -> dict:

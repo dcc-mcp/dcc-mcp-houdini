@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _lookdev_common import get_node, node_summary  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def get_material_parms(material_path: str, name_filter: Optional[str] = None) -> dict:

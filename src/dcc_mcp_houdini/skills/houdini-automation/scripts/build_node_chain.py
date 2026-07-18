@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _atomic_node_chain import (
     AtomicNodeChainExecutor,
@@ -20,6 +12,7 @@ from _atomic_node_chain import (
     NodeChainValidator,
 )
 from _automation_common import hou_import_error, node_summary, set_parm_value
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def build_node_chain(

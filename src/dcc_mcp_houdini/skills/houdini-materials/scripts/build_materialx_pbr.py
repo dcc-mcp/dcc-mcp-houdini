@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _material_common import get_node, hou_import_error, node_summary
+from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
 def _set_value(node: Any, name: str, value: Any) -> None:

@@ -102,3 +102,37 @@ def test_module_exposes_expected_symbols() -> None:
     assert isinstance(lint_skills, types.ModuleType)
     assert hasattr(lint_skills, "CliLintResult")
     assert hasattr(lint_skills, "lint_skills_with_cli")
+
+
+def test_houdini_conventions_reject_sibling_sys_path_mutation(
+    tmp_path: pathlib.Path,
+) -> None:
+    skill_dir = tmp_path / "houdini-example"
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir(parents=True)
+    (skill_dir / "tools.yaml").write_text(
+        """tools:
+- name: example
+  source_file: scripts/example.py
+""",
+        encoding="utf-8",
+    )
+    (scripts_dir / "example.py").write_text(
+        """from pathlib import Path
+import sys
+
+script_dir = str(Path(__file__).resolve().parent)
+sys.path.insert(0, script_dir)
+from _common import helper
+""",
+        encoding="utf-8",
+    )
+    front = {"metadata": {"dcc-mcp": {"tools": "tools.yaml"}}}
+    errors = []
+
+    lint_skills._lint_houdini_conventions(skill_dir, front, errors)
+
+    assert errors == [
+        "houdini-example/example: skill scripts must import sibling helpers "
+        "directly; the shared runner owns script-directory import setup"
+    ]

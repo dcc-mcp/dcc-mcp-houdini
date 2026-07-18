@@ -1,13 +1,36 @@
 # dcc-mcp-houdini
 
-[![CI](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/ci.yml)
-[![E2E](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/e2e.yml)
-[![Release](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml/badge.svg)](https://github.com/loonghao/dcc-mcp-houdini/actions/workflows/release.yml)
+<p align="center">
+  <img src="docs/assets/dcc-mcp-houdini.svg" alt="DCC-MCP · HOUDINI" width="600">
+</p>
+
+## Agent workflow
+
+AI agents should use the shared gateway through `dcc-mcp-cli`; IDE users may
+continue to use the MCP endpoint. Prefer typed skills and tools over raw scripts.
+
+```bash
+dcc-mcp-cli dcc-types
+dcc-mcp-cli list
+dcc-mcp-cli search --query "<task>" --dcc-type houdini
+dcc-mcp-cli describe <tool-slug>
+dcc-mcp-cli call <tool-slug> --json '{"key":"value"}'
+```
+
+`dcc-types` reports release-catalog support; `list` reports live sessions. If a
+tool belongs to an inactive progressive skill, call `dcc-mcp-cli load-skill <skill-name> --dcc-type houdini` before retrying. For post-task improvement,
+attach a stable session id with `--meta-json`, query `dcc-mcp-cli stats --range 24h --session-id <task-id>`, then pass the bounded evidence to the
+`review_skill_improvement` prompt from `dcc-mcp-skills-creator`.
+
+
+[![CI](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/ci.yml/badge.svg)](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/ci.yml)
+[![E2E](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/e2e.yml/badge.svg)](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/e2e.yml)
+[![Release](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/release.yml/badge.svg)](https://github.com/dcc-mcp/dcc-mcp-houdini/actions/workflows/release.yml)
 [![PyPI](https://img.shields.io/pypi/v/dcc-mcp-houdini.svg)](https://pypi.org/project/dcc-mcp-houdini/)
 [![Python](https://img.shields.io/badge/python-3.7%2B-blue.svg)](pyproject.toml)
-[![Downloads](https://img.shields.io/github/downloads/loonghao/dcc-mcp-houdini/total.svg)](https://github.com/loonghao/dcc-mcp-houdini/releases)
-[![License](https://img.shields.io/github/license/loonghao/dcc-mcp-houdini.svg)](LICENSE)
-[![Release Assets](https://img.shields.io/github/v/release/loonghao/dcc-mcp-houdini?label=github%20release)](https://github.com/loonghao/dcc-mcp-houdini/releases)
+[![Downloads](https://img.shields.io/github/downloads/dcc-mcp/dcc-mcp-houdini/total.svg)](https://github.com/dcc-mcp/dcc-mcp-houdini/releases)
+[![License](https://img.shields.io/github/license/dcc-mcp/dcc-mcp-houdini.svg)](LICENSE)
+[![Release Assets](https://img.shields.io/github/v/release/dcc-mcp/dcc-mcp-houdini?label=github%20release)](https://github.com/dcc-mcp/dcc-mcp-houdini/releases)
 
 SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
@@ -42,7 +65,7 @@ skill and is CC0-1.0.
 Let your AI agent do the setup. In an MCP-capable agent (Cursor, Claude, etc.),
 just say:
 
-> 帮我参考 loonghao/dcc-mcp-houdini/install.md 去安装
+> 帮我参考 dcc-mcp/dcc-mcp-houdini/install.md 去安装
 
 The agent reads [`install.md`](install.md), runs the
 `dcc-mcp-houdini-setup` skill to install dependencies into Houdini's `hython`,
@@ -60,13 +83,13 @@ pip install dcc-mcp-houdini
 For an unreleased GitHub asset, install a release wheel directly:
 
 ```bash
-pip install https://github.com/loonghao/dcc-mcp-houdini/releases/download/v0.9.1/dcc_mcp_houdini-0.9.1-py3-none-any.whl
+pip install https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.9.1/dcc_mcp_houdini-0.9.1-py3-none-any.whl
 ```
 
 ### Houdini Quickinstall ZIP
 
 Download `dcc_mcp_houdini_quickinstall_<platform>_v<version>.zip` from
-[GitHub Releases](https://github.com/loonghao/dcc-mcp-houdini/releases), extract
+[GitHub Releases](https://github.com/dcc-mcp/dcc-mcp-houdini/releases), extract
 it to a stable folder, then run:
 
 ```powershell

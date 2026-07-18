@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _hda_common import definitions_in_file, hou_import_error, validate_hda_path
+from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
 def install_hda_file(file_path: str) -> dict:

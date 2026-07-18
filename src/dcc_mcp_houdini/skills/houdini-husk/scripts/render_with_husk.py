@@ -4,16 +4,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import time
-from pathlib import Path
 from typing import List, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _husk_common import (  # noqa: E402
     build_husk_command,
@@ -22,6 +14,7 @@ from _husk_common import (  # noqa: E402
     husk_subprocess_environment,
     resolve_husk_renderer,
 )
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def render_with_husk(

@@ -7,15 +7,7 @@ subset available through the Bake Texture ROP.
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import List, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _texture_bake_common import (  # noqa: E402
     collect_geometry,
@@ -24,6 +16,7 @@ from _texture_bake_common import (  # noqa: E402
     set_parm_if_exists,
     validate_map_types,
 )
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 _DEFAULT_MAP_TYPES = ["normals", "cavity", "curvature", "diffuse", "ambient_occlusion"]
 

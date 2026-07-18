@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import os
-import sys
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _automation_common import hou_import_error
+from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
 def save_hip_file(file_path: Optional[str] = None) -> dict:

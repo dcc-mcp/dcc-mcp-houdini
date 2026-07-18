@@ -16,6 +16,7 @@ import pytest
 import yaml
 from dcc_mcp_core import McpHttpConfig, create_skill_server
 from dcc_mcp_core.host import QueueDispatcher, StandaloneHost
+from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
 _SKILL_ROOT = _SKILLS_ROOT / "houdini-animation"
@@ -27,7 +28,8 @@ def _load_validator() -> ModuleType:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
     return module
 
 

@@ -4,19 +4,12 @@ from __future__ import annotations
 
 import glob
 import os
-import sys
 import time
-from pathlib import Path
 from typing import List, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _background_render import launch_background_render  # noqa: E402
 from _render_common import eval_first_parm, expanded_outputs, get_node, node_summary, render_node  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 _OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
 

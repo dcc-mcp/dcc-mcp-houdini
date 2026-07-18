@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from skill_loader import skill_script_import_context
 
 SCRIPTS = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills" / "houdini-husk" / "scripts"
 
 
 def _load_script(filename: str):
     path = SCRIPTS / filename
-    if str(SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SCRIPTS))
     spec = importlib.util.spec_from_file_location(f"husk_test_{path.stem}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
     return module
 
 

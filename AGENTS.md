@@ -2,6 +2,21 @@
 
 > Navigation map for AI agents. Detailed API → `llms.txt`.
 
+## Agent Control Path
+
+AI agent runtimes default to the shared gateway through the
+`dcc-cli-gateway` skill and `dcc-mcp-cli` REST commands:
+
+```bash
+dcc-mcp-cli search --query "<task>" --dcc-type houdini
+dcc-mcp-cli describe <tool-slug>
+dcc-mcp-cli call <tool-slug> --json '{"key":"value"}'
+```
+
+Use `dcc-mcp-cli list` for live instances and `dcc-mcp-cli dcc-types` for
+release-catalog support. IDE users may continue to configure the gateway MCP
+endpoint; adapter-local Python start APIs are for host bootstrap and tests.
+
 ## Quick Start (inside Houdini)
 
 ```python

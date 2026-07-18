@@ -2,15 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import List, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _light_rig_common import (  # noqa: E402
     get_node,
@@ -18,6 +10,7 @@ from _light_rig_common import (  # noqa: E402
     node_summary,
     set_parm_if_exists,
 )
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def aim_light_at_object(

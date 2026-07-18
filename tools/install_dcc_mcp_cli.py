@@ -3,7 +3,7 @@
 The skill linter (:mod:`tools.lint_skills`) prefers the standalone
 ``dcc-mcp-cli`` binary because it is the exact validator the runtime skill
 loader uses. The binary is published as a per-platform asset on the
-``loonghao/dcc-mcp-core`` GitHub releases, so CI and contributors can fetch it
+``dcc-mcp/dcc-mcp-core`` GitHub releases, so CI and contributors can fetch it
 with nothing more than the Python standard library.
 
 Usage::
