@@ -18,7 +18,7 @@ if _SCRIPT_DIR not in sys.path:
 from _background_render import launch_background_render  # noqa: E402
 from _render_common import eval_first_parm, expanded_outputs, get_node, node_summary, render_node  # noqa: E402
 
-_OUTPUT_PARMS = ("picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage")
+_OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
 
 
 def _expand_outputs(pattern: Optional[str]) -> list:
