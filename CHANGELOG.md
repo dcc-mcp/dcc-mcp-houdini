@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.23.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.23.0...v0.23.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* **render:** reject outputs from failed background jobs ([b875267](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b875267673f061dbc9531ce77d7d8124088f4322))
+
 ## [0.23.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.22.0...v0.23.0) (2026-07-18)
 
 
