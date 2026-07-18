@@ -42,7 +42,7 @@ def render_rop(
                 node_path=rop.path(),
             )
         output_pattern = eval_first_parm(rop, _OUTPUT_PARMS, preserve_string=True)
-        use_background = bool(hou.isUIAvailable()) if background is None else background
+        use_background = True if background is None else background
         if use_background:
             job = launch_background_render(hou, rop.path(), frame_range, output_pattern)
             return skill_success(

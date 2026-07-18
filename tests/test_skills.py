@@ -49,6 +49,15 @@ def test_tools_yaml_contract(skill_dir: str) -> None:
             assert tool.get("timeout_hint_secs"), f"{tool['name']} missing timeout_hint_secs"
 
 
+def test_render_rop_returns_its_render_job_identity_directly_by_default() -> None:
+    tools_path = _SKILLS_ROOT / "houdini-render" / "tools.yaml"
+    tools = yaml.safe_load(tools_path.read_text(encoding="utf-8"))["tools"]
+    render_rop = next(tool for tool in tools if tool["name"] == "render_rop")
+
+    assert render_rop["execution"] == "sync"
+    assert "timeout_hint_secs" not in render_rop
+
+
 def test_skills_index_exists() -> None:
     index = _SKILLS_ROOT / "SKILLS_INDEX.md"
     assert index.is_file()

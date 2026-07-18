@@ -147,18 +147,36 @@ def _with_progress(status: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(status)
     expected = list(result.get("expected_outputs") or [])
     before = dict(result.get("output_snapshot") or {})
-    observed_written_files = []
+    observed = []
     for output in expected:
         signature = _file_signature(output)
         if signature is not None and signature != before.get(output):
-            observed_written_files.append(output)
-    completed = len(observed_written_files)
+            observed.append(output)
+
+    state = result.get("state")
     total = len(expected)
+    if state in _isolated_jobs._TERMINAL_STATES and "written_files" in result:
+        completed_outputs = list(result.get("written_files") or [])
+        verification = result.get("output_verification") or {}
+        worker_total = verification.get("expected_output_count")
+        if isinstance(worker_total, int) and not isinstance(worker_total, bool) and worker_total >= 0:
+            total = max(total, worker_total)
+        total = max(total, len(completed_outputs))
+    elif state == "completed":
+        # Older workers did not persist written_files. A completed legacy job
+        # has closed all of its observed outputs, so none remains in progress.
+        completed_outputs = observed
+    else:
+        # Frame ranges emit expected outputs in order. The last observed file may
+        # still be open, so hold it pending until the worker verifies it.
+        completed_outputs = observed[:-1]
+
+    completed = len(completed_outputs)
     result["completed"] = completed
     result["total"] = total
     result["progress"] = float(completed) / total if total else None
     if result.get("state") not in _isolated_jobs._TERMINAL_STATES or "written_files" not in result:
-        result["written_files"] = observed_written_files
+        result["written_files"] = completed_outputs
 
     started_at = result.get("started_at")
     if started_at is not None:
@@ -166,7 +184,6 @@ def _with_progress(status: Dict[str, Any]) -> Dict[str, Any]:
         elapsed = float(finished_at) - float(started_at) if finished_at is not None else time.time() - float(started_at)
         result["elapsed_secs"] = round(max(0.0, elapsed), 3)
     elapsed_secs = result.get("elapsed_secs")
-    state = result.get("state")
     if state in {"failed", "cancelled", "interrupted"}:
         result["eta_secs"] = None
     elif state == "completed":
