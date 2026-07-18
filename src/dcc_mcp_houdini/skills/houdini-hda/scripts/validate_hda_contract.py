@@ -5,17 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _hda_common import hou_import_error, validate_hda_path
+from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 _MANIFEST_SECTION = "dcc_mcp/manifest.json"
 

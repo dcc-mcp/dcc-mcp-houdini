@@ -78,14 +78,14 @@ houdini-dev: houdini-link
 #
 #   just houdini-version=20.5 houdini-dev-build-link-core-win
 #   just houdini-version=20.5 houdini-dev-debug-win
-@houdini-dev-build-link-core-win: (houdini-version)
+@houdini-dev-build-link-core-win:
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/houdini-dev-build-link-core-win.ps1 -HoudiniVersion {{houdini-version}}
 
-@houdini-dev-debug-win: (houdini-version)
+@houdini-dev-debug-win:
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/houdini-dev-build-link-core-win.ps1 -HoudiniVersion {{houdini-version}} -LaunchHoudini
 
 # Windows: only refresh symlinks (skip maturin develop) after you already built core.
-@houdini-dev-relink-core-win: (houdini-version)
+@houdini-dev-relink-core-win:
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/houdini-dev-build-link-core-win.ps1 -HoudiniVersion {{houdini-version}} -SkipBuild
 
 # ── Houdini startup (for debug) ───────────────────────────────────────────────

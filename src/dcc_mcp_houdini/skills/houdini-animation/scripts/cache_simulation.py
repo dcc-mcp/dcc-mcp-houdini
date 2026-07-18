@@ -4,20 +4,13 @@ from __future__ import annotations
 
 import glob
 import os
-import sys
 import time
-from pathlib import Path
 from typing import List, Optional
 
+from _anim_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 from dcc_mcp_houdini._rop_jobs import launch_background_render
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
-from _anim_common import get_node  # noqa: E402
 
 _OUTPUT_PARMS = ("file", "sopoutput", "filename", "dopoutput", "picture", "outputimage")
 

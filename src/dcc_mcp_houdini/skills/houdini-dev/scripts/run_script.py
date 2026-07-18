@@ -3,16 +3,9 @@
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 from _dev_common import capture_call, is_root_allowed  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def run_script(script_path: str) -> dict:

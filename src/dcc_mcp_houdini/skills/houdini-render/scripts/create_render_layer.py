@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import Optional
 
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
 from _render_common import eval_first_parm, get_node, node_summary, set_first_parm  # noqa: E402
+from configure_aovs import _configure_mantra_aovs  # noqa: E402
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
 def _normalized_output_samples(hou, output_path: str) -> set:
@@ -131,8 +125,6 @@ def create_render_layer(
             configured_aovs = []
             unsupported_aovs = []
             if aovs:
-                from configure_aovs import _configure_mantra_aovs  # noqa: PLC0415
-
                 configured_aovs, unsupported_aovs = _configure_mantra_aovs(layer, aovs, "add")
                 if unsupported_aovs:
                     raise ValueError(

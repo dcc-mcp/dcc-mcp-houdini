@@ -8,6 +8,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
+from skill_loader import skill_script_import_context
+
 _SCRIPTS = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills" / "houdini-materials" / "scripts"
 
 
@@ -17,7 +19,8 @@ def _load_script(name: str) -> ModuleType:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
     return module
 
 

@@ -4,15 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-import sys
-from pathlib import Path
 from typing import Any, Dict, Optional
-
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
 import _export_preset_common  # noqa: E402
 from _export_preset_common import (  # noqa: E402
@@ -23,6 +15,7 @@ from _export_preset_common import (  # noqa: E402
     hou_import_error,
     node_summary,
 )
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 

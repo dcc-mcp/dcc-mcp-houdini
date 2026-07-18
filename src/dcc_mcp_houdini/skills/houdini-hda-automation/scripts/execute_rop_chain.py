@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import List, Optional
 
+from _hda_auto_common import get_node, node_summary  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 from dcc_mcp_houdini._rop_jobs import launch_background_render
-
-_SCRIPT_DIR = str(Path(__file__).resolve().parent)
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
-from _hda_auto_common import get_node, node_summary  # noqa: E402
 
 _OUTPUT_PARMS = ("outputimage", "picture", "vm_picture", "sopoutput", "filename", "dopoutput", "lopoutput")
 

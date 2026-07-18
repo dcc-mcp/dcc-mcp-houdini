@@ -340,6 +340,17 @@ def _lint_houdini_conventions(skill_dir: pathlib.Path, front: dict, errors: List
                     "{}/{}: hou import must be lazy inside the tool function".format(skill_dir.name, tool_name)
                 )
 
+        if "__file__" in script_text and any(
+            mutation in script_text for mutation in ("sys.path.insert", "sys.path.append")
+        ):
+            errors.append(
+                "{}/{}: skill scripts must import sibling helpers directly; "
+                "the shared runner owns script-directory import setup".format(
+                    skill_dir.name,
+                    tool_name,
+                )
+            )
+
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
