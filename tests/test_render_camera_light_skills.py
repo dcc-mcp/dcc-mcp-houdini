@@ -2207,7 +2207,7 @@ class TestRenderExecution:
         mock_hou.node.return_value = rop
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.render_rop("/out/mantra1", frame_range=[1, 1, 1])
+            result = mod.render_rop("/out/mantra1", frame_range=[1, 1, 1], background=False)
 
         assert result["success"] is True
         rop.render.assert_called_once_with(verbose=False, frame_range=(1.0, 1.0, 1.0))

@@ -16,7 +16,7 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 from _background_render import launch_background_render  # noqa: E402
-from _render_common import apply_frame_range, eval_first_parm, get_node, node_summary  # noqa: E402
+from _render_common import eval_first_parm, expanded_outputs, get_node, node_summary, render_node  # noqa: E402
 
 _OUTPUT_PARMS = ("picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage")
 
@@ -72,21 +72,12 @@ def render_rop(
         warnings: List[str] = []
         start = time.time()
         rendered = True
-        render_kwargs = {}
-        if frame_range:
-            render_kwargs["frame_range"] = (
-                float(frame_range[0]),
-                float(frame_range[1]),
-                float(frame_range[2]) if len(frame_range) > 2 else 1.0,
-            )
-        applied_range = apply_frame_range(rop, frame_range) if frame_range else None
         try:
-            rop.render(verbose=False, **render_kwargs)
-        except TypeError:
-            rop.render(**render_kwargs)
+            applied_range, execution_mode = render_node(rop, frame_range)
         except Exception as render_exc:  # noqa: BLE001
             rendered = False
             applied_range = None
+            execution_mode = None
             errors.append("Render failed: {}".format(render_exc))
         elapsed = round(time.time() - start, 3)
         rop_errors = getattr(rop, "errors", None)
@@ -95,11 +86,12 @@ def render_rop(
         rop_warnings = getattr(rop, "warnings", None)
         if callable(rop_warnings):
             warnings.extend(str(warning) for warning in rop_warnings())
-        written = _expand_outputs(output_pattern)
+        written = expanded_outputs(output_pattern)
         return skill_success(
             "Rendered ROP",
             rop=node_summary(rop),
             rendered=rendered,
+            execution_mode=execution_mode,
             elapsed_secs=elapsed,
             frame_range=applied_range,
             output_pattern=output_pattern,
