@@ -7,12 +7,15 @@ lifecycle, and the trailing-edge throttling — all without a live Houdini.
 from __future__ import annotations
 
 import json
+import threading
 import time
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
 
+import dcc_mcp_houdini._resources as resources
 from dcc_mcp_houdini._resources import (
     DEFAULT_SCENE_THROTTLE_SECS,
     ENV_RESOURCES,
@@ -213,6 +216,70 @@ class TestInstallResources:
         assert binder is not None
         assert binder.handle is server.resource_handle
         assert binder.scene_publish_count == 1
+
+    def test_save_as_publishes_registry_scene_after_save(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        callbacks: List[Callable[..., None]] = []
+        before_save = object()
+        after_save = object()
+        fake_hou = SimpleNamespace(
+            hipFile=SimpleNamespace(addEventCallback=callbacks.append),
+            hipFileEventType=SimpleNamespace(
+                AfterClear=object(),
+                AfterLoad=object(),
+                AfterMerge=object(),
+                AfterSave=after_save,
+            ),
+        )
+        monkeypatch.setattr(resources, "_hou", lambda: fake_hou)
+
+        main_thread = threading.get_ident()
+        current_scene = {"path": "old.hip"}
+        workers: List[threading.Thread] = []
+
+        class RegistryServer(_FakeServer):
+            def __init__(self) -> None:
+                super().__init__()
+                self.registry_scenes: List[str] = []
+
+            def publish_capability_snapshot(self, *, reason: str) -> bool:
+                if threading.get_ident() != main_thread:
+                    return False
+                self.registry_scenes.append(current_scene["path"])
+                return True
+
+        class ImmediateThreadTimer:
+            def __init__(self, _delay: float, callback: Callable[[], None]) -> None:
+                self.callback = callback
+                self.daemon = False
+
+            def start(self) -> None:
+                worker = threading.Thread(target=self.callback)
+                workers.append(worker)
+                worker.start()
+
+            def cancel(self) -> None:
+                pass
+
+        monkeypatch.setattr(resources.threading, "Timer", ImmediateThreadTimer)
+        server = RegistryServer()
+        binder = install_resources(
+            server,
+            snapshot_provider=lambda: {"scene": current_scene["path"]},
+            throttle_secs=0.5,
+        )
+        assert binder is not None
+        assert len(callbacks) == 1
+        server.registry_scenes.clear()
+        binder._last_publish_at = 0.0
+
+        callbacks[0](before_save)
+        current_scene["path"] = "new.hip"
+        callbacks[0](after_save)
+        for worker in workers:
+            worker.join()
+
+        assert server.registry_scenes == ["new.hip"]
+        binder.unbind()
 
 
 class TestModuleExports:
