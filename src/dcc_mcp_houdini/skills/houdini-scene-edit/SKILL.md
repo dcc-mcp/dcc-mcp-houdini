@@ -28,8 +28,9 @@ lifecycle and navigation.
 
 ## When to use
 
-- **Lifecycle:** `new_scene`, `open_scene`, `save_scene` — each guards against
-  silently discarding unsaved changes (pass `force=true` to override).
+- **Lifecycle:** `new_scene`, `open_scene`, `save_scene` — destructive calls
+  require a known-clean scene or explicit `force=true` when dirty state is
+  unknown.
 - **Selection & discovery:** `get_selection`, `set_selection`, `find_nodes`,
   `list_cameras`, `get_bounding_box`.
 

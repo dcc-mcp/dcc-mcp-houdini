@@ -25,6 +25,8 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional
 
+from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -96,7 +98,7 @@ class HoudiniContextSnapshotProvider:
         has_file = _safe(lambda: bool(hou.hipFile.hasFile()))
         if scene and has_file:
             snapshot["scene"] = scene
-        modified = _safe(lambda: bool(hou.hipFile.hasUnsavedChanges()))
+        modified = get_hip_dirty_state(hou)
         if modified is not None:
             snapshot["scene_saved"] = not modified
 

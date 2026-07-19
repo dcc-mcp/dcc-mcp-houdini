@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dcc_mcp_houdini import _isolated_jobs
+from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
 
 _SUMMARY_WARNING_LIMIT = 10
 _SUMMARY_TEXT_LIMIT = 500
@@ -32,10 +33,11 @@ def _validate_saved_hip(hou: Any) -> tuple:
     if not hip_path.is_file():
         raise ValueError("Background rendering requires the current HIP file to be saved")
     is_ui_available = bool(hou.isUIAvailable())
-    if is_ui_available:
-        has_unsaved_changes = getattr(hou.hipFile, "hasUnsavedChanges", None)
-        if callable(has_unsaved_changes) and has_unsaved_changes() is True:
-            raise ValueError("Background rendering rejects unsaved changes; save the HIP file explicitly first")
+    dirty = get_hip_dirty_state(hou)
+    if dirty is True:
+        raise ValueError("Background rendering rejects unsaved changes; save the HIP file explicitly first")
+    if is_ui_available and dirty is None:
+        raise ValueError("Background rendering cannot determine the current HIP dirty state")
     return hip_path, is_ui_available
 
 

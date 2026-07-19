@@ -16,7 +16,15 @@ from dcc_mcp_houdini._context_snapshot import (
 )
 
 
-def _fake_hou(*, scene="/projects/shot.hip", has_file=True, unsaved=False, version="20.5.445", obj_count=3):
+def _fake_hou(
+    *,
+    scene="/projects/shot.hip",
+    has_file=True,
+    unsaved=False,
+    version="20.5.445",
+    obj_count=3,
+    ui_available=True,
+):
     hip = SimpleNamespace(
         path=lambda: scene,
         name=lambda: scene,
@@ -29,6 +37,7 @@ def _fake_hou(*, scene="/projects/shot.hip", has_file=True, unsaved=False, versi
     return SimpleNamespace(
         hipFile=hip,
         playbar=playbar,
+        isUIAvailable=lambda: ui_available,
         frame=lambda: 1001,
         node=lambda path: obj_node if path == "/obj" else None,
         applicationVersionString=lambda: version,
@@ -48,6 +57,16 @@ def test_provider_collects_full_snapshot_when_houdini_available():
     assert snap["version"] == "20.5.445"
     assert snap["display_name"] == "Houdini 20.5.445 — shot.hip"
     assert snap["pid"] > 0
+
+
+def test_provider_omits_saved_state_when_hython_dirty_probe_is_unsupported():
+    provider = HoudiniContextSnapshotProvider(
+        hou_provider=lambda: _fake_hou(ui_available=False, unsaved=True),
+    )
+
+    snap = provider()
+
+    assert "scene_saved" not in snap
 
 
 def test_provider_returns_stub_when_hou_unavailable():

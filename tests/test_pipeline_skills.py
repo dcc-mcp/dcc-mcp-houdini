@@ -154,6 +154,24 @@ class TestValidation:
         assert result["context"]["valid"] is True
         assert result["context"]["dirty"] is False
 
+    def test_validate_scene_reports_unknown_dirty_state_in_hython(self, tmp_path) -> None:
+        mod = _load_script("validate_scene.py")
+        existing = tmp_path / "in.bgeo"
+        existing.write_text("x")
+        node = _node("/obj/geo1/file1", "file1", "file")
+        node.parms.return_value = [_file_parm("file", str(existing))]
+        node.errors.return_value = []
+        mock_hou = _mock_hou_with_file_parms()
+        mock_hou.node.return_value = node
+        mock_hou.isUIAvailable.return_value = False
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.validate_scene(node_paths=["/obj/geo1/file1"])
+
+        assert result["context"]["dirty"] is None
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+
     def test_collect_dependencies(self, tmp_path) -> None:
         mod = _load_script("collect_dependencies.py")
         existing = tmp_path / "tex.exr"

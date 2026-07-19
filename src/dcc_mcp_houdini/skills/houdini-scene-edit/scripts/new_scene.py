@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
+
 
 def new_scene(force: bool = False) -> dict:
     """Clear the current hip file.
 
-    Refuses to discard unsaved changes unless ``force`` is ``True``.
+    Requires a known-clean scene unless ``force`` is ``True``.
     """
     try:
         import hou  # noqa: PLC0415
@@ -16,15 +18,23 @@ def new_scene(force: bool = False) -> dict:
         return skill_error("Houdini not available", "hou could not be imported")
 
     try:
-        if not force and hou.hipFile.hasUnsavedChanges():
-            return skill_error(
-                "Scene has unsaved changes",
-                "Refusing to clear the scene; save first or call with force=true",
-                possible_solutions=[
-                    "Call houdini_scene_edit__save_scene first",
-                    "Re-run new_scene with force=true to discard changes",
-                ],
-            )
+        if not force:
+            dirty = get_hip_dirty_state(hou)
+            if dirty is True:
+                return skill_error(
+                    "Scene has unsaved changes",
+                    "Refusing to clear the scene; save first or call with force=true",
+                    possible_solutions=[
+                        "Call houdini_scene_edit__save_scene first",
+                        "Re-run new_scene with force=true to discard changes",
+                    ],
+                )
+            if dirty is None:
+                return skill_error(
+                    "Scene dirty state unavailable",
+                    "Cannot safely clear the scene when its dirty state is unknown; call with force=true to discard it",
+                    possible_solutions=["Re-run new_scene with force=true to discard the current scene"],
+                )
         hou.hipFile.clear(suppress_save_prompt=True)
         return skill_success("Started a new scene", forced=bool(force))
     except Exception as exc:
