@@ -53,7 +53,10 @@ tools:
   - name: set_parms
     description: >-
       Set one or many parameters with type-aware coercion. Tuple values target
-      parm tuples; per-parameter validation errors are reported, not fatal.
+      parm tuples. Existing keyframes and expression-driven channels are
+      preserved and reported as per-parameter conflicts; use houdini-animation
+      tools for intentional channel edits. Other per-parameter validation errors
+      are reported without aborting safe values in the same request.
     source_file: scripts/set_parms.py
     execution: sync
     affinity: main
@@ -74,7 +77,9 @@ tools:
           description: Node to modify.
         parameters:
           type: object
-          description: Mapping of parm name to scalar or list (tuple) value.
+          description: >-
+            Mapping of static parm name to scalar or list (tuple) value.
+            Animated or expression-driven channels are rejected.
   - name: get_parm_templates
     description: >-
       Inspect parameter templates for one parm or all top-level templates.

@@ -78,6 +78,8 @@ class TestParameterEdit:
         mod = _load_script("houdini-parameters", "set_parms.py")
         count_parm = MagicMock()
         count_parm.eval.return_value = 3  # int -> coerce "5" to 5
+        count_parm.keyframes.return_value = []
+        count_parm.isTimeDependent.return_value = False
         node = _node()
         node.parmTuple.side_effect = lambda n: None
         node.parm.side_effect = lambda n: count_parm if n == "count" else None
@@ -92,9 +94,84 @@ class TestParameterEdit:
         assert result["context"]["applied"]["count"] == 5
         assert "ghost" in result["context"]["errors"]
 
+    def test_set_parms_rejects_animated_parm_without_adding_ghost_keyframe(self) -> None:
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        keyframes = [MagicMock()]
+        animated_parm = MagicMock()
+        animated_parm.name.return_value = "tx"
+        animated_parm.eval.return_value = 1.25
+        animated_parm.keyframes.side_effect = lambda: list(keyframes)
+        animated_parm.isTimeDependent.return_value = True
+        animated_parm.set.side_effect = lambda _value: keyframes.append(MagicMock())
+        node = _node()
+        node.parm.side_effect = lambda name: animated_parm if name == "tx" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms(node.path(), {"tx": 2.5})
+
+        assert result["success"] is False
+        assert "tx" not in result["context"].get("applied", {})
+        assert "tx" in result["context"]["errors"]
+        assert "keyframe" in result["context"]["errors"]["tx"].lower()
+        animated_parm.set.assert_not_called()
+        assert len(keyframes) == 1
+
+    def test_set_parms_rejects_time_dependent_parm_without_keyframes(self) -> None:
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        animated_parm = MagicMock()
+        animated_parm.name.return_value = "tx"
+        animated_parm.keyframes.return_value = []
+        animated_parm.isTimeDependent.return_value = True
+        node = _node()
+        node.parm.side_effect = lambda name: animated_parm if name == "tx" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"tx": 2.5})
+
+        assert result["success"] is False
+        assert "time-dependent" in result["context"]["errors"]["tx"]
+        animated_parm.set.assert_not_called()
+
+    def test_set_parms_applies_static_values_but_reports_animated_conflicts(self) -> None:
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        static_parm = MagicMock()
+        static_parm.eval.return_value = 1.0
+        static_parm.keyframes.return_value = []
+        static_parm.isTimeDependent.return_value = False
+        animated_parm = MagicMock()
+        animated_parm.name.return_value = "tx"
+        animated_parm.eval.return_value = 1.25
+        animated_parm.keyframes.return_value = [MagicMock()]
+        animated_parm.isTimeDependent.return_value = True
+        node = _node()
+        node.parm.side_effect = lambda name: {
+            "ty": static_parm,
+            "tx": animated_parm,
+        }.get(name)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"ty": 2.5, "tx": 3.5})
+
+        assert result["success"] is True
+        assert result["context"]["applied"] == {"ty": 2.5}
+        assert "tx" in result["context"]["errors"]
+        static_parm.set.assert_called_once_with(2.5)
+        animated_parm.set.assert_not_called()
+
     def test_set_parms_tuple(self) -> None:
         mod = _load_script("houdini-parameters", "set_parms.py")
         t_tuple = MagicMock()
+        tuple_parms = [MagicMock(), MagicMock(), MagicMock()]
+        for parm in tuple_parms:
+            parm.keyframes.return_value = []
+            parm.isTimeDependent.return_value = False
+        t_tuple.__iter__.return_value = iter(tuple_parms)
         node = _node()
         node.parmTuple.side_effect = lambda n: t_tuple if n == "t" else None
         node.parm.side_effect = lambda n: None
@@ -106,6 +183,31 @@ class TestParameterEdit:
 
         assert result["success"] is True
         t_tuple.set.assert_called_once_with((1, 2, 3))
+
+    def test_set_parms_rejects_tuple_when_a_component_is_animated(self) -> None:
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        static_component = MagicMock()
+        static_component.name.return_value = "ty"
+        static_component.keyframes.return_value = []
+        static_component.isTimeDependent.return_value = False
+        animated_component = MagicMock()
+        animated_component.name.return_value = "tx"
+        animated_component.keyframes.return_value = [MagicMock()]
+        animated_component.isTimeDependent.return_value = True
+        t_tuple = MagicMock()
+        t_tuple.__iter__.return_value = iter([animated_component, static_component])
+        node = _node()
+        node.parmTuple.side_effect = lambda name: t_tuple if name == "t" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"t": [1.5, 2.5]})
+
+        assert result["success"] is False
+        assert "t" in result["context"]["errors"]
+        assert "tx" in result["context"]["errors"]["t"]
+        t_tuple.set.assert_not_called()
 
     def test_add_spare_parm_unsupported(self) -> None:
         mod = _load_script("houdini-parameters", "add_spare_parm.py")

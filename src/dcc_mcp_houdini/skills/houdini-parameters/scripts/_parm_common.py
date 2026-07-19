@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 
 def get_node(hou: Any, node_path: str) -> Any:
@@ -65,3 +65,35 @@ def coerce_scalar(value: Any, current: Any) -> Any:
     except (TypeError, ValueError):
         return value
     return value
+
+
+def channel_write_conflict(parm: Any) -> Optional[str]:
+    """Return why a plain value write would be unsafe, or ``None``.
+
+    ``hou.Parm.set`` writes at the current frame. On an animated channel that
+    can create a new keyframe instead of replacing the channel, so callers that
+    promise plain value assignment must inspect the channel before mutating it.
+    Inspection failures are conflicts: preserving an unknown channel is safer
+    than reporting a write that may not have changed its evaluated value.
+    """
+    name = _safe(parm, "name") or "<unknown>"
+    try:
+        keyframe_count = len(parm.keyframes())
+    except Exception as exc:  # noqa: BLE001
+        return "Cannot safely inspect keyframes for parameter {!r}: {}".format(name, exc)
+    if keyframe_count:
+        return (
+            "Parameter {!r} has {} keyframe(s); set_parms preserves keyframed and expression-driven channels. "
+            "Use houdini-animation tools to edit or clear the channel first."
+        ).format(name, keyframe_count)
+
+    try:
+        is_time_dependent = bool(parm.isTimeDependent())
+    except Exception as exc:  # noqa: BLE001
+        return "Cannot safely inspect time dependence for parameter {!r}: {}".format(name, exc)
+    if is_time_dependent:
+        return (
+            "Parameter {!r} is time-dependent; set_parms preserves expression-driven channels. "
+            "Use houdini-animation tools to edit or clear the channel first."
+        ).format(name)
+    return None
