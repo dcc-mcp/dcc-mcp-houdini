@@ -16,6 +16,22 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.24.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.24.0...v0.24.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* handle unknown HIP dirty state safely in hython ([#172](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/172)) ([b487d07](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b487d0788a20d8125e1d00166c56aaa97adb966a))
+* preserve animated parms in set_parms ([#173](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/173)) ([fb5bf51](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fb5bf51f3b03071f2e6c653bc8ffbde781bbdde5))
+* refresh scene metadata after hip changes ([#170](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/170)) ([ad5037e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ad5037e736a862904d56f0c72691fcace4d5ce2a))
+* **scene:** report object visibility and renderability ([#174](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/174)) ([84c0949](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/84c09493ba3e802a468ae8e11cad9cffe84bf063))
+* use runtime-scoped skill imports ([2689d13](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2689d132301fd8f82a273c155b402ad11727969e))
+
+
+### Documentation
+
+* document CLI install and updates ([6693862](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6693862e170ae31b932a87b8b5772e3c529ae893))
+
 ## [0.24.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.23.1...v0.24.0) (2026-07-18)
 
 
