@@ -106,6 +106,8 @@ tools:
     description: >-
       Return a read-only summary for a Houdini node including path, type,
       category, parent, child count, flags, and optional input/output links.
+      Object nodes additionally report effective object display and the
+      vm_renderable property; null means unsupported while false means off.
     source_file: scripts/get_node_info.py
     execution: sync
     affinity: main

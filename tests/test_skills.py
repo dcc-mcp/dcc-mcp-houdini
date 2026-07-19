@@ -27,6 +27,21 @@ def _load_script(skill_name: str, script_name: str) -> ModuleType:
     return module
 
 
+def _mock_inspection_node(category_name: str, path: str, type_name: str, *methods: str) -> MagicMock:
+    category = MagicMock()
+    category.name.return_value = category_name
+    type_obj = MagicMock()
+    type_obj.name.return_value = type_name
+    type_obj.category.return_value = category
+    node = MagicMock(spec=["children", "name", "parent", "path", "type", *methods])
+    node.path.return_value = path
+    node.name.return_value = path.rsplit("/", 1)[-1]
+    node.type.return_value = type_obj
+    node.parent.return_value = None
+    node.children.return_value = []
+    return node
+
+
 @pytest.mark.parametrize("skill_dir", _SKILL_DIRS)
 def test_validate_skill_clean(skill_dir: str) -> None:
     from dcc_mcp_core import validate_skill
@@ -223,6 +238,58 @@ class TestSceneNodeInspectionSkills:
         assert info["child_count"] == 1
         assert info["inputs"] == ["/obj/geo1/input", None]
         assert info["outputs"] == ["/obj/geo1/output"]
+
+    def test_get_node_info_reports_object_visibility_without_fabricating_sop_flags(self) -> None:
+        mod = _load_script("houdini-scene", "get_node_info.py")
+        node = _mock_inspection_node(
+            "Object",
+            "/obj/geo1",
+            "geo",
+            "isCurrent",
+            "isDisplayFlagSet",
+            "isHidden",
+            "isObjectDisplayed",
+            "isSelected",
+            "parm",
+        )
+        renderable = MagicMock(spec=["evalAsInt"])
+        renderable.evalAsInt.return_value = 0
+        node.isDisplayFlagSet.return_value = True
+        node.isObjectDisplayed.return_value = False
+        node.isCurrent.return_value = False
+        node.isSelected.return_value = False
+        node.isHidden.return_value = False
+        node.parm.return_value = renderable
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_node_info("/obj/geo1", include_connections=False)
+
+        assert result["success"] is True
+        flags = result["context"]["node"]["flags"]
+        assert flags["display"] is True
+        assert flags["object_displayed"] is False
+        assert flags["object_renderable"] is False
+        assert flags["bypassed"] is None
+        assert flags["render"] is None
+        assert flags["template"] is None
+        node.parm.assert_called_once_with("vm_renderable")
+
+    def test_get_node_info_marks_object_visibility_unsupported_for_other_categories(self) -> None:
+        mod = _load_script("houdini-scene", "get_node_info.py")
+        node = _mock_inspection_node("Unknown", "/custom/node1", "custom", "isObjectDisplayed", "parm")
+        node.isObjectDisplayed.return_value = False
+        node.parm.return_value.evalAsInt.return_value = 0
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_node_info("/custom/node1", include_connections=False)
+
+        flags = result["context"]["node"]["flags"]
+        assert flags["object_displayed"] is None
+        assert flags["object_renderable"] is None
 
 
 class TestNodeSkills:
