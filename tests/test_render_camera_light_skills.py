@@ -573,6 +573,40 @@ class TestViewportCapture:
 
 
 class TestRenderSettings:
+    def test_get_render_settings_reports_raw_pattern_and_resolution_frame(self) -> None:
+        mod = _load_script("houdini-render", "get_render_settings.py")
+        pattern = "$HIP/renders/beauty.$F4.exr"
+        current_frame = {"value": 1.0}
+        output_parm = _scalar_parm(pattern)
+        output_tuple = MagicMock()
+        output_tuple.eval.side_effect = lambda: (
+            "C:/show/shot/renders/beauty.{:04d}.exr".format(int(current_frame["value"])),
+        )
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parm.side_effect = lambda name: output_parm if name == "vm_picture" else None
+        rop.parmTuple.side_effect = lambda name: output_tuple if name == "vm_picture" else None
+        mock_hou = MagicMock()
+        mock_hou.frame.side_effect = lambda: current_frame["value"]
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            frame_1 = mod.get_render_settings("/out/mantra1")["context"]
+            current_frame["value"] = 576.0
+            frame_576 = mod.get_render_settings("/out/mantra1")["context"]
+
+        assert frame_1["output_path"] == ["C:/show/shot/renders/beauty.0001.exr"]
+        assert frame_1["output_path_pattern"] == pattern
+        assert frame_1["output_path_resolution"] == {
+            "frame": 1.0,
+            "paths": ["C:/show/shot/renders/beauty.0001.exr"],
+        }
+        assert frame_576["output_path"] == ["C:/show/shot/renders/beauty.0576.exr"]
+        assert frame_576["output_path_pattern"] == pattern
+        assert frame_576["output_path_resolution"] == {
+            "frame": 576.0,
+            "paths": ["C:/show/shot/renders/beauty.0576.exr"],
+        }
+
     def test_get_render_settings_reads_fields(self) -> None:
         mod = _load_script("houdini-render", "get_render_settings.py")
         rop = _node("/out/mantra1", "mantra1", "ifd")
@@ -584,6 +618,7 @@ class TestRenderSettings:
             "res_overridey": _scalar_parm(720),
         }.get(n)
         mock_hou = MagicMock()
+        mock_hou.frame.return_value = 1.0
         mock_hou.node.return_value = rop
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
@@ -592,6 +627,8 @@ class TestRenderSettings:
         assert result["success"] is True
         assert result["context"]["camera"] == "/obj/cam1"
         assert result["context"]["output_path"] == "/tmp/beauty.exr"
+        assert result["context"]["output_path_pattern"] == "/tmp/beauty.exr"
+        assert result["context"]["output_path_resolution"] == {"frame": 1.0, "paths": ["/tmp/beauty.exr"]}
         assert result["context"]["resolution"] == [1280, 720]
 
     def test_set_render_settings_reports_unsupported(self) -> None:

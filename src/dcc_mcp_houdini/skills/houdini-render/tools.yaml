@@ -70,7 +70,9 @@ tools:
   - name: get_render_settings
     description: >-
       Read renderer, camera, resolution, frame range, output path, and image
-      format from a ROP node. Read-only.
+      format from a ROP node. Preserves the existing resolved output_path and
+      also reports its raw tokenized pattern plus the frame-to-path resolution
+      used for that value. Read-only.
     source_file: scripts/get_render_settings.py
     execution: sync
     affinity: main
