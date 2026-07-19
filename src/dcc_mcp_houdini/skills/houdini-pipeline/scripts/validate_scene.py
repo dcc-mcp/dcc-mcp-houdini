@@ -8,6 +8,8 @@ from typing import List, Optional
 from _pipeline_common import expand_path, iter_file_parms, resolve_nodes  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
+
 
 def validate_scene(
     node_paths: Optional[List[str]] = None,
@@ -51,10 +53,7 @@ def validate_scene(
             if errs:
                 node_errors.append({"node": node.path(), "errors": errs})
 
-        try:
-            dirty = bool(hou.hipFile.hasUnsavedChanges())
-        except Exception:  # noqa: BLE001
-            dirty = None
+        dirty = get_hip_dirty_state(hou)
 
         issue_count = len(missing_files) + len(bad_output_dirs) + len(node_errors)
         valid = issue_count == 0

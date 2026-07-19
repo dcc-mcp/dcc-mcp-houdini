@@ -1106,6 +1106,22 @@ class TestRenderExecution:
         mock_hou.hipFile.saveAsBackup.assert_not_called()
         popen.assert_not_called()
 
+    def test_background_render_gui_rejects_unknown_dirty_state(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "_background_render.py")
+        hip = tmp_path / "scene.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.hasUnsavedChanges.side_effect = RuntimeError("probe failed")
+        mock_hou.isUIAvailable.return_value = True
+
+        with patch.object(mod.subprocess, "Popen") as popen, pytest.raises(ValueError, match="dirty state"):
+            mod.launch_background_render(mock_hou, "/out/mantra1", [1, 2, 1], "beauty.$F4.exr")
+
+        mock_hou.hipFile.save.assert_not_called()
+        mock_hou.hipFile.saveAsBackup.assert_not_called()
+        popen.assert_not_called()
+
     def test_background_render_headless_launches_from_owned_snapshot_without_saving_source(
         self, tmp_path: Path
     ) -> None:

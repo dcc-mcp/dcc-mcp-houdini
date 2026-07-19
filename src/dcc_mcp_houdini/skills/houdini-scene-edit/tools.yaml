@@ -1,8 +1,8 @@
 tools:
   - name: new_scene
     description: >-
-      Clear the current hip file and start an empty scene. Refuses to discard
-      unsaved changes unless force is true.
+      Clear the current hip file and start an empty scene. Requires a
+      known-clean scene unless force is true.
     source_file: scripts/new_scene.py
     execution: sync
     affinity: main
@@ -26,8 +26,8 @@ tools:
         - houdini_scene_edit__save_scene
   - name: open_scene
     description: >-
-      Load an existing hip file. Refuses to discard unsaved changes unless
-      force is true; returns a structured error when the file is missing.
+      Load an existing hip file. Requires a known-clean scene unless force is
+      true; returns a structured error when the file is missing.
     source_file: scripts/open_scene.py
     execution: sync
     affinity: main

@@ -171,6 +171,12 @@ or call `dcc_mcp_houdini.serve_headless(...)` from a dedicated Hython
 entrypoint. A plain headless `start_server()` fails before tools are registered
 instead of silently executing HOM on an HTTP worker.
 
+Hython cannot report a reliable HIP dirty state: context snapshots omit
+`scene_saved`, while `validate_scene` returns `dirty: null`; GUI sessions report
+the real boolean state. Destructive `open_scene` and `new_scene` calls fail
+closed when that state is unknown unless the caller explicitly passes
+`force=true`.
+
 Default minimal mode (`DCC_MCP_MINIMAL=1`) loads only:
 
 - `houdini-scripting`

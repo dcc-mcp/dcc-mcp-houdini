@@ -39,24 +39,107 @@ class TestSceneLifecycle:
     def test_new_scene_blocks_on_unsaved_changes(self) -> None:
         mod = _load_script("houdini-scene-edit", "new_scene.py")
         mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
         mock_hou.hipFile.hasUnsavedChanges.return_value = True
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.new_scene(force=False)
 
         assert result["success"] is False
+        mock_hou.hipFile.hasUnsavedChanges.assert_called_once_with()
         mock_hou.hipFile.clear.assert_not_called()
 
     def test_new_scene_force_clears(self) -> None:
         mod = _load_script("houdini-scene-edit", "new_scene.py")
         mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = False
         mock_hou.hipFile.hasUnsavedChanges.return_value = True
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.new_scene(force=True)
 
         assert result["success"] is True
-        mock_hou.hipFile.clear.assert_called_once()
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.clear.assert_called_once_with(suppress_save_prompt=True)
+
+    def test_new_scene_requires_force_when_hython_dirty_state_is_unknown(self) -> None:
+        mod = _load_script("houdini-scene-edit", "new_scene.py")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = False
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.new_scene(force=False)
+
+        assert result["success"] is False
+        assert result["message"] == "Scene dirty state unavailable"
+        assert "force=true" in result["error"]
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.clear.assert_not_called()
+
+    def test_open_scene_requires_force_when_hython_dirty_state_is_unknown(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-scene-edit", "open_scene.py")
+        hip = tmp_path / "shot.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = False
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+        mock_hou.hipFile.path.return_value = str(hip)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.open_scene(str(hip), force=False)
+
+        assert result["success"] is False
+        assert result["message"] == "Scene dirty state unavailable"
+        assert "force=true" in result["error"]
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.load.assert_not_called()
+
+    def test_new_scene_fails_closed_when_gui_dirty_probe_raises(self) -> None:
+        mod = _load_script("houdini-scene-edit", "new_scene.py")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.hipFile.hasUnsavedChanges.side_effect = RuntimeError("probe failed")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.new_scene(force=False)
+
+        assert result["success"] is False
+        assert result["message"] == "Scene dirty state unavailable"
+        mock_hou.hipFile.clear.assert_not_called()
+
+    def test_open_scene_still_blocks_real_gui_unsaved_changes(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-scene-edit", "open_scene.py")
+        hip = tmp_path / "shot.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.hipFile.hasUnsavedChanges.return_value = True
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.open_scene(str(hip), force=False)
+
+        assert result["success"] is False
+        mock_hou.hipFile.load.assert_not_called()
+
+    def test_open_scene_force_loads_in_hython_with_suppressed_prompt(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-scene-edit", "open_scene.py")
+        hip = tmp_path / "shot.hip"
+        hip.write_bytes(b"hip")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = False
+        mock_hou.hipFile.path.return_value = str(hip)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.open_scene(str(hip), force=True)
+
+        assert result["success"] is True
+        mock_hou.hipFile.hasUnsavedChanges.assert_not_called()
+        mock_hou.hipFile.load.assert_called_once_with(
+            str(hip),
+            suppress_save_prompt=True,
+            ignore_load_warnings=False,
+        )
 
     def test_save_scene_requires_path_when_never_saved(self) -> None:
         mod = _load_script("houdini-scene-edit", "save_scene.py")
