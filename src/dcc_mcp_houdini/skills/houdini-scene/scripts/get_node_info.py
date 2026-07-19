@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -27,6 +27,18 @@ def _path_or_none(node: Any) -> Optional[str]:
 def _optional_bool(node: Any, method_name: str) -> Optional[bool]:
     value = _call_or_none(node, method_name)
     return bool(value) if value is not None else None
+
+
+def _object_visibility_flags(node: Any, category: Optional[str]) -> Dict[str, Optional[bool]]:
+    if category != "Object":
+        return {"object_displayed": None, "object_renderable": None}
+
+    parm_method = getattr(node, "parm", None)
+    renderable_parm = parm_method("vm_renderable") if callable(parm_method) else None
+    return {
+        "object_displayed": _optional_bool(node, "isObjectDisplayed"),
+        "object_renderable": _optional_bool(renderable_parm, "evalAsInt"),
+    }
 
 
 def _type_context(node: Any) -> dict:
@@ -57,6 +69,7 @@ def get_node_info(node_path: str, include_connections: bool = True) -> dict:
             return skill_error("Houdini node not found", node_path)
 
         children = list(node.children())
+        type_context = _type_context(node)
         context = {
             "path": node.path(),
             "name": node.name(),
@@ -71,9 +84,10 @@ def get_node_info(node_path: str, include_connections: bool = True) -> dict:
                 "current": _optional_bool(node, "isCurrent"),
                 "selected": _optional_bool(node, "isSelected"),
                 "hidden": _optional_bool(node, "isHidden"),
+                **_object_visibility_flags(node, type_context["category"]),
             },
         }
-        context.update(_type_context(node))
+        context.update(type_context)
         if include_connections:
             context["inputs"] = _connection_paths(_call_or_none(node, "inputs"))
             context["outputs"] = _connection_paths(_call_or_none(node, "outputs"))
