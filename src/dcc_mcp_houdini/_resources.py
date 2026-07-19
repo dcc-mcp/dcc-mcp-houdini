@@ -189,8 +189,13 @@ def _default_event_installer(callback: Callable[[], None]) -> List[Any]:
     if hou is None:
         return []
 
-    def _wrapper(*_args: Any, **_kwargs: Any) -> None:
-        callback()
+    after_events = tuple(
+        getattr(hou.hipFileEventType, name) for name in ("AfterClear", "AfterLoad", "AfterMerge", "AfterSave")
+    )
+
+    def _wrapper(event_type: Any, *_args: Any, **_kwargs: Any) -> None:
+        if event_type in after_events:
+            callback()
 
     try:
         hou.hipFile.addEventCallback(_wrapper)
