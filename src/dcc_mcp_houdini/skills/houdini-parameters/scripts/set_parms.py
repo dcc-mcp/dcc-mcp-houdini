@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from _parm_common import coerce_scalar, get_node  # noqa: E402
+from _parm_common import channel_write_conflict, coerce_scalar, get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -12,8 +12,9 @@ def set_parms(node_path: str, parameters: Dict[str, Any]) -> dict:
     """Set the given parameters, reporting per-parameter validation errors.
 
     Tuple values (lists) target parm tuples; scalars target single parms with
-    best-effort coercion to the parm's existing value type. Errors are collected
-    per parameter rather than aborting the whole call.
+    best-effort coercion to the parm's existing value type. Existing animation
+    and expressions are preserved and reported as per-parameter conflicts.
+    Errors are collected per parameter rather than aborting the whole call.
     """
     try:
         import hou  # noqa: PLC0415
@@ -31,12 +32,24 @@ def set_parms(node_path: str, parameters: Dict[str, Any]) -> dict:
                     if parm_tuple is None:
                         errors[name] = "No parameter tuple named {!r}".format(name)
                         continue
+                    conflicts = []
+                    for parm in parm_tuple:
+                        conflict = channel_write_conflict(parm)
+                        if conflict is not None:
+                            conflicts.append(conflict)
+                    if conflicts:
+                        errors[name] = "Cannot set parameter tuple {!r}: {}".format(name, "; ".join(conflicts))
+                        continue
                     parm_tuple.set(tuple(value))
                     applied[name] = list(value)
                 else:
                     parm = node.parm(name)
                     if parm is None:
                         errors[name] = "No parameter named {!r}".format(name)
+                        continue
+                    conflict = channel_write_conflict(parm)
+                    if conflict is not None:
+                        errors[name] = conflict
                         continue
                     try:
                         current = parm.eval()

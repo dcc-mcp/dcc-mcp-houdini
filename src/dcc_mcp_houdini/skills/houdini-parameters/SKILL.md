@@ -13,7 +13,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: authoring
-    version: "1.0.0"
+    version: "1.0.1"
     tags: [houdini, parameters, parms, spare, expression, channel, authoring]
     search-hint: "list parameters, get parm, set parm, parm template, spare parameter, channel expression, reference"
     tools: tools.yaml
@@ -30,11 +30,13 @@ and expression work.
 - **`parm-query`** (read-only): `list_parms`, `get_parms`, `get_parm_templates`,
   `get_expression`.
 - **`parm-edit`** (mutating): `set_parms` (type-aware coercion + per-parm
-  validation), `add_spare_parm`, `remove_spare_parm`.
+  validation while preserving animated channels), `add_spare_parm`,
+  `remove_spare_parm`.
 - **`parm-expression`** (mutating): `set_expression`, `clear_expression`.
 
 ## Suggested flow
 
 1. `list_parms` / `get_parm_templates` to discover names and types
-2. `set_parms` for type-coerced edits (errors reported per parameter)
+2. `set_parms` for static, type-coerced edits (errors reported per parameter;
+   keyframed or expression-driven parms are preserved)
 3. `set_expression` / `clear_expression` to drive or freeze a value
