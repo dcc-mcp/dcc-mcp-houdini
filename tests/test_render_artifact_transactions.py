@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import multiprocessing
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -154,6 +156,26 @@ def _completed_job(tmp_path: Path, count: int = 1):
     return job_id, status_path, artifacts
 
 
+def _finalize_frame_in_process(tmp_root, job_id, receipt, start_event, result_queue):
+    real_identity = _rop_jobs.stable_file_identity
+    delayed = [False]
+
+    def delayed_identity(path):
+        if not delayed[0] and os.path.normcase(str(path)) == os.path.normcase(receipt["staging_path"]):
+            delayed[0] = True
+            time.sleep(1.0)
+        return real_identity(path)
+
+    start_event.wait(10.0)
+    try:
+        with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_root)), patch.object(
+            _rop_jobs, "stable_file_identity", side_effect=delayed_identity
+        ):
+            result_queue.put(("ok", _rop_jobs.finalize_render_outputs(job_id, [receipt])))
+    except Exception as exc:  # noqa: BLE001
+        result_queue.put(("error", type(exc).__name__, str(exc)))
+
+
 def _receipt(job_id: str, artifact: dict) -> dict:
     identity = _render_artifacts.stable_file_identity(artifact["staging_path"])
     return {
@@ -173,6 +195,46 @@ def test_transaction_request_and_frames_are_fail_closed() -> None:
         _render_artifacts.normalize_transaction_request({"mode": "replace"})
     with pytest.raises(ValueError, match="integral"):
         _render_artifacts.integer_frames([1, 2.5, 1])
+
+
+def test_integer_frames_accepts_the_bounded_limit_in_both_directions() -> None:
+    limit = _render_artifacts.MAX_TRANSACTION_FRAMES
+    assert 1 <= limit <= 100000
+    assert len(_render_artifacts.integer_frames([1, limit])) == limit
+    assert len(_render_artifacts.integer_frames([limit, 1, -1])) == limit
+    assert len(_render_artifacts.integer_frames([1, 1 + ((limit - 1) * 2), 2])) == limit
+
+
+def test_integer_frames_rejects_above_limit_before_expansion() -> None:
+    limit = _render_artifacts.MAX_TRANSACTION_FRAMES
+    with patch.object(_render_artifacts, "range", side_effect=AssertionError("range must not expand"), create=True):
+        with pytest.raises(ValueError, match="at most"):
+            _render_artifacts.integer_frames([1, limit + 1])
+        with pytest.raises(ValueError, match="at most"):
+            _render_artifacts.integer_frames([1, 10**1000])
+
+
+def test_job_transaction_lock_releases_after_exception(tmp_path: Path) -> None:
+    status_path = tmp_path / "job" / "status.json"
+    status_path.parent.mkdir()
+    with pytest.raises(RuntimeError, match="inside lock"):
+        with _rop_jobs._artifact_transaction_lock(status_path):
+            raise RuntimeError("inside lock")
+    with _rop_jobs._artifact_transaction_lock(status_path):
+        pass
+
+
+def test_job_transaction_lock_times_out_and_remains_available(tmp_path: Path) -> None:
+    status_path = tmp_path / "job" / "status.json"
+    status_path.parent.mkdir()
+    with patch.object(_rop_jobs, "_ARTIFACT_LOCK_TIMEOUT_SECONDS", 0.0), patch.object(
+        _rop_jobs, "_try_artifact_transaction_lock", return_value=False
+    ):
+        with pytest.raises(TimeoutError, match="artifact transaction lock"):
+            with _rop_jobs._artifact_transaction_lock(status_path):
+                pass
+    with _rop_jobs._artifact_transaction_lock(status_path):
+        pass
 
 
 def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> None:
@@ -373,6 +435,37 @@ def test_windows_path_uses_rename_and_preserves_collision(tmp_path: Path) -> Non
     assert final.read_bytes() == b"stage"
 
 
+@pytest.mark.parametrize(
+    ("platform_name", "primitive_name"),
+    [("nt", "rename"), ("posix", "link")],
+)
+def test_publication_never_commits_source_replaced_after_expected_identity_check(
+    tmp_path: Path,
+    platform_name: str,
+    primitive_name: str,
+) -> None:
+    staged = tmp_path / "stage.exr"
+    final = tmp_path / "final.exr"
+    staged.write_bytes(b"validated bytes")
+    expected_identity = _render_artifacts.stable_file_identity(staged)
+    real_primitive = getattr(os, primitive_name)
+
+    def replace_then_publish(source, destination, *args, **kwargs):
+        staged.unlink()
+        staged.write_bytes(b"unvalidated replacement")
+        return real_primitive(source, destination, *args, **kwargs)
+
+    with patch.object(_render_artifacts.os, primitive_name, side_effect=replace_then_publish):
+        with pytest.raises(ValueError, match="identity"):
+            _render_artifacts.publish_no_clobber(
+                staged,
+                final,
+                platform_name=platform_name,
+                expected_identity=expected_identity,
+            )
+    assert not final.exists()
+
+
 def test_cross_volume_identity_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     staged = tmp_path / "stage.exr"
     final = tmp_path / "final.exr"
@@ -441,6 +534,25 @@ def test_finalize_rejects_staged_drift_without_writing_final(tmp_path: Path) -> 
     assert not Path(artifacts[0]["final_path"]).exists()
 
 
+def test_finalize_rejects_drift_after_persisting_publish_intent_without_writing_final(tmp_path: Path) -> None:
+    job_id, _, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    real_write_status = _isolated_jobs.write_status
+
+    def write_status(path, payload):
+        real_write_status(path, payload)
+        transaction = payload.get("artifact_transaction", {})
+        if any(artifact.get("state") == "publishing" for artifact in transaction.get("artifacts", [])):
+            Path(artifacts[0]["staging_path"]).write_bytes(b"changed after publication intent")
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _isolated_jobs, "write_status", side_effect=write_status
+    ):
+        with pytest.raises(ValueError, match="identity"):
+            _rop_jobs.finalize_render_outputs(job_id, [receipt])
+    assert not Path(artifacts[0]["final_path"]).exists()
+
+
 def test_finalize_collision_never_overwrites_final(tmp_path: Path) -> None:
     job_id, status_path, artifacts = _completed_job(tmp_path)
     receipt = _receipt(job_id, artifacts[0])
@@ -474,6 +586,92 @@ def test_finalize_preserves_committed_evidence_when_post_check_fails(tmp_path: P
     assert artifact["committed"] is True
     assert artifact["state"] == "commit_verification_failed"
     assert Path(artifact["final_path"]).is_file()
+
+
+def test_finalize_retry_recovers_transient_post_commit_failure(tmp_path: Path) -> None:
+    job_id, status_path, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _rop_jobs, "fsync_parent", side_effect=OSError("transient flush failure")
+    ):
+        with pytest.raises(OSError, match="transient flush failure"):
+            _rop_jobs.finalize_render_outputs(job_id, [receipt])
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)):
+        recovered = _rop_jobs.finalize_render_outputs(job_id, [receipt])
+
+    assert recovered["transaction_state"] == "committed"
+    assert recovered["aggregate"]["complete"] is True
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    artifact = status["artifact_transaction"]["artifacts"][0]
+    assert artifact["state"] == "committed"
+    assert "post_commit_error" not in artifact
+
+
+def test_finalize_retry_recovers_transient_helper_post_check_failure(tmp_path: Path) -> None:
+    job_id, status_path, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    real_identity = _render_artifacts.stable_file_identity
+    failed = [False]
+
+    def transient_final_identity(path):
+        if not failed[0] and os.path.normcase(str(path)) == os.path.normcase(artifacts[0]["final_path"]):
+            failed[0] = True
+            raise OSError("transient helper post-check failure")
+        return real_identity(path)
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _render_artifacts, "stable_file_identity", side_effect=transient_final_identity
+    ):
+        with pytest.raises(OSError, match="transient helper post-check failure"):
+            _rop_jobs.finalize_render_outputs(job_id, [receipt])
+    assert Path(artifacts[0]["final_path"]).is_file()
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)):
+        recovered = _rop_jobs.finalize_render_outputs(job_id, [receipt])
+
+    assert recovered["transaction_state"] == "committed"
+    assert recovered["aggregate"]["complete"] is True
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    artifact = status["artifact_transaction"]["artifacts"][0]
+    assert artifact["state"] == "committed"
+    assert "last_error" not in artifact
+
+
+def test_two_processes_finalize_different_frames_without_lost_status(tmp_path: Path) -> None:
+    job_id, status_path, artifacts = _completed_job(tmp_path, count=2)
+    receipts = [_receipt(job_id, artifact) for artifact in artifacts]
+    context = multiprocessing.get_context("spawn")
+    start_event = context.Event()
+    result_queue = context.Queue()
+    processes = [
+        context.Process(
+            target=_finalize_frame_in_process,
+            args=(tmp_path, job_id, receipt, start_event, result_queue),
+        )
+        for receipt in receipts
+    ]
+    for process in processes:
+        process.start()
+    start_event.set()
+    for process in processes:
+        process.join(20.0)
+    hung = [process for process in processes if process.is_alive()]
+    for process in hung:
+        process.terminate()
+        process.join(5.0)
+    assert not hung
+    assert [process.exitcode for process in processes] == [0, 0]
+    results = [result_queue.get(timeout=5.0) for _ in processes]
+    result_queue.close()
+    result_queue.join_thread()
+    assert [result[0] for result in results] == ["ok", "ok"]
+
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    transaction = status["artifact_transaction"]
+    assert [artifact["state"] for artifact in transaction["artifacts"]] == ["committed", "committed"]
+    assert transaction["aggregate"]["complete"] is True
+    assert all(Path(artifact["final_path"]).is_file() for artifact in transaction["artifacts"])
 
 
 def test_finalize_recovers_commit_before_status_update(tmp_path: Path) -> None:

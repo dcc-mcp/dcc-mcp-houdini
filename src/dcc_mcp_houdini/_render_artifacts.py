@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 TRANSACTION_MODE = "staged_no_clobber"
+MAX_TRANSACTION_FRAMES = 100000
 _REPARSE_POINT = 0x400
 _SHA256_HEX_LENGTH = 64
 
@@ -38,12 +39,15 @@ def integer_frames(frame_range: Optional[Sequence[float]]) -> list:
     values = list(frame_range)
     if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
         raise ValueError("artifact_transaction frame_range values must be numbers")
-    if any(not math.isfinite(float(value)) or float(value) != int(value) for value in values):
+    if any(isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()) for value in values):
         raise ValueError("artifact_transaction supports integral frames only")
     start, end = int(values[0]), int(values[1])
     step = int(values[2]) if len(values) == 3 else 1
     if step == 0 or (end - start) * step < 0:
         raise ValueError("frame_range step must move from start toward end")
+    frame_count = (abs(end - start) // abs(step)) + 1
+    if frame_count > MAX_TRANSACTION_FRAMES:
+        raise ValueError("artifact_transaction supports at most {} frames".format(MAX_TRANSACTION_FRAMES))
     stop = end + (1 if step > 0 else -1)
     frames = list(range(start, stop, step))
     if not frames:
@@ -177,10 +181,24 @@ def fsync_parent(path: Any, platform_name: Optional[str] = None) -> None:
         os.close(descriptor)
 
 
+def _rollback_mismatched_publication(final: Path, published_identity: Mapping[str, Any]) -> None:
+    """Remove only the mismatched final identity created by this publication."""
+    try:
+        current_identity = stable_file_identity(final)
+    except FileNotFoundError:
+        return
+    if current_identity != dict(published_identity):
+        raise RuntimeError("published final identity changed before rollback")
+    os.unlink(str(final))
+    if os.path.lexists(str(final)):
+        raise RuntimeError("mismatched published final could not be removed")
+
+
 def publish_no_clobber(
     staged_path: Any,
     final_path: Any,
     platform_name: Optional[str] = None,
+    expected_identity: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Commit with native no-clobber semantics and never fall back to replace."""
     staged = _absolute(staged_path)
@@ -188,11 +206,20 @@ def publish_no_clobber(
     assert_same_parent_and_volume(staged, final)
     if os.path.lexists(str(final)):
         raise FileExistsError("final output already exists: {}".format(final))
+    expected = dict(expected_identity) if expected_identity is not None else None
+    if expected is not None and stable_file_identity(staged) != expected:
+        raise ValueError("staged output identity changed before publication")
     cleanup_error = None
     if (platform_name or os.name) == "nt":
         os.rename(str(staged), str(final))
     else:
         os.link(str(staged), str(final), follow_symlinks=False)
+    if expected is not None:
+        published_identity = stable_file_identity(final)
+        if published_identity != expected:
+            _rollback_mismatched_publication(final, published_identity)
+            raise ValueError("published final identity does not match the expected staged identity")
+    if (platform_name or os.name) != "nt":
         try:
             os.unlink(str(staged))
         except OSError as exc:

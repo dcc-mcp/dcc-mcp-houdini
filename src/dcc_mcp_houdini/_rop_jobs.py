@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +31,72 @@ from dcc_mcp_houdini._render_artifacts import (
 _SUMMARY_WARNING_LIMIT = 10
 _SUMMARY_TEXT_LIMIT = 500
 _STDERR_TAIL_BYTES = 256 * 1024
+_ARTIFACT_LOCK_TIMEOUT_SECONDS = 120.0
+_ARTIFACT_LOCK_POLL_SECONDS = 0.05
+_LOCK_CONTENTION_ERRORS = {
+    errno.EACCES,
+    errno.EAGAIN,
+    getattr(errno, "EDEADLK", errno.EACCES),
+    getattr(errno, "EWOULDBLOCK", errno.EAGAIN),
+}
+
+
+def _try_artifact_transaction_lock(stream: Any) -> bool:
+    if os.name == "nt":
+        import msvcrt
+
+        try:
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno not in _LOCK_CONTENTION_ERRORS:
+                raise
+            return False
+        return True
+
+    import fcntl
+
+    try:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if exc.errno not in _LOCK_CONTENTION_ERRORS:
+            raise
+        return False
+    return True
+
+
+def _release_artifact_transaction_lock(stream: Any) -> None:
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _artifact_transaction_lock(status_path: Path):
+    """Serialize one job's artifact status updates across adapter processes."""
+    lock_path = status_path.with_name("artifact-transaction.lock")
+    with lock_path.open("a+b") as stream:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+        deadline = time.monotonic() + _ARTIFACT_LOCK_TIMEOUT_SECONDS
+        while not _try_artifact_transaction_lock(stream):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("timed out acquiring artifact transaction lock: {}".format(lock_path))
+            time.sleep(min(_ARTIFACT_LOCK_POLL_SECONDS, remaining))
+        try:
+            yield
+        finally:
+            _release_artifact_transaction_lock(stream)
 
 
 def _hython_executable() -> Path:
@@ -274,7 +342,40 @@ def _set_transaction(status: Dict[str, Any], transaction: Dict[str, Any]) -> Non
     status["artifact_transaction"] = transaction
 
 
-def _revalidate_committed(transaction: Dict[str, Any]) -> tuple:
+def _clear_current_artifact_errors(artifact: Dict[str, Any]) -> None:
+    for field in ("last_error", "last_error_at", "post_commit_error"):
+        artifact.pop(field, None)
+
+
+def _recover_committed_artifact(job_id: str, source: Dict[str, Any]) -> Dict[str, Any]:
+    """Finish a previously published artifact after a transient post-commit failure."""
+    artifact = dict(source)
+    receipt = validate_receipt(artifact.get("validator_receipt"), job_id, artifact)
+    final_identity = stable_file_identity(artifact["final_path"])
+    if not identity_matches_receipt(final_identity, receipt):
+        raise ValueError("committed final output does not match its validator receipt")
+    if os.path.lexists(artifact["staging_path"]):
+        staged_identity = stable_file_identity(artifact["staging_path"])
+        if not identity_matches_receipt(staged_identity, receipt) or not os.path.samefile(
+            artifact["staging_path"], artifact["final_path"]
+        ):
+            raise FileExistsError("committed final output has an unrelated staging path")
+        os.unlink(artifact["staging_path"])
+    fsync_parent(artifact["final_path"])
+    artifact.update(
+        {
+            "state": "committed",
+            "committed": True,
+            "committed_identity": final_identity,
+            "cleanup_error": None,
+            "post_commit_recovered_at": time.time(),
+        }
+    )
+    _clear_current_artifact_errors(artifact)
+    return artifact
+
+
+def _revalidate_committed(job_id: str, transaction: Dict[str, Any]) -> tuple:
     artifacts = []
     errors = []
     for source in transaction.get("artifacts", []):
@@ -282,11 +383,21 @@ def _revalidate_committed(transaction: Dict[str, Any]) -> tuple:
         if artifact.get("committed") is True:
             expected = artifact.get("committed_identity")
             try:
-                identity = stable_file_identity(artifact["final_path"])
-                if not isinstance(expected, dict) or identity != expected:
+                if artifact.get("state") in {
+                    "attention_required",
+                    "commit_verification_failed",
+                    "post_commit_verification",
+                } or not isinstance(expected, dict):
+                    artifact = _recover_committed_artifact(job_id, artifact)
+                elif stable_file_identity(artifact["final_path"]) != expected:
                     raise ValueError("committed final output identity drifted")
             except Exception as exc:  # noqa: BLE001
-                artifact["state"] = "drifted"
+                if isinstance(exc, FileExistsError):
+                    artifact["state"] = "collision"
+                elif isinstance(exc, ValueError):
+                    artifact["state"] = "drifted"
+                else:
+                    artifact["state"] = "commit_verification_failed"
                 artifact["post_commit_error"] = str(exc)
                 errors.append("frame {}: {}".format(artifact.get("frame"), exc))
         artifacts.append(artifact)
@@ -314,6 +425,7 @@ def _recover_publication_intents(job_id: str, transaction: Dict[str, Any]) -> tu
                 if not staged_exists:
                     raise ValueError("publication intent lost both staged and final outputs")
                 artifact["state"] = "staged"
+                _clear_current_artifact_errors(artifact)
                 artifacts.append(artifact)
                 continue
             final_identity = stable_file_identity(artifact["final_path"])
@@ -343,6 +455,8 @@ def _recover_publication_intents(job_id: str, transaction: Dict[str, Any]) -> tu
                     "recovered_at": time.time(),
                 }
             )
+            if not cleanup_error:
+                _clear_current_artifact_errors(artifact)
             if cleanup_error:
                 errors.append("frame {}: {}".format(artifact.get("frame"), cleanup_error))
         except Exception as exc:  # noqa: BLE001
@@ -390,7 +504,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
     _isolated_jobs.read_job(job_id)
     status_path = _isolated_jobs._status_path(job_id)
     finalized_frames = []
-    with _isolated_jobs._PROCESS_LOCK:
+    with _isolated_jobs._PROCESS_LOCK, _artifact_transaction_lock(status_path):
         status = _isolated_jobs._read_status(status_path)
         if status.get("state") != "completed":
             raise ValueError("render worker must be completed before finalization")
@@ -409,7 +523,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
         transaction = status["artifact_transaction"]
         if recovery_errors:
             raise ValueError("; ".join(recovery_errors))
-        transaction, drift_errors = _revalidate_committed(transaction)
+        transaction, drift_errors = _revalidate_committed(job_id, transaction)
         if drift_errors:
             _set_transaction(status, transaction)
             _isolated_jobs.write_status(status_path, status)
@@ -483,9 +597,23 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
             transaction = status["artifact_transaction"]
 
             try:
-                publication = publish_no_clobber(artifact["staging_path"], artifact["final_path"])
+                publication_identity = stable_file_identity(artifact["staging_path"])
+                if not identity_matches_receipt(publication_identity, receipt):
+                    raise ValueError(
+                        "staged output identity no longer matches its validator receipt before publication"
+                    )
+                publication = publish_no_clobber(
+                    artifact["staging_path"],
+                    artifact["final_path"],
+                    expected_identity=publication_identity,
+                )
             except Exception as exc:
-                failure_state = "collision" if isinstance(exc, FileExistsError) else "attention_required"
+                if isinstance(exc, FileExistsError):
+                    failure_state = "collision"
+                elif isinstance(exc, ValueError):
+                    failure_state = "drifted"
+                else:
+                    failure_state = "publishing"
                 _persist_finalize_failure(
                     status_path,
                     status,
@@ -557,7 +685,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
             transaction = status["artifact_transaction"]
             finalized_frames.append(frame)
 
-        transaction, drift_errors = _revalidate_committed(transaction)
+        transaction, drift_errors = _revalidate_committed(job_id, transaction)
         _set_transaction(status, transaction)
         _isolated_jobs.write_status(status_path, status)
         if drift_errors:
