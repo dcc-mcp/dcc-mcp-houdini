@@ -16,6 +16,19 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.25.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.24.1...v0.25.0) (2026-07-20)
+
+
+### Features
+
+* **render:** add staged no-clobber publication for isolated ROP jobs ([#177](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/177)) ([1692501](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1692501d19dc4b89cd95af3a2d756291ea06c8e2))
+* **render:** expose raw output path pattern ([#175](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/175)) ([463f898](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/463f89857836c944874017e9ae1c358395c115ae))
+
+
+### Bug Fixes
+
+* **render:** shorten atomic status temp paths ([#178](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/178)) ([780ff57](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/780ff5719680fa03fb733eab1f4194602ec9a8e5))
+
 ## [0.24.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.24.0...v0.24.1) (2026-07-19)
 
 
