@@ -229,6 +229,87 @@ def test_integer_frames_rejects_above_limit_before_expansion() -> None:
             _render_artifacts.integer_frames([1, 10**1000])
 
 
+def test_windows_status_read_retries_permission_errors(tmp_path: Path) -> None:
+    status_path = tmp_path / "status.json"
+    status_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+    real_read_text = Path.read_text
+    attempts = [0]
+
+    def flaky_read_text(path, *args, **kwargs):
+        attempts[0] += 1
+        if attempts[0] < 3:
+            raise PermissionError("status reader temporarily blocked")
+        return real_read_text(path, *args, **kwargs)
+
+    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
+        _isolated_jobs, "_STATUS_IO_POLL_SECONDS", 0.0
+    ), patch.object(Path, "read_text", autospec=True, side_effect=flaky_read_text):
+        assert _isolated_jobs._read_status(status_path) == {"state": "completed"}
+    assert attempts[0] == 3
+
+
+def test_windows_status_replace_retries_and_preserves_atomic_document(tmp_path: Path) -> None:
+    status_path = tmp_path / "status.json"
+    status_path.write_text(json.dumps({"state": "old"}), encoding="utf-8")
+    real_replace = os.replace
+    attempts = [0]
+
+    def flaky_replace(source, destination):
+        attempts[0] += 1
+        if attempts[0] < 3:
+            assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "old"}
+            raise PermissionError("status destination temporarily open")
+        return real_replace(source, destination)
+
+    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
+        _isolated_jobs, "_STATUS_IO_POLL_SECONDS", 0.0
+    ), patch.object(_isolated_jobs.os, "replace", side_effect=flaky_replace):
+        _isolated_jobs.write_status(status_path, {"state": "new"})
+    assert attempts[0] == 3
+    assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "new"}
+    assert not list(tmp_path.glob("status.json.*.tmp"))
+
+
+def test_windows_status_replace_timeout_preserves_old_document_and_cleans_pending(tmp_path: Path) -> None:
+    status_path = tmp_path / "status.json"
+    status_path.write_text(json.dumps({"state": "old"}), encoding="utf-8")
+    blocked = PermissionError("status destination stayed open")
+
+    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
+        _isolated_jobs, "_STATUS_IO_TIMEOUT_SECONDS", 0.0
+    ), patch.object(_isolated_jobs.os, "replace", side_effect=blocked):
+        with pytest.raises(TimeoutError, match="status file") as captured:
+            _isolated_jobs.write_status(status_path, {"state": "new"})
+    assert captured.value.__cause__ is blocked
+    assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "old"}
+    assert not list(tmp_path.glob("status.json.*.tmp"))
+
+
+def test_status_replace_non_permission_error_is_preserved_and_pending_is_cleaned(tmp_path: Path) -> None:
+    status_path = tmp_path / "status.json"
+    status_path.write_text(json.dumps({"state": "old"}), encoding="utf-8")
+    failure = OSError("status disk failure")
+
+    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(_isolated_jobs.os, "replace", side_effect=failure):
+        with pytest.raises(OSError, match="status disk failure") as captured:
+            _isolated_jobs.write_status(status_path, {"state": "new"})
+    assert captured.value is failure
+    assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "old"}
+    assert not list(tmp_path.glob("status.json.*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "error"),
+    [("posix", PermissionError("permission denied")), ("nt", OSError("disk failure"))],
+)
+def test_status_io_does_not_retry_out_of_scope_errors(platform_name: str, error: OSError) -> None:
+    operation = MagicMock(side_effect=error)
+    with patch.object(_isolated_jobs.os, "name", platform_name):
+        with pytest.raises(type(error), match=str(error)):
+            _isolated_jobs._retry_windows_status_io(operation, "testing status file")
+    operation.assert_called_once_with()
+
+
 def test_job_transaction_lock_releases_after_exception(tmp_path: Path) -> None:
     status_path = tmp_path / "job" / "status.json"
     status_path.parent.mkdir()
@@ -300,6 +381,49 @@ def test_second_same_job_finalizer_observes_file_lock_timeout(tmp_path: Path) ->
         assert not blocked
         with pytest.raises(TimeoutError, match="artifact transaction lock"):
             second.result(timeout=1.0)
+
+
+def test_finalize_and_high_frequency_poll_share_atomic_status_file(tmp_path: Path) -> None:
+    job_id, status_path, artifacts = _completed_job(tmp_path, count=20)
+    receipts = [_receipt(job_id, artifact) for artifact in artifacts]
+    poller_count = 4
+    start = threading.Barrier(poller_count + 1)
+    stop = threading.Event()
+    poll_errors = []
+    poll_count = [0]
+
+    def poll_status():
+        start.wait(timeout=5.0)
+        while not stop.is_set():
+            try:
+                result = _rop_jobs.read_render_job(job_id, include_details=True)
+                transaction = result["artifact_transaction"]
+                assert len(transaction["artifacts"]) == 20
+                assert len({artifact["frame"] for artifact in transaction["artifacts"]}) == 20
+                assert transaction["aggregate"]["total"] == 20
+                poll_count[0] += 1
+            except Exception as exc:  # noqa: BLE001
+                poll_errors.append(exc)
+                stop.set()
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), ThreadPoolExecutor(
+        max_workers=poller_count
+    ) as pool:
+        pollers = [pool.submit(poll_status) for _ in range(poller_count)]
+        start.wait(timeout=5.0)
+        try:
+            finalized = _rop_jobs.finalize_render_outputs(job_id, receipts)
+        finally:
+            stop.set()
+            for poller in pollers:
+                poller.result(timeout=5.0)
+
+    assert not poll_errors
+    assert poll_count[0] > 0
+    assert finalized["aggregate"]["complete"] is True
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["artifact_transaction"]["aggregate"]["complete"] is True
+    assert {artifact["state"] for artifact in status["artifact_transaction"]["artifacts"]} == {"committed"}
 
 
 def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> None:
