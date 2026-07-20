@@ -37,7 +37,7 @@ def _remove_pending_status(path: Path) -> None:
 
 def write_status(path: Path, payload: Mapping[str, Any]) -> None:
     """Atomically replace one JSON status document without exposing partial JSON."""
-    pending = path.with_name("{}.{}.tmp".format(path.name, uuid.uuid4().hex))
+    pending = path.with_name(".{}.tmp".format(uuid.uuid4().hex))
     try:
         pending.write_text(json.dumps(dict(payload), indent=2), encoding="utf-8")
         _retry_windows_status_io(
