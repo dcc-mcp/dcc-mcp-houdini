@@ -7,8 +7,9 @@ import json
 import multiprocessing
 import os
 import sys
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -121,12 +122,11 @@ def _run_transaction_worker(
     return json.loads(status_path.read_text(encoding="utf-8")), parms, mock_hou, final_pattern
 
 
-def _completed_job(tmp_path: Path, count: int = 1):
-    job_id = "2" * 32
+def _completed_job(tmp_path: Path, count: int = 1, job_id: str = "2" * 32, stem: str = "beauty"):
     artifacts = []
     for frame in range(1, count + 1):
-        final_path = tmp_path / "beauty.{:04d}.exr".format(frame)
-        staged_path = tmp_path / "beauty.{:04d}.dcc-mcp-{}.partial.exr".format(frame, job_id)
+        final_path = tmp_path / "{}.{:04d}.exr".format(stem, frame)
+        staged_path = tmp_path / "{}.{:04d}.dcc-mcp-{}.partial.exr".format(stem, frame, job_id)
         staged_path.write_bytes("validated frame {}".format(frame).encode("ascii"))
         artifacts.append(
             {
@@ -141,8 +141,8 @@ def _completed_job(tmp_path: Path, count: int = 1):
         "mode": "staged_no_clobber",
         "state": "staged",
         "output_parm_name": "vm_picture",
-        "final_output_pattern": str(tmp_path / "beauty.$F4.exr"),
-        "staging_output_pattern": str(tmp_path / "beauty.$F4.partial.exr"),
+        "final_output_pattern": str(tmp_path / "{}.$F4.exr".format(stem)),
+        "staging_output_pattern": str(tmp_path / "{}.$F4.partial.exr".format(stem)),
         "artifacts": artifacts,
         "aggregate": _render_artifacts.aggregate_artifacts(artifacts),
     }
@@ -174,6 +174,21 @@ def _finalize_frame_in_process(tmp_root, job_id, receipt, start_event, result_qu
             result_queue.put(("ok", _rop_jobs.finalize_render_outputs(job_id, [receipt])))
     except Exception as exc:  # noqa: BLE001
         result_queue.put(("error", type(exc).__name__, str(exc)))
+
+
+def _block_first_staging_identity(receipt, entered, release):
+    real_identity = _rop_jobs.stable_file_identity
+    blocked = [False]
+
+    def identity(path):
+        if not blocked[0] and os.path.normcase(str(path)) == os.path.normcase(receipt["staging_path"]):
+            blocked[0] = True
+            entered.set()
+            if not release.wait(5.0):
+                raise TimeoutError("test did not release slow identity")
+        return real_identity(path)
+
+    return identity
 
 
 def _receipt(job_id: str, artifact: dict) -> dict:
@@ -235,6 +250,56 @@ def test_job_transaction_lock_times_out_and_remains_available(tmp_path: Path) ->
                 pass
     with _rop_jobs._artifact_transaction_lock(status_path):
         pass
+
+
+def test_slow_finalize_does_not_block_other_job_read_or_cancel(tmp_path: Path) -> None:
+    job_a, _, artifacts_a = _completed_job(tmp_path, job_id="2" * 32, stem="job_a")
+    job_b, _, _ = _completed_job(tmp_path, job_id="3" * 32, stem="job_b")
+    receipt = _receipt(job_a, artifacts_a[0])
+    entered = threading.Event()
+    release = threading.Event()
+    slow_identity = _block_first_staging_identity(receipt, entered, release)
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _rop_jobs, "stable_file_identity", side_effect=slow_identity
+    ), ThreadPoolExecutor(max_workers=3) as pool:
+        finalize_future = pool.submit(_rop_jobs.finalize_render_outputs, job_a, [receipt])
+        try:
+            assert entered.wait(5.0)
+            read_future = pool.submit(_rop_jobs.read_render_job, job_b)
+            cancel_future = pool.submit(_rop_jobs.cancel_render_job, job_b)
+            _, blocked = wait([read_future, cancel_future], timeout=1.0)
+        finally:
+            release.set()
+        finalize_future.result(timeout=5.0)
+        assert not blocked
+        assert read_future.result(timeout=1.0)["job_id"] == job_b
+        assert cancel_future.result(timeout=1.0)["cancel_requested"] is False
+
+
+def test_second_same_job_finalizer_observes_file_lock_timeout(tmp_path: Path) -> None:
+    job_id, _, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    entered = threading.Event()
+    release = threading.Event()
+    slow_identity = _block_first_staging_identity(receipt, entered, release)
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _rop_jobs, "_ARTIFACT_LOCK_TIMEOUT_SECONDS", 0.2
+    ), patch.object(_rop_jobs, "stable_file_identity", side_effect=slow_identity), ThreadPoolExecutor(
+        max_workers=2
+    ) as pool:
+        first = pool.submit(_rop_jobs.finalize_render_outputs, job_id, [receipt])
+        try:
+            assert entered.wait(5.0)
+            second = pool.submit(_rop_jobs.finalize_render_outputs, job_id, [receipt])
+            _, blocked = wait([second], timeout=1.0)
+        finally:
+            release.set()
+        first.result(timeout=5.0)
+        assert not blocked
+        with pytest.raises(TimeoutError, match="artifact transaction lock"):
+            second.result(timeout=1.0)
 
 
 def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> None:

@@ -504,7 +504,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
     _isolated_jobs.read_job(job_id)
     status_path = _isolated_jobs._status_path(job_id)
     finalized_frames = []
-    with _isolated_jobs._PROCESS_LOCK, _artifact_transaction_lock(status_path):
+    with _artifact_transaction_lock(status_path):
         status = _isolated_jobs._read_status(status_path)
         if status.get("state") != "completed":
             raise ValueError("render worker must be completed before finalization")
