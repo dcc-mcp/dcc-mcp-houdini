@@ -206,7 +206,12 @@ def publish_no_clobber(
     else:
         os.link(str(staged), str(final), follow_symlinks=False)
     if expected is not None:
-        published_identity = stable_file_identity(final)
+        try:
+            published_identity = stable_file_identity(final)
+        except Exception as exc:
+            raise PublicationIdentityMismatchError(
+                "published final identity could not be verified; final ownership is unprovable"
+            ) from exc
         if published_identity != expected:
             raise PublicationIdentityMismatchError(
                 "published final identity does not match the expected staged identity; final ownership is unprovable"

@@ -11,7 +11,6 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import nullcontext
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -62,7 +61,6 @@ def _run_transaction_worker(
     render_error=None,
     outputs=None,
     rop_inputs=(),
-    worker_replace=None,
 ):
     module = _load_script("_render_worker.py")
     job_id = "1" * 32
@@ -118,12 +116,9 @@ def _run_transaction_worker(
         json.dumps(final_pattern),
         json.dumps(False),
     ]
-    replace_context = (
-        patch.object(module.os, "replace", side_effect=worker_replace) if worker_replace else nullcontext()
-    )
     with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(module.sys, "argv", argv), patch.object(
         module, "render_node", side_effect=render
-    ), replace_context:
+    ):
         module.main()
     return json.loads(status_path.read_text(encoding="utf-8")), parms, mock_hou, final_pattern
 
@@ -527,7 +522,9 @@ def test_worker_retries_transient_initial_status_write_before_render_try(tmp_pat
             raise PermissionError("initial worker status destination temporarily open")
         return real_replace(source, destination)
 
-    status, _, _, _ = _run_transaction_worker(tmp_path, worker_replace=transient_replace)
+    status_os = SimpleNamespace(name="nt", replace=MagicMock(side_effect=transient_replace))
+    with patch.object(_status_io, "os", status_os):
+        status, _, _, _ = _run_transaction_worker(tmp_path)
 
     assert status["state"] == "completed"
     assert attempts[0] >= 2
@@ -799,6 +796,86 @@ def test_publication_identity_mismatch_never_deletes_unowned_final(
     assert _render_artifacts.stable_file_identity(final)["sha256"] == unrelated_sha256
 
 
+@pytest.mark.parametrize(
+    ("platform_name", "primitive_name"),
+    [("nt", "rename"), ("posix", "link")],
+)
+@pytest.mark.parametrize(
+    "validation_error",
+    [
+        FileNotFoundError("published final disappeared before validation"),
+        ValueError("published final became non-regular"),
+        OSError("published final validation unavailable"),
+    ],
+)
+def test_post_publication_validation_exception_reports_ambiguous_ownership(
+    tmp_path: Path,
+    platform_name: str,
+    primitive_name: str,
+    validation_error: Exception,
+) -> None:
+    staged = tmp_path / "stage.exr"
+    final = tmp_path / "final.exr"
+    staged.write_bytes(b"validated frame")
+    expected_identity = _render_artifacts.stable_file_identity(staged)
+    real_identity = _render_artifacts.stable_file_identity
+
+    def fail_final_validation(path):
+        if os.path.normcase(str(path)) == os.path.normcase(str(final)):
+            raise validation_error
+        return real_identity(path)
+
+    with patch.object(_render_artifacts, "stable_file_identity", side_effect=fail_final_validation):
+        with pytest.raises(_render_artifacts.PublicationIdentityMismatchError) as captured:
+            _render_artifacts.publish_no_clobber(
+                staged,
+                final,
+                platform_name=platform_name,
+                expected_identity=expected_identity,
+            )
+
+    assert captured.value.__cause__ is validation_error
+    assert final.read_bytes() == b"validated frame"
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "primitive_name"),
+    [("nt", "rename"), ("posix", "link")],
+)
+def test_post_publication_nonregular_replacement_is_never_removed(
+    tmp_path: Path,
+    platform_name: str,
+    primitive_name: str,
+) -> None:
+    staged = tmp_path / "stage.exr"
+    final = tmp_path / "final.exr"
+    staged.write_bytes(b"validated frame")
+    expected_identity = _render_artifacts.stable_file_identity(staged)
+    real_primitive = getattr(os, primitive_name)
+
+    def publish_then_replace_with_directory(source, destination, *args, **kwargs):
+        result = real_primitive(source, destination, *args, **kwargs)
+        final.unlink()
+        final.mkdir()
+        return result
+
+    with patch.object(
+        _render_artifacts.os,
+        primitive_name,
+        side_effect=publish_then_replace_with_directory,
+    ):
+        with pytest.raises(_render_artifacts.PublicationIdentityMismatchError) as captured:
+            _render_artifacts.publish_no_clobber(
+                staged,
+                final,
+                platform_name=platform_name,
+                expected_identity=expected_identity,
+            )
+
+    assert isinstance(captured.value.__cause__, ValueError)
+    assert final.is_dir()
+
+
 def test_finalize_persists_ambiguous_publication_as_attention_required(tmp_path: Path) -> None:
     job_id, status_path, artifacts = _completed_job(tmp_path)
     receipt = _receipt(job_id, artifacts[0])
@@ -987,9 +1064,16 @@ def test_finalize_retry_recovers_transient_helper_post_check_failure(tmp_path: P
     with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
         _render_artifacts, "stable_file_identity", side_effect=transient_final_identity
     ):
-        with pytest.raises(OSError, match="transient helper post-check failure"):
+        with pytest.raises(_render_artifacts.PublicationIdentityMismatchError) as captured:
             _rop_jobs.finalize_render_outputs(job_id, [receipt])
+    assert isinstance(captured.value.__cause__, OSError)
+    assert "transient helper post-check failure" in str(captured.value.__cause__)
     assert Path(artifacts[0]["final_path"]).is_file()
+    failed_status = json.loads(status_path.read_text(encoding="utf-8"))
+    failed_artifact = failed_status["artifact_transaction"]["artifacts"][0]
+    assert failed_artifact["state"] == "attention_required"
+    assert failed_artifact["committed"] is True
+    assert failed_status["artifact_transaction"]["aggregate"]["state"] == "blocked"
 
     with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)):
         recovered = _rop_jobs.finalize_render_outputs(job_id, [receipt])
