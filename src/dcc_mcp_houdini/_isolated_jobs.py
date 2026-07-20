@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
@@ -14,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from dcc_mcp_houdini._render_artifacts import aggregate_artifacts
+from dcc_mcp_houdini._status_io import read_status as _read_status_document
+from dcc_mcp_houdini._status_io import write_status
 
 if os.name == "nt":
     from dcc_mcp_houdini._windows_process import terminate_process_tree as _terminate_windows_process_tree
@@ -27,46 +28,6 @@ _TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "interrupted"}
 _CANCEL_GRACE_SECS = 2
 _SIGTERM = getattr(signal, "SIGTERM", 15)
 _SIGKILL = getattr(signal, "SIGKILL", 9)
-_STATUS_IO_TIMEOUT_SECONDS = 1.0
-_STATUS_IO_POLL_SECONDS = 0.01
-
-
-def _retry_windows_status_io(operation: Any, description: str) -> Any:
-    """Retry transient Windows sharing violations within one bounded deadline."""
-    if os.name != "nt":
-        return operation()
-    deadline = time.monotonic() + _STATUS_IO_TIMEOUT_SECONDS
-    while True:
-        try:
-            return operation()
-        except PermissionError as exc:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("timed out while {}".format(description)) from exc
-            time.sleep(min(_STATUS_IO_POLL_SECONDS, remaining))
-
-
-def _remove_pending_status(path: Path) -> None:
-    try:
-        _retry_windows_status_io(path.unlink, "cleaning pending status file {}".format(path))
-    except FileNotFoundError:
-        pass
-
-
-def write_status(path: Path, payload: Mapping[str, Any]) -> None:
-    pending = path.with_name("{}.{}.tmp".format(path.name, uuid.uuid4().hex))
-    try:
-        pending.write_text(json.dumps(dict(payload), indent=2), encoding="utf-8")
-        _retry_windows_status_io(
-            lambda: os.replace(str(pending), str(path)),
-            "replacing status file {}".format(path),
-        )
-    except Exception:
-        try:
-            _remove_pending_status(pending)
-        except Exception:  # noqa: BLE001
-            pass
-        raise
 
 
 def _status_path(job_id: str) -> Path:
@@ -78,11 +39,7 @@ def _status_path(job_id: str) -> Path:
 def _read_status(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError("Background job was not found")
-    payload = _retry_windows_status_io(
-        lambda: path.read_text(encoding="utf-8"),
-        "reading status file {}".format(path),
-    )
-    return json.loads(payload)
+    return _read_status_document(path)
 
 
 def create_job(initial: Mapping[str, Any]) -> Tuple[Dict[str, Any], Path]:

@@ -16,6 +16,7 @@ from dcc_mcp_houdini import _isolated_jobs
 from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
 from dcc_mcp_houdini._render_artifacts import (
     TRANSACTION_MODE,
+    PublicationIdentityMismatchError,
     aggregate_artifacts,
     assert_same_parent_and_volume,
     fsync_file,
@@ -608,7 +609,10 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
                     expected_identity=publication_identity,
                 )
             except Exception as exc:
-                if isinstance(exc, FileExistsError):
+                committed = isinstance(exc, PublicationIdentityMismatchError)
+                if committed:
+                    failure_state = "attention_required"
+                elif isinstance(exc, FileExistsError):
                     failure_state = "collision"
                 elif isinstance(exc, ValueError):
                     failure_state = "drifted"
@@ -621,6 +625,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
                     artifact_index,
                     failure_state,
                     exc,
+                    committed=committed,
                 )
                 raise
 

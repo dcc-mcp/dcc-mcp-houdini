@@ -25,13 +25,7 @@ from dcc_mcp_houdini._render_artifacts import (
     integer_frames,
     staging_pattern,
 )
-
-
-def write_status(path: Path, payload: dict) -> None:
-    """Atomically replace worker status without importing the adapter package."""
-    pending = path.with_name("{}.{}.tmp".format(path.name, os.getpid()))
-    pending.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(str(pending), str(path))
+from dcc_mcp_houdini._status_io import read_status, write_status
 
 
 def _cook_errors(status: dict) -> list:
@@ -188,7 +182,7 @@ def main() -> None:
     status_path = Path(status_arg)
     frame_range = json.loads(range_json)
     output_pattern = json.loads(output_json)
-    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status = read_status(status_path)
     transaction_enabled = isinstance(status.get("artifact_transaction"), dict)
     transaction = dict(status.get("artifact_transaction") or {})
     output_parm = None

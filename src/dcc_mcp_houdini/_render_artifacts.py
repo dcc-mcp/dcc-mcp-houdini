@@ -15,6 +15,10 @@ _REPARSE_POINT = 0x400
 _SHA256_HEX_LENGTH = 64
 
 
+class PublicationIdentityMismatchError(ValueError):
+    """Publication completed, but ownership of the final path is unprovable."""
+
+
 def normalize_transaction_request(value: Any) -> Dict[str, Any]:
     """Validate the opt-in request while keeping the legacy path untouched."""
     if not isinstance(value, Mapping):
@@ -181,19 +185,6 @@ def fsync_parent(path: Any, platform_name: Optional[str] = None) -> None:
         os.close(descriptor)
 
 
-def _rollback_mismatched_publication(final: Path, published_identity: Mapping[str, Any]) -> None:
-    """Remove only the mismatched final identity created by this publication."""
-    try:
-        current_identity = stable_file_identity(final)
-    except FileNotFoundError:
-        return
-    if current_identity != dict(published_identity):
-        raise RuntimeError("published final identity changed before rollback")
-    os.unlink(str(final))
-    if os.path.lexists(str(final)):
-        raise RuntimeError("mismatched published final could not be removed")
-
-
 def publish_no_clobber(
     staged_path: Any,
     final_path: Any,
@@ -217,8 +208,9 @@ def publish_no_clobber(
     if expected is not None:
         published_identity = stable_file_identity(final)
         if published_identity != expected:
-            _rollback_mismatched_publication(final, published_identity)
-            raise ValueError("published final identity does not match the expected staged identity")
+            raise PublicationIdentityMismatchError(
+                "published final identity does not match the expected staged identity; final ownership is unprovable"
+            )
     if (platform_name or os.name) != "nt":
         try:
             os.unlink(str(staged))

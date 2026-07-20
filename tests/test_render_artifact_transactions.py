@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import multiprocessing
@@ -10,6 +11,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
+from contextlib import nullcontext
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -17,7 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from skill_loader import skill_script_import_context
 
-from dcc_mcp_houdini import _isolated_jobs, _render_artifacts, _rop_jobs
+from dcc_mcp_houdini import _isolated_jobs, _render_artifacts, _rop_jobs, _status_io
 
 _SKILL_SCRIPTS = (
     Path(__file__).resolve().parents[1] / "src" / "dcc_mcp_houdini" / "skills" / "houdini-render" / "scripts"
@@ -60,6 +62,7 @@ def _run_transaction_worker(
     render_error=None,
     outputs=None,
     rop_inputs=(),
+    worker_replace=None,
 ):
     module = _load_script("_render_worker.py")
     job_id = "1" * 32
@@ -115,9 +118,12 @@ def _run_transaction_worker(
         json.dumps(final_pattern),
         json.dumps(False),
     ]
+    replace_context = (
+        patch.object(module.os, "replace", side_effect=worker_replace) if worker_replace else nullcontext()
+    )
     with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(module.sys, "argv", argv), patch.object(
         module, "render_node", side_effect=render
-    ):
+    ), replace_context:
         module.main()
     return json.loads(status_path.read_text(encoding="utf-8")), parms, mock_hou, final_pattern
 
@@ -241,8 +247,8 @@ def test_windows_status_read_retries_permission_errors(tmp_path: Path) -> None:
             raise PermissionError("status reader temporarily blocked")
         return real_read_text(path, *args, **kwargs)
 
-    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
-        _isolated_jobs, "_STATUS_IO_POLL_SECONDS", 0.0
+    with patch.object(_status_io.os, "name", "nt"), patch.object(
+        _status_io, "_STATUS_IO_POLL_SECONDS", 0.0
     ), patch.object(Path, "read_text", autospec=True, side_effect=flaky_read_text):
         assert _isolated_jobs._read_status(status_path) == {"state": "completed"}
     assert attempts[0] == 3
@@ -261,9 +267,9 @@ def test_windows_status_replace_retries_and_preserves_atomic_document(tmp_path: 
             raise PermissionError("status destination temporarily open")
         return real_replace(source, destination)
 
-    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
-        _isolated_jobs, "_STATUS_IO_POLL_SECONDS", 0.0
-    ), patch.object(_isolated_jobs.os, "replace", side_effect=flaky_replace):
+    with patch.object(_status_io.os, "name", "nt"), patch.object(
+        _status_io, "_STATUS_IO_POLL_SECONDS", 0.0
+    ), patch.object(_status_io.os, "replace", side_effect=flaky_replace):
         _isolated_jobs.write_status(status_path, {"state": "new"})
     assert attempts[0] == 3
     assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "new"}
@@ -275,9 +281,9 @@ def test_windows_status_replace_timeout_preserves_old_document_and_cleans_pendin
     status_path.write_text(json.dumps({"state": "old"}), encoding="utf-8")
     blocked = PermissionError("status destination stayed open")
 
-    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(
-        _isolated_jobs, "_STATUS_IO_TIMEOUT_SECONDS", 0.0
-    ), patch.object(_isolated_jobs.os, "replace", side_effect=blocked):
+    with patch.object(_status_io.os, "name", "nt"), patch.object(
+        _status_io, "_STATUS_IO_TIMEOUT_SECONDS", 0.0
+    ), patch.object(_status_io.os, "replace", side_effect=blocked):
         with pytest.raises(TimeoutError, match="status file") as captured:
             _isolated_jobs.write_status(status_path, {"state": "new"})
     assert captured.value.__cause__ is blocked
@@ -290,7 +296,7 @@ def test_status_replace_non_permission_error_is_preserved_and_pending_is_cleaned
     status_path.write_text(json.dumps({"state": "old"}), encoding="utf-8")
     failure = OSError("status disk failure")
 
-    with patch.object(_isolated_jobs.os, "name", "nt"), patch.object(_isolated_jobs.os, "replace", side_effect=failure):
+    with patch.object(_status_io.os, "name", "nt"), patch.object(_status_io.os, "replace", side_effect=failure):
         with pytest.raises(OSError, match="status disk failure") as captured:
             _isolated_jobs.write_status(status_path, {"state": "new"})
     assert captured.value is failure
@@ -304,9 +310,9 @@ def test_status_replace_non_permission_error_is_preserved_and_pending_is_cleaned
 )
 def test_status_io_does_not_retry_out_of_scope_errors(platform_name: str, error: OSError) -> None:
     operation = MagicMock(side_effect=error)
-    with patch.object(_isolated_jobs.os, "name", platform_name):
+    with patch.object(_status_io.os, "name", platform_name):
         with pytest.raises(type(error), match=str(error)):
-            _isolated_jobs._retry_windows_status_io(operation, "testing status file")
+            _status_io._retry_windows_status_io(operation, "testing status file")
     operation.assert_called_once_with()
 
 
@@ -424,6 +430,108 @@ def test_finalize_and_high_frequency_poll_share_atomic_status_file(tmp_path: Pat
     status = json.loads(status_path.read_text(encoding="utf-8"))
     assert status["artifact_transaction"]["aggregate"]["complete"] is True
     assert {artifact["state"] for artifact in status["artifact_transaction"]["artifacts"]} == {"committed"}
+
+
+def test_worker_status_writes_survive_four_high_frequency_adapter_pollers(tmp_path: Path) -> None:
+    worker = _load_script("_render_worker.py")
+    status_path = tmp_path / "status.json"
+    artifacts = [
+        {
+            "frame": frame,
+            "state": "rendering",
+            "staging_path": str(tmp_path / "beauty.{:04d}.partial.exr".format(frame)),
+            "final_path": str(tmp_path / "beauty.{:04d}.exr".format(frame)),
+        }
+        for frame in range(1, 21)
+    ]
+    payload = {"state": "running", "sequence": -1, "artifact_transaction": {"artifacts": artifacts}}
+    status_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    poller_count = 4
+    rounds = 10
+    opened = [threading.Event() for _ in range(rounds)]
+    release = [threading.Event() for _ in range(rounds)]
+    opened_counts = [0] * rounds
+    counter_lock = threading.Lock()
+    poller_round = threading.local()
+    read_errors = []
+    write_errors = []
+    completed_while_readers_held = []
+    real_read_text = Path.read_text
+
+    def hold_status_read(path, *args, **kwargs):
+        round_index = getattr(poller_round, "index", None)
+        if round_index is None or Path(path) != status_path:
+            return real_read_text(path, *args, **kwargs)
+        with Path(path).open(
+            mode="r",
+            encoding=kwargs.get("encoding"),
+            errors=kwargs.get("errors"),
+        ) as stream:
+            document = stream.read()
+            with counter_lock:
+                opened_counts[round_index] += 1
+                if opened_counts[round_index] == poller_count:
+                    opened[round_index].set()
+            assert release[round_index].wait(timeout=5.0)
+            return document
+
+    def poll_once(round_index):
+        poller_round.index = round_index
+        try:
+            observed = _isolated_jobs._read_status(status_path)
+            assert isinstance(observed["sequence"], int)
+            assert len(observed["artifact_transaction"]["artifacts"]) == 20
+        except Exception as exc:  # noqa: BLE001
+            read_errors.append(exc)
+        finally:
+            del poller_round.index
+
+    with patch.object(Path, "read_text", autospec=True, side_effect=hold_status_read), ThreadPoolExecutor(
+        max_workers=poller_count + 1
+    ) as pool:
+        for sequence in range(rounds):
+            pollers = [pool.submit(poll_once, sequence) for _ in range(poller_count)]
+            assert opened[sequence].wait(timeout=5.0)
+            next_payload = dict(payload)
+            next_payload["sequence"] = sequence
+            writer = pool.submit(worker.write_status, status_path, next_payload)
+            time.sleep(0.02)
+            completed_while_readers_held.append(writer.done())
+            release[sequence].set()
+            for poller in pollers:
+                poller.result(timeout=5.0)
+            try:
+                writer.result(timeout=5.0)
+            except PermissionError as exc:
+                write_errors.append(exc)
+
+    pending = list(tmp_path.glob("status.json.*.tmp"))
+    assert not read_errors
+    assert not write_errors, {
+        "write_error_count": len(write_errors),
+        "pending_status_files": [path.name for path in pending],
+    }
+    if os.name == "nt":
+        assert completed_while_readers_held == [False] * rounds
+    assert _isolated_jobs._read_status(status_path)["sequence"] == rounds - 1
+    assert not pending
+
+
+def test_worker_retries_transient_initial_status_write_before_render_try(tmp_path: Path) -> None:
+    real_replace = os.replace
+    attempts = [0]
+
+    def transient_replace(source, destination):
+        attempts[0] += 1
+        if attempts[0] == 1:
+            raise PermissionError("initial worker status destination temporarily open")
+        return real_replace(source, destination)
+
+    status, _, _, _ = _run_transaction_worker(tmp_path, worker_replace=transient_replace)
+
+    assert status["state"] == "completed"
+    assert attempts[0] >= 2
+    assert not list(tmp_path.glob("status.json.*.tmp"))
 
 
 def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> None:
@@ -628,7 +736,7 @@ def test_windows_path_uses_rename_and_preserves_collision(tmp_path: Path) -> Non
     ("platform_name", "primitive_name"),
     [("nt", "rename"), ("posix", "link")],
 )
-def test_publication_never_commits_source_replaced_after_expected_identity_check(
+def test_publication_preserves_ambiguous_final_when_source_changes_after_identity_check(
     tmp_path: Path,
     platform_name: str,
     primitive_name: str,
@@ -652,7 +760,74 @@ def test_publication_never_commits_source_replaced_after_expected_identity_check
                 platform_name=platform_name,
                 expected_identity=expected_identity,
             )
-    assert not final.exists()
+    assert final.read_bytes() == b"unvalidated replacement"
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "primitive_name"),
+    [("nt", "rename"), ("posix", "link")],
+)
+def test_publication_identity_mismatch_never_deletes_unowned_final(
+    tmp_path: Path,
+    platform_name: str,
+    primitive_name: str,
+) -> None:
+    staged = tmp_path / "stage.exr"
+    final = tmp_path / "final.exr"
+    staged.write_bytes(b"validated frame")
+    expected_identity = _render_artifacts.stable_file_identity(staged)
+    unrelated_bytes = b"artist replacement after publication"
+    unrelated_sha256 = hashlib.sha256(unrelated_bytes).hexdigest()
+    real_primitive = getattr(os, primitive_name)
+
+    def publish_then_replace(source, destination, *args, **kwargs):
+        result = real_primitive(source, destination, *args, **kwargs)
+        final.unlink()
+        final.write_bytes(unrelated_bytes)
+        return result
+
+    with patch.object(_render_artifacts.os, primitive_name, side_effect=publish_then_replace):
+        with pytest.raises(ValueError, match="identity"):
+            _render_artifacts.publish_no_clobber(
+                staged,
+                final,
+                platform_name=platform_name,
+                expected_identity=expected_identity,
+            )
+
+    assert final.read_bytes() == unrelated_bytes
+    assert _render_artifacts.stable_file_identity(final)["sha256"] == unrelated_sha256
+
+
+def test_finalize_persists_ambiguous_publication_as_attention_required(tmp_path: Path) -> None:
+    job_id, status_path, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    final = Path(artifacts[0]["final_path"])
+    unrelated_bytes = b"unowned replacement after publication"
+    unrelated_sha256 = hashlib.sha256(unrelated_bytes).hexdigest()
+    primitive_name = "rename" if os.name == "nt" else "link"
+    real_primitive = getattr(os, primitive_name)
+
+    def publish_then_replace(source, destination, *args, **kwargs):
+        result = real_primitive(source, destination, *args, **kwargs)
+        final.unlink()
+        final.write_bytes(unrelated_bytes)
+        return result
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+        _render_artifacts.os, primitive_name, side_effect=publish_then_replace
+    ):
+        with pytest.raises(ValueError, match="identity"):
+            _rop_jobs.finalize_render_outputs(job_id, [receipt])
+
+    assert final.read_bytes() == unrelated_bytes
+    assert _render_artifacts.stable_file_identity(final)["sha256"] == unrelated_sha256
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    transaction = status["artifact_transaction"]
+    artifact = transaction["artifacts"][0]
+    assert artifact["state"] == "attention_required"
+    assert artifact["committed"] is True
+    assert transaction["aggregate"]["state"] == "blocked"
 
 
 def test_cross_volume_identity_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
