@@ -268,7 +268,34 @@ def test_windows_status_replace_retries_and_preserves_atomic_document(tmp_path: 
         _isolated_jobs.write_status(status_path, {"state": "new"})
     assert attempts[0] == 3
     assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "new"}
-    assert not list(tmp_path.glob("status.json.*.tmp"))
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_create_job_first_status_write_stays_below_legacy_windows_max_path(tmp_path: Path) -> None:
+    job_id = "f" * 32
+    target_status_length = 226
+    base_status_path = tmp_path / _isolated_jobs._JOB_ROOT_NAME / job_id / "status.json"
+    filler_length = target_status_length - len(str(base_status_path)) - 1
+    assert filler_length > 0
+    temp_root = tmp_path / ("r" * filler_length)
+    attempted_paths = []
+    real_write_text = Path.write_text
+
+    def legacy_windows_write_text(path, *args, **kwargs):
+        attempted_paths.append(Path(path))
+        if len(str(path)) >= 260:
+            raise FileNotFoundError("legacy Windows path limit")
+        return real_write_text(path, *args, **kwargs)
+
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(temp_root)), patch.object(
+        _isolated_jobs.uuid, "uuid4", return_value=SimpleNamespace(hex=job_id)
+    ), patch.object(Path, "write_text", autospec=True, side_effect=legacy_windows_write_text):
+        status, status_path = _isolated_jobs.create_job({"job_kind": "render"})
+
+    assert len(str(status_path)) == target_status_length
+    assert max(len(str(path)) for path in attempted_paths) < 260
+    assert json.loads(status_path.read_text(encoding="utf-8")) == status
+    assert not list(status_path.parent.glob(".*.tmp"))
 
 
 def test_windows_status_replace_timeout_preserves_old_document_and_cleans_pending(tmp_path: Path) -> None:
@@ -283,7 +310,7 @@ def test_windows_status_replace_timeout_preserves_old_document_and_cleans_pendin
             _isolated_jobs.write_status(status_path, {"state": "new"})
     assert captured.value.__cause__ is blocked
     assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "old"}
-    assert not list(tmp_path.glob("status.json.*.tmp"))
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def test_status_replace_non_permission_error_is_preserved_and_pending_is_cleaned(tmp_path: Path) -> None:
@@ -296,7 +323,7 @@ def test_status_replace_non_permission_error_is_preserved_and_pending_is_cleaned
             _isolated_jobs.write_status(status_path, {"state": "new"})
     assert captured.value is failure
     assert json.loads(status_path.read_text(encoding="utf-8")) == {"state": "old"}
-    assert not list(tmp_path.glob("status.json.*.tmp"))
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 @pytest.mark.parametrize(
@@ -500,7 +527,7 @@ def test_worker_status_writes_survive_four_high_frequency_adapter_pollers(tmp_pa
             except PermissionError as exc:
                 write_errors.append(exc)
 
-    pending = list(tmp_path.glob("status.json.*.tmp"))
+    pending = list(tmp_path.glob(".*.tmp"))
     assert not read_errors
     assert not write_errors, {
         "write_error_count": len(write_errors),
@@ -528,7 +555,7 @@ def test_worker_retries_transient_initial_status_write_before_render_try(tmp_pat
 
     assert status["state"] == "completed"
     assert attempts[0] >= 2
-    assert not list(tmp_path.glob("status.json.*.tmp"))
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> None:
