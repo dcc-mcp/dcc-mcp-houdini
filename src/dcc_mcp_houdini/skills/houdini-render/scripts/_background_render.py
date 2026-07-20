@@ -11,6 +11,7 @@ tempfile = _isolated_jobs.tempfile
 time = _isolated_jobs.time
 launch_background_render = _rop_jobs.launch_background_render
 read_render_job = _rop_jobs.read_render_job
+finalize_render_outputs = _rop_jobs.finalize_render_outputs
 _PROCESS_HANDLES = _isolated_jobs._PROCESS_HANDLES
 _PROCESS_LOCK = _isolated_jobs._PROCESS_LOCK
 _TERMINAL_STATES = _isolated_jobs._TERMINAL_STATES

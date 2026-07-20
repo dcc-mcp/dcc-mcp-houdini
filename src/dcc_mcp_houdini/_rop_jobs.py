@@ -2,20 +2,102 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dcc_mcp_houdini import _isolated_jobs
 from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
+from dcc_mcp_houdini._render_artifacts import (
+    TRANSACTION_MODE,
+    PublicationIdentityMismatchError,
+    aggregate_artifacts,
+    assert_same_parent_and_volume,
+    fsync_file,
+    fsync_parent,
+    identity_matches_receipt,
+    integer_frames,
+    normalize_transaction_request,
+    publish_no_clobber,
+    stable_file_identity,
+    validate_receipt,
+)
 
 _SUMMARY_WARNING_LIMIT = 10
 _SUMMARY_TEXT_LIMIT = 500
 _STDERR_TAIL_BYTES = 256 * 1024
+_ARTIFACT_LOCK_TIMEOUT_SECONDS = 120.0
+_ARTIFACT_LOCK_POLL_SECONDS = 0.05
+_LOCK_CONTENTION_ERRORS = {
+    errno.EACCES,
+    errno.EAGAIN,
+    getattr(errno, "EDEADLK", errno.EACCES),
+    getattr(errno, "EWOULDBLOCK", errno.EAGAIN),
+}
+
+
+def _try_artifact_transaction_lock(stream: Any) -> bool:
+    if os.name == "nt":
+        import msvcrt
+
+        try:
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno not in _LOCK_CONTENTION_ERRORS:
+                raise
+            return False
+        return True
+
+    import fcntl
+
+    try:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if exc.errno not in _LOCK_CONTENTION_ERRORS:
+            raise
+        return False
+    return True
+
+
+def _release_artifact_transaction_lock(stream: Any) -> None:
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _artifact_transaction_lock(status_path: Path):
+    """Serialize one job's artifact status updates across adapter processes."""
+    lock_path = status_path.with_name("artifact-transaction.lock")
+    with lock_path.open("a+b") as stream:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+        deadline = time.monotonic() + _ARTIFACT_LOCK_TIMEOUT_SECONDS
+        while not _try_artifact_transaction_lock(stream):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("timed out acquiring artifact transaction lock: {}".format(lock_path))
+            time.sleep(min(_ARTIFACT_LOCK_POLL_SECONDS, remaining))
+        try:
+            yield
+        finally:
+            _release_artifact_transaction_lock(stream)
 
 
 def _hython_executable() -> Path:
@@ -84,26 +166,36 @@ def launch_background_render(
     output_pattern: Optional[str],
     ignore_inputs: bool = False,
     job_kind: str = "render",
+    artifact_transaction: Optional[dict] = None,
 ) -> Dict[str, Any]:
     """Launch one saved ROP job in an isolated hython process."""
     source_hip_path, is_ui_available = _validate_saved_hip(hou)
     executable = _hython_executable()
-    initial, status_path = _isolated_jobs.create_job(
-        {
-            "job_kind": job_kind,
-            "hip_path": str(source_hip_path),
-            "rop_path": rop_path,
-            "frame_range": frame_range,
-            "output_pattern": output_pattern,
-            "ignore_inputs": bool(ignore_inputs),
-        }
-    )
+    transaction = None
+    if artifact_transaction is not None:
+        if job_kind != "render":
+            raise ValueError("artifact_transaction supports render jobs only")
+        transaction = normalize_transaction_request(artifact_transaction)
+        transaction["requested_frames"] = integer_frames(frame_range)
+    initial_payload = {
+        "job_kind": job_kind,
+        "hip_path": str(source_hip_path),
+        "rop_path": rop_path,
+        "frame_range": frame_range,
+        "output_pattern": output_pattern,
+        "ignore_inputs": bool(ignore_inputs),
+    }
+    if transaction is not None:
+        initial_payload["artifact_transaction"] = transaction
+    initial, status_path = _isolated_jobs.create_job(initial_payload)
     hip_path = source_hip_path
     if not is_ui_available:
         try:
             hip_path = _save_owned_hip_snapshot(hou, status_path.parent)
         except Exception as exc:
             initial.update({"state": "failed", "finished_at": time.time(), "error": str(exc)})
+            if isinstance(initial.get("artifact_transaction"), dict):
+                initial["artifact_transaction"]["state"] = "failed"
             _isolated_jobs.write_status(status_path, initial)
             raise
         initial.update(
@@ -239,6 +331,380 @@ def _warning_lines(status: Dict[str, Any]) -> List[Any]:
     return warnings
 
 
+def _transaction_summary(transaction: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: transaction[key] for key in ("mode", "state", "output_parm_name", "aggregate") if key in transaction}
+
+
+def _set_transaction(status: Dict[str, Any], transaction: Dict[str, Any]) -> None:
+    transaction = dict(transaction)
+    transaction["aggregate"] = aggregate_artifacts(transaction.get("artifacts", []))
+    transaction["state"] = transaction["aggregate"]["state"]
+    transaction["updated_at"] = time.time()
+    status["artifact_transaction"] = transaction
+
+
+def _clear_current_artifact_errors(artifact: Dict[str, Any]) -> None:
+    for field in ("last_error", "last_error_at", "post_commit_error"):
+        artifact.pop(field, None)
+
+
+def _recover_committed_artifact(job_id: str, source: Dict[str, Any]) -> Dict[str, Any]:
+    """Finish a previously published artifact after a transient post-commit failure."""
+    artifact = dict(source)
+    receipt = validate_receipt(artifact.get("validator_receipt"), job_id, artifact)
+    final_identity = stable_file_identity(artifact["final_path"])
+    if not identity_matches_receipt(final_identity, receipt):
+        raise ValueError("committed final output does not match its validator receipt")
+    if os.path.lexists(artifact["staging_path"]):
+        staged_identity = stable_file_identity(artifact["staging_path"])
+        if not identity_matches_receipt(staged_identity, receipt) or not os.path.samefile(
+            artifact["staging_path"], artifact["final_path"]
+        ):
+            raise FileExistsError("committed final output has an unrelated staging path")
+        os.unlink(artifact["staging_path"])
+    fsync_parent(artifact["final_path"])
+    artifact.update(
+        {
+            "state": "committed",
+            "committed": True,
+            "committed_identity": final_identity,
+            "cleanup_error": None,
+            "post_commit_recovered_at": time.time(),
+        }
+    )
+    _clear_current_artifact_errors(artifact)
+    return artifact
+
+
+def _revalidate_committed(job_id: str, transaction: Dict[str, Any]) -> tuple:
+    artifacts = []
+    errors = []
+    for source in transaction.get("artifacts", []):
+        artifact = dict(source)
+        if artifact.get("committed") is True:
+            expected = artifact.get("committed_identity")
+            try:
+                if artifact.get("state") in {
+                    "attention_required",
+                    "commit_verification_failed",
+                    "post_commit_verification",
+                } or not isinstance(expected, dict):
+                    artifact = _recover_committed_artifact(job_id, artifact)
+                elif stable_file_identity(artifact["final_path"]) != expected:
+                    raise ValueError("committed final output identity drifted")
+            except Exception as exc:  # noqa: BLE001
+                if isinstance(exc, FileExistsError):
+                    artifact["state"] = "collision"
+                elif isinstance(exc, ValueError):
+                    artifact["state"] = "drifted"
+                else:
+                    artifact["state"] = "commit_verification_failed"
+                artifact["post_commit_error"] = str(exc)
+                errors.append("frame {}: {}".format(artifact.get("frame"), exc))
+        artifacts.append(artifact)
+    transaction = dict(transaction)
+    transaction["artifacts"] = artifacts
+    transaction["aggregate"] = aggregate_artifacts(artifacts)
+    transaction["state"] = transaction["aggregate"]["state"]
+    return transaction, errors
+
+
+def _recover_publication_intents(job_id: str, transaction: Dict[str, Any]) -> tuple:
+    """Resolve the narrow crash window between publication and status update."""
+    artifacts = []
+    errors = []
+    for source in transaction.get("artifacts", []):
+        artifact = dict(source)
+        if artifact.get("state") != "publishing" or artifact.get("committed") is True:
+            artifacts.append(artifact)
+            continue
+        try:
+            receipt = validate_receipt(artifact.get("validator_receipt"), job_id, artifact)
+            staged_exists = os.path.lexists(artifact["staging_path"])
+            final_exists = os.path.lexists(artifact["final_path"])
+            if not final_exists:
+                if not staged_exists:
+                    raise ValueError("publication intent lost both staged and final outputs")
+                artifact["state"] = "staged"
+                _clear_current_artifact_errors(artifact)
+                artifacts.append(artifact)
+                continue
+            final_identity = stable_file_identity(artifact["final_path"])
+            if not identity_matches_receipt(final_identity, receipt):
+                raise ValueError("publication intent final output does not match its validator receipt")
+            cleanup_error = None
+            if staged_exists:
+                staged_identity = stable_file_identity(artifact["staging_path"])
+                if not identity_matches_receipt(staged_identity, receipt) or not os.path.samefile(
+                    artifact["staging_path"], artifact["final_path"]
+                ):
+                    raise FileExistsError("publication intent collided with an unrelated final output")
+                try:
+                    os.unlink(artifact["staging_path"])
+                except OSError as exc:
+                    cleanup_error = str(exc)
+            try:
+                fsync_parent(artifact["final_path"])
+            except OSError as exc:
+                cleanup_error = cleanup_error or str(exc)
+            artifact.update(
+                {
+                    "committed": True,
+                    "committed_identity": final_identity,
+                    "state": "attention_required" if cleanup_error else "committed",
+                    "cleanup_error": cleanup_error,
+                    "recovered_at": time.time(),
+                }
+            )
+            if not cleanup_error:
+                _clear_current_artifact_errors(artifact)
+            if cleanup_error:
+                errors.append("frame {}: {}".format(artifact.get("frame"), cleanup_error))
+        except Exception as exc:  # noqa: BLE001
+            artifact["state"] = "collision" if isinstance(exc, FileExistsError) else "drifted"
+            artifact["last_error"] = str(exc)
+            errors.append("frame {}: {}".format(artifact.get("frame"), exc))
+        artifacts.append(artifact)
+    transaction = dict(transaction)
+    transaction["artifacts"] = artifacts
+    transaction["aggregate"] = aggregate_artifacts(artifacts)
+    transaction["state"] = transaction["aggregate"]["state"]
+    return transaction, errors
+
+
+def _persist_finalize_failure(
+    status_path: Path,
+    status: Dict[str, Any],
+    transaction: Dict[str, Any],
+    artifact_index: int,
+    state: str,
+    error: Exception,
+    committed: bool = False,
+) -> None:
+    artifacts = [dict(item) for item in transaction.get("artifacts", [])]
+    artifact = artifacts[artifact_index]
+    artifact.update(
+        {
+            "state": state,
+            "committed": committed,
+            "last_error": str(error),
+            "last_error_at": time.time(),
+        }
+    )
+    artifacts[artifact_index] = artifact
+    transaction = dict(transaction)
+    transaction["artifacts"] = artifacts
+    _set_transaction(status, transaction)
+    _isolated_jobs.write_status(status_path, status)
+
+
+def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict[str, Any]:
+    """Publish externally validated staged EXRs without replacing final paths."""
+    if not isinstance(validator_receipts, list) or not validator_receipts:
+        raise ValueError("validator_receipts must be a non-empty array")
+    _isolated_jobs.read_job(job_id)
+    status_path = _isolated_jobs._status_path(job_id)
+    finalized_frames = []
+    with _artifact_transaction_lock(status_path):
+        status = _isolated_jobs._read_status(status_path)
+        if status.get("state") != "completed":
+            raise ValueError("render worker must be completed before finalization")
+        transaction = status.get("artifact_transaction")
+        if not isinstance(transaction, dict) or transaction.get("mode") != TRANSACTION_MODE:
+            raise ValueError("render job has no staged_no_clobber artifact transaction")
+        artifacts = transaction.get("artifacts")
+        if not isinstance(artifacts, list) or not artifacts:
+            raise ValueError("render job has no staged artifacts")
+        if len(validator_receipts) > len(artifacts):
+            raise ValueError("validator_receipts exceeds the staged artifact count")
+
+        transaction, recovery_errors = _recover_publication_intents(job_id, transaction)
+        _set_transaction(status, transaction)
+        _isolated_jobs.write_status(status_path, status)
+        transaction = status["artifact_transaction"]
+        if recovery_errors:
+            raise ValueError("; ".join(recovery_errors))
+        transaction, drift_errors = _revalidate_committed(job_id, transaction)
+        if drift_errors:
+            _set_transaction(status, transaction)
+            _isolated_jobs.write_status(status_path, status)
+            raise ValueError("; ".join(drift_errors))
+
+        seen_frames = set()
+        for receipt_payload in validator_receipts:
+            frame = receipt_payload.get("frame") if isinstance(receipt_payload, dict) else None
+            if isinstance(frame, bool) or not isinstance(frame, int) or frame in seen_frames:
+                raise ValueError("validator_receipts must bind unique integer frames")
+            seen_frames.add(frame)
+            artifacts = [dict(item) for item in transaction["artifacts"]]
+            matching = [index for index, artifact in enumerate(artifacts) if artifact.get("frame") == frame]
+            if len(matching) != 1:
+                raise ValueError("validator receipt frame is not part of this render job")
+            artifact_index = matching[0]
+            artifact = artifacts[artifact_index]
+            receipt = validate_receipt(receipt_payload, job_id, artifact)
+
+            if artifact.get("committed") is True:
+                if artifact.get("validator_receipt") != receipt:
+                    raise ValueError("committed frame validator receipt does not match")
+                final_identity = stable_file_identity(artifact["final_path"])
+                if not identity_matches_receipt(final_identity, receipt):
+                    error = ValueError("committed final output no longer matches its validator receipt")
+                    _persist_finalize_failure(
+                        status_path,
+                        status,
+                        transaction,
+                        artifact_index,
+                        "drifted",
+                        error,
+                        committed=True,
+                    )
+                    raise error
+                finalized_frames.append(frame)
+                continue
+            if artifact.get("state") != "staged":
+                raise ValueError("frame {} is not in staged state".format(frame))
+
+            try:
+                assert_same_parent_and_volume(artifact["staging_path"], artifact["final_path"])
+                staged_identity = stable_file_identity(artifact["staging_path"])
+                if not identity_matches_receipt(staged_identity, receipt):
+                    raise ValueError("staged output does not match its validator receipt")
+                fsync_file(artifact["staging_path"])
+                if stable_file_identity(artifact["staging_path"]) != staged_identity:
+                    raise ValueError("staged output identity drifted after fsync")
+            except Exception as exc:
+                _persist_finalize_failure(
+                    status_path,
+                    status,
+                    transaction,
+                    artifact_index,
+                    "drifted",
+                    exc,
+                )
+                raise
+
+            artifact.update(
+                {
+                    "state": "publishing",
+                    "validator_receipt": receipt,
+                    "publication_started_at": time.time(),
+                }
+            )
+            artifacts[artifact_index] = artifact
+            transaction["artifacts"] = artifacts
+            _set_transaction(status, transaction)
+            _isolated_jobs.write_status(status_path, status)
+            transaction = status["artifact_transaction"]
+
+            try:
+                publication_identity = stable_file_identity(artifact["staging_path"])
+                if not identity_matches_receipt(publication_identity, receipt):
+                    raise ValueError(
+                        "staged output identity no longer matches its validator receipt before publication"
+                    )
+                publication = publish_no_clobber(
+                    artifact["staging_path"],
+                    artifact["final_path"],
+                    expected_identity=publication_identity,
+                )
+            except Exception as exc:
+                committed = isinstance(exc, PublicationIdentityMismatchError)
+                if committed:
+                    failure_state = "attention_required"
+                elif isinstance(exc, FileExistsError):
+                    failure_state = "collision"
+                elif isinstance(exc, ValueError):
+                    failure_state = "drifted"
+                else:
+                    failure_state = "publishing"
+                _persist_finalize_failure(
+                    status_path,
+                    status,
+                    transaction,
+                    artifact_index,
+                    failure_state,
+                    exc,
+                    committed=committed,
+                )
+                raise
+
+            artifacts = [dict(item) for item in transaction["artifacts"]]
+            artifact = artifacts[artifact_index]
+            artifact.update(
+                {
+                    "state": "post_commit_verification",
+                    "committed": True,
+                    "published_at": time.time(),
+                    "publication_method": "rename" if os.name == "nt" else "hardlink_unlink",
+                    "cleanup_error": publication.get("cleanup_error"),
+                }
+            )
+            artifacts[artifact_index] = artifact
+            transaction["artifacts"] = artifacts
+            _set_transaction(status, transaction)
+            _isolated_jobs.write_status(status_path, status)
+            transaction = status["artifact_transaction"]
+
+            final_identity = None
+            try:
+                final_identity = stable_file_identity(artifact["final_path"])
+                if not identity_matches_receipt(final_identity, receipt):
+                    raise ValueError("published final output does not match its validator receipt")
+                fsync_parent(artifact["final_path"])
+                if publication.get("cleanup_error"):
+                    raise RuntimeError("staging cleanup failed: {}".format(publication["cleanup_error"]))
+            except Exception as exc:
+                artifacts = [dict(item) for item in transaction["artifacts"]]
+                artifact = artifacts[artifact_index]
+                if final_identity is not None:
+                    artifact["committed_identity"] = final_identity
+                artifact.update(
+                    {
+                        "state": "commit_verification_failed",
+                        "committed": True,
+                        "post_commit_error": str(exc),
+                        "post_commit_checked_at": time.time(),
+                    }
+                )
+                artifacts[artifact_index] = artifact
+                transaction["artifacts"] = artifacts
+                _set_transaction(status, transaction)
+                _isolated_jobs.write_status(status_path, status)
+                raise
+
+            artifacts = [dict(item) for item in transaction["artifacts"]]
+            artifact = artifacts[artifact_index]
+            artifact.update(
+                {
+                    "state": "committed",
+                    "committed": True,
+                    "committed_identity": final_identity,
+                    "post_commit_verified_at": time.time(),
+                }
+            )
+            artifacts[artifact_index] = artifact
+            transaction["artifacts"] = artifacts
+            _set_transaction(status, transaction)
+            _isolated_jobs.write_status(status_path, status)
+            transaction = status["artifact_transaction"]
+            finalized_frames.append(frame)
+
+        transaction, drift_errors = _revalidate_committed(job_id, transaction)
+        _set_transaction(status, transaction)
+        _isolated_jobs.write_status(status_path, status)
+        if drift_errors:
+            raise ValueError("; ".join(drift_errors))
+        transaction = status["artifact_transaction"]
+        return {
+            "job_id": job_id,
+            "worker_state": status["state"],
+            "transaction_state": transaction["state"],
+            "aggregate": transaction["aggregate"],
+            "finalized_frames": finalized_frames,
+        }
+
+
 def read_render_job(job_id: str, include_details: bool = False) -> Dict[str, Any]:
     result = _with_progress(_isolated_jobs.read_job(job_id))
     if result.get("state") in _isolated_jobs._TERMINAL_STATES:
@@ -248,6 +714,9 @@ def read_render_job(job_id: str, include_details: bool = False) -> Dict[str, Any
     if include_details:
         result["warnings"] = warnings
     if not include_details:
+        transaction = result.get("artifact_transaction")
+        if isinstance(transaction, dict):
+            result["artifact_transaction"] = _transaction_summary(transaction)
         result.pop("expected_outputs", None)
         result.pop("output_snapshot", None)
         written_files = list(result.pop("written_files", []) or [])

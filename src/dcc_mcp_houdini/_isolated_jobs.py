@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
@@ -12,6 +11,10 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+
+from dcc_mcp_houdini._render_artifacts import aggregate_artifacts
+from dcc_mcp_houdini._status_io import read_status as _read_status_document
+from dcc_mcp_houdini._status_io import write_status
 
 if os.name == "nt":
     from dcc_mcp_houdini._windows_process import terminate_process_tree as _terminate_windows_process_tree
@@ -27,12 +30,6 @@ _SIGTERM = getattr(signal, "SIGTERM", 15)
 _SIGKILL = getattr(signal, "SIGKILL", 9)
 
 
-def write_status(path: Path, payload: Mapping[str, Any]) -> None:
-    pending = path.with_name("{}.{}.tmp".format(path.name, uuid.uuid4().hex))
-    pending.write_text(json.dumps(dict(payload), indent=2), encoding="utf-8")
-    os.replace(str(pending), str(path))
-
-
 def _status_path(job_id: str) -> Path:
     if not job_id or any(char not in "0123456789abcdef" for char in job_id.lower()):
         raise ValueError("job_id must be a hexadecimal identifier")
@@ -42,7 +39,7 @@ def _status_path(job_id: str) -> Path:
 def _read_status(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError("Background job was not found")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return _read_status_document(path)
 
 
 def create_job(initial: Mapping[str, Any]) -> Tuple[Dict[str, Any], Path]:
@@ -92,6 +89,12 @@ def launch_job(
             )
     except Exception as exc:
         status.update({"state": "failed", "finished_at": time.time(), "error": str(exc)})
+        transaction = status.get("artifact_transaction")
+        if isinstance(transaction, dict):
+            transaction = dict(transaction)
+            transaction["state"] = "failed"
+            transaction["aggregate"] = aggregate_artifacts(transaction.get("artifacts", []))
+            status["artifact_transaction"] = transaction
         write_status(status_path, status)
         raise
     result = dict(status)
@@ -114,6 +117,23 @@ def _finish_status(status: Dict[str, Any], state: str, return_code: int) -> Dict
         status["elapsed_secs"] = round(finished_at - float(status["started_at"]), 3)
     if state == "interrupted":
         status["error"] = "Background worker exited before reporting a terminal state"
+    transaction = status.get("artifact_transaction")
+    if isinstance(transaction, dict) and transaction.get("state") not in {"committed", "partially_committed"}:
+        transaction = dict(transaction)
+        artifacts = []
+        for source in transaction.get("artifacts", []):
+            artifact = dict(source)
+            if artifact.get("committed") is not True:
+                artifact["state"] = state
+            artifacts.append(artifact)
+        transaction.update(
+            {
+                "state": state,
+                "artifacts": artifacts,
+                "aggregate": aggregate_artifacts(artifacts),
+            }
+        )
+        status["artifact_transaction"] = transaction
     return status
 
 
