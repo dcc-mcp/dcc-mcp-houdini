@@ -28,7 +28,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Three-point studio lighting | `load_skill("houdini-light-rig")` → `create_three_point_light_rig` → `aim_light_at_object` → `set_light_rig_intensity` → `get_lighting_summary` |
 | HDRI environment lighting | `load_skill("houdini-light-rig")` → `create_hdri_world` → `area_softbox` / `set_render_view_transform` → `get_lighting_summary` |
 | Light rig management | `load_skill("houdini-light-rig")` → `list_light_rigs` → `group_lights` → `set_light_rig_intensity` |
-| Render & verify | `load_skill("houdini-render")` → `houdini_render__set_render_settings` → `houdini_render__capture_viewport` → `houdini_render__render_rop` → `houdini_render__get_render_job` / `houdini_render__cancel_render_job` |
+| Render & verify | `load_skill("houdini-render")` → `houdini_render__set_render_settings` → `houdini_render__capture_viewport` → `houdini_render__render_rop` → `houdini_render__get_render_job` → optional `houdini_render__finalize_render_outputs` / `houdini_render__cancel_render_job` |
 | Karma stage preflight | `load_skill("houdini-render")` → `houdini_render__validate_karma_stage(lop_path="/stage/OUT", renderer="karma_xpu")` |
 | Texture bake (AO) | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__bake_ambient_occlusion` |
 | Texture bake (lighting) | `load_skill("houdini-texture-bake")` → `houdini_texture_bake__list_bake_targets` → `houdini_texture_bake__bake_lighting` |

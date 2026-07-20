@@ -192,6 +192,19 @@ tools:
             execution. When omitted, both interactive and headless Houdini use
             an isolated job. Headless isolation uses a job-owned temporary HIP
             snapshot without saving the source scene.
+        artifact_transaction:
+          type: object
+          additionalProperties: false
+          required: [mode]
+          description: >-
+            Optional staged publication contract for background renders with one
+            primary multilayer EXR per integral frame. The worker discovers the
+            exact ROP output parameter and creates same-directory staging names;
+            the source HIP and final paths are never changed or overwritten.
+          properties:
+            mode:
+              type: string
+              enum: [staged_no_clobber]
   - name: get_render_job
     description: >-
       Read bounded status, output progress, elapsed time, and ETA for a background
@@ -220,6 +233,72 @@ tools:
           type: boolean
           default: false
           description: Include full expected/output snapshots, written-file and warning lists, errors, and traceback data. The default response is bounded.
+  - name: finalize_render_outputs
+    description: >-
+      Publish one or more staged EXRs from a completed isolated render job. Each
+      external validator receipt is bound to the job, frame, staging/final paths,
+      byte count, mtime, SHA-256, and validator identity. Publication never
+      replaces an existing final: Windows uses rename and POSIX uses hard-link
+      plus unlink. Poll get_render_job for the transaction aggregate and set
+      include_details=true for per-frame evidence.
+    source_file: scripts/finalize_render_outputs.py
+    execution: sync
+    affinity: any
+    group: render
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [job_id, validator_receipts]
+      properties:
+        job_id:
+          type: string
+        validator_receipts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [accepted, job_id, frame, staging_path, final_path, bytes, mtime_ns, sha256, validator]
+            properties:
+              accepted:
+                type: boolean
+                const: true
+              job_id:
+                type: string
+              frame:
+                type: integer
+              staging_path:
+                type: string
+              final_path:
+                type: string
+              bytes:
+                type: integer
+                minimum: 1
+              mtime_ns:
+                type: integer
+                minimum: 0
+              sha256:
+                type: string
+                pattern: "^[0-9A-Fa-f]{64}$"
+              validator:
+                type: object
+                additionalProperties: false
+                required: [id, version, implementation_sha256]
+                properties:
+                  id:
+                    type: string
+                  version:
+                    type: string
+                  implementation_sha256:
+                    type: string
+                    pattern: "^[0-9A-Fa-f]{64}$"
   - name: cancel_render_job
     description: Cancel a background ROP render/cache/chain job owned by the current adapter process. Repeated calls are safe.
     source_file: scripts/cancel_render_job.py

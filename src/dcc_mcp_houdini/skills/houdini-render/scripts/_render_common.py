@@ -8,6 +8,7 @@ import re
 from typing import Any, Optional, Sequence
 
 MAX_DIMENSION = 4096
+PRIMARY_OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
 
 
 def get_node(hou: Any, node_path: str) -> Any:
@@ -60,25 +61,30 @@ def set_first_parm(node: Any, names: Sequence[str], value: Any) -> Optional[str]
 
 def eval_first_parm(node: Any, names: Sequence[str], preserve_string: bool = False):
     """Eval the first existing parm/parm-tuple in *names*, else None."""
+    return eval_first_parm_named(node, names, preserve_string=preserve_string)[1]
+
+
+def eval_first_parm_named(node: Any, names: Sequence[str], preserve_string: bool = False):
+    """Return ``(name, value)`` for the first evaluable parameter."""
     for name in names:
         parm = node.parm(name)
         if preserve_string and parm is not None:
             try:
-                return parm.unexpandedString()
+                return name, parm.unexpandedString()
             except Exception:  # noqa: BLE001
                 continue
         parm_tuple = node.parmTuple(name)
         if parm_tuple is not None:
             try:
-                return list(parm_tuple.eval())
+                return name, list(parm_tuple.eval())
             except Exception:  # noqa: BLE001
                 continue
         if parm is not None:
             try:
-                return parm.eval()
+                return name, parm.eval()
             except Exception:  # noqa: BLE001
                 continue
-    return None
+    return None, None
 
 
 def apply_frame_range(node: Any, frame_range: Optional[Sequence[float]]) -> Optional[list]:

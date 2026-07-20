@@ -8,10 +8,15 @@ import time
 from typing import List, Optional
 
 from _background_render import launch_background_render  # noqa: E402
-from _render_common import eval_first_parm, expanded_outputs, get_node, node_summary, render_node  # noqa: E402
+from _render_common import (  # noqa: E402
+    PRIMARY_OUTPUT_PARMS,
+    eval_first_parm,
+    expanded_outputs,
+    get_node,
+    node_summary,
+    render_node,
+)
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
-
-_OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
 
 
 def _expand_outputs(pattern: Optional[str]) -> list:
@@ -33,6 +38,7 @@ def render_rop(
     rop_path: str,
     frame_range: Optional[List[float]] = None,
     background: Optional[bool] = None,
+    artifact_transaction: Optional[dict] = None,
 ) -> dict:
     """Render the ROP at *rop_path*, returning written files and elapsed time."""
     try:
@@ -51,10 +57,24 @@ def render_rop(
                 "Node has no supported render action; expected a ROP/output driver",
                 node_path=rop.path(),
             )
-        output_pattern = eval_first_parm(rop, _OUTPUT_PARMS, preserve_string=True)
+        output_pattern = eval_first_parm(rop, PRIMARY_OUTPUT_PARMS, preserve_string=True)
         use_background = True if background is None else background
+        if artifact_transaction is not None and not use_background:
+            return skill_error(
+                "Artifact transaction requires background rendering",
+                "staged_no_clobber is available only for isolated ROP jobs",
+            )
         if use_background:
-            job = launch_background_render(hou, rop.path(), frame_range, output_pattern)
+            if artifact_transaction is None:
+                job = launch_background_render(hou, rop.path(), frame_range, output_pattern)
+            else:
+                job = launch_background_render(
+                    hou,
+                    rop.path(),
+                    frame_range,
+                    output_pattern,
+                    artifact_transaction=artifact_transaction,
+                )
             return skill_success(
                 "Started background ROP render",
                 rop=node_summary(rop),

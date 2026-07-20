@@ -36,7 +36,8 @@ agent can detect and skip cleanly when rendering is unavailable.
 - **`render`:** `get_render_settings` (read-only), `set_render_settings`
   (reports `unsupported` fields per ROP type), `render_rop` (foreground or
   isolated `hython` background job), `get_render_job` (polls and reconciles
-  status without blocking the UI), `cancel_render_job` (cancels only jobs
+  status without blocking the UI), `finalize_render_outputs` (publishes
+  externally validated staged EXRs without replacing finals), `cancel_render_job` (cancels only jobs
   owned by the current adapter process), `configure_aovs` (add/remove Solaris
   RenderVars or native Mantra auxiliary planes with renderer-correct processing),
   `validate_karma_stage` (read-only USD/Karma
@@ -55,6 +56,14 @@ agent can detect and skip cleanly when rendering is unavailable.
 4. `capture_viewport(output_path="/tmp/preview.jpg")` for a quick look (UI only)
 5. `flipbook(output_path="/tmp/preview.$F4.jpg", frame_range=[1,24,4], camera_path="/obj/rendercam")` for a sparse camera preview (UI only)
 6. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive or headless Houdini
+
+For crash-safe final publication, opt in with
+`artifact_transaction={"mode":"staged_no_clobber"}` and an explicit integral
+frame range. Poll the worker to `completed`, validate each returned staging EXR
+externally, then pass the identity-bound receipts to
+`finalize_render_outputs(job_id, validator_receipts)`. The worker discovers and
+temporarily overrides the exact EXR output parameter only in its loaded HIP
+copy. Final paths are created only by the no-clobber finalize step.
 
 ### Render Layers & AOVs
 
@@ -86,6 +95,9 @@ evidence. `verified` requires every expected output to be newly written,
 readable, non-empty, and produced without an execution/cook failure. Pass
 an explicit frame range when exact completeness matters; render and cache jobs
 with only part of that requested range written fail with bounded output counts.
+Transaction polling additionally returns a bounded transaction state and
+aggregate; use `include_details=true` for per-frame staging, validator, commit,
+and post-commit verification evidence.
 Pass `include_details=true` only when the full
 expected-output snapshot, complete written-file and warning lists, error, and
 traceback are needed. The same job lifecycle also observes `cache_simulation` and
