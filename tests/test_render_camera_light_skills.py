@@ -526,10 +526,9 @@ class TestViewportCapture:
         # resolution clamped to MAX_DIMENSION
         assert result["context"]["resolution"] == [4096, 720]
 
-    def test_flipbook_applies_increment_and_camera(self, tmp_path: Path) -> None:
+    def test_flipbook_launch_returns_job_id(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "flipbook.py")
-        out = tmp_path / "frame.$F4.jpg"
-        written = tmp_path / "frame.0001.jpg"
+        out = str(tmp_path / "frame.$F4.jpg")
         settings = MagicMock()
         cam = _node("/obj/shotcam", "shotcam", "cam")
         viewport = MagicMock()
@@ -537,7 +536,6 @@ class TestViewportCapture:
         viewer = MagicMock()
         viewer.curViewport.return_value = viewport
         viewer.flipbookSettings.return_value.stash.return_value = settings
-        viewer.flipbook.side_effect = lambda vp, s: written.write_bytes(b"img")
         mock_hou = MagicMock()
         mock_hou.isUIAvailable.return_value = True
         mock_hou.ui.paneTabOfType.return_value = viewer
@@ -545,18 +543,19 @@ class TestViewportCapture:
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.flipbook(
-                str(out),
+                out,
                 frame_range=[1, 10, 3],
                 camera_path="/obj/shotcam",
             )
 
         assert result["success"] is True
-        assert result["context"]["frame_range"] == [1.0, 10.0, 3.0]
-        assert result["context"]["camera_path"] == "/obj/shotcam"
-        settings.frameRange.assert_called_once_with((1.0, 10.0))
-        settings.frameIncrement.assert_called_once_with(3.0)
-        viewport.setCamera.assert_called_once_with(cam)
-        viewer.flipbook.assert_called_once_with(viewport, settings)
+        ctx = result["context"]
+        assert "job_id" in ctx
+        assert ctx["job_id"].startswith("flipbook-")
+        assert ctx["state"] == "running"
+        assert ctx["frame_range"] == [1.0, 10.0, 3.0]
+        assert ctx["camera_path"] == "/obj/shotcam"
+        assert ctx["progress"] == {"completed": 0, "total": 4}
 
     def test_flipbook_rejects_non_positive_increment(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "flipbook.py")
@@ -570,6 +569,184 @@ class TestViewportCapture:
 
         assert result["success"] is False
         assert "increment" in result["error"].lower()
+
+    def test_flipbook_chunked_runner_step_through(self, tmp_path: Path) -> None:
+        """Verify the ChunkedRunner steps through frames and reports progress."""
+        mod = _load_script("houdini-render", "flipbook.py")
+        out = str(tmp_path / "frame.$F4.jpg")
+        settings = MagicMock()
+        viewer = MagicMock()
+        viewer.curViewport.return_value = MagicMock()
+        viewer.flipbookSettings.return_value.stash.return_value = settings
+        written_frames = []
+
+        def _write_frame(vp, s):
+            # Extract frame from output path in settings
+            try:
+                frame_path = s.output.call_args[0][0]
+            except Exception:  # noqa: BLE001
+                frame_path = str(tmp_path / "frame.0001.jpg")
+            Path(frame_path).write_bytes(b"img")
+            written_frames.append(frame_path)
+
+        viewer.flipbook.side_effect = _write_frame
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            launch_result = mod.flipbook(out, frame_range=[1, 4, 1])
+
+            assert launch_result["success"] is True
+            job_id = launch_result["context"]["job_id"]
+
+            # Access the cached module that flipbook.py imported
+            import _flipbook_chunked as chunked
+            job = chunked._flipbook_jobs[job_id]
+            runner = job["runner"]
+
+            # Step 1
+            assert runner.step() is True
+            progress1 = mod.get_flipbook_job(job_id)
+            assert progress1["context"]["state"] == "running"
+            assert progress1["context"]["progress"]["completed"] == 1
+
+            # Step 2
+            assert runner.step() is True
+            progress2 = mod.get_flipbook_job(job_id)
+            assert progress2["context"]["progress"]["completed"] == 2
+
+            # Step 3
+            assert runner.step() is True
+            progress3 = mod.get_flipbook_job(job_id)
+            assert progress3["context"]["progress"]["completed"] == 3
+
+            # Step 4 — last step
+            assert runner.step() is False  # terminal
+            final = mod.get_flipbook_job(job_id)
+            assert final["context"]["state"] == "completed"
+            assert final["context"]["progress"]["completed"] == 4
+            assert final["context"]["captured"] is True
+            assert len(final["context"]["written_files"]) == 4
+
+    def test_flipbook_chunked_cancellation(self, tmp_path: Path) -> None:
+        """Cancel mid-sequence returns partial outputs."""
+        mod = _load_script("houdini-render", "flipbook.py")
+        out = str(tmp_path / "frame.$F4.jpg")
+        settings = MagicMock()
+        viewer = MagicMock()
+        viewer.curViewport.return_value = MagicMock()
+        viewer.flipbookSettings.return_value.stash.return_value = settings
+
+        written_frames = []
+
+        def _write_frame(vp, s):
+            try:
+                frame_path = s.output.call_args[0][0]
+            except Exception:  # noqa: BLE001
+                frame_path = str(tmp_path / "frame.0001.jpg")
+            Path(frame_path).write_bytes(b"img")
+            written_frames.append(frame_path)
+
+        viewer.flipbook.side_effect = _write_frame
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            launch_result = mod.flipbook(out, frame_range=[1, 10, 1])
+
+            job_id = launch_result["context"]["job_id"]
+            import _flipbook_chunked as chunked
+            job = chunked._flipbook_jobs[job_id]
+            runner = job["runner"]
+
+            # Execute 3 frames
+            for _ in range(3):
+                assert runner.step() is True
+
+            progress = mod.get_flipbook_job(job_id)
+            assert progress["context"]["progress"]["completed"] == 3
+
+            # Cancel
+            cancel_result = mod.cancel_flipbook_job(job_id)
+            assert cancel_result["success"] is True
+            assert cancel_result["context"]["state"] == "cancelling"
+
+            # Next step detects cancellation
+            assert runner.step() is False
+            final = mod.get_flipbook_job(job_id)
+            assert final["context"]["state"] == "cancelled"
+            assert final["context"]["captured"] is True
+            assert len(final["context"]["written_files"]) == 3
+            assert len(final["context"]["skipped_frames"]) == 7
+
+    def test_flipbook_chunked_terminal_idempotence(self, tmp_path: Path) -> None:
+        """step() after terminal is a no-op."""
+        mod = _load_script("houdini-render", "flipbook.py")
+        out = str(tmp_path / "frame.$F4.jpg")
+        settings = MagicMock()
+        viewer = MagicMock()
+        viewer.curViewport.return_value = MagicMock()
+        viewer.flipbookSettings.return_value.stash.return_value = settings
+
+        def _write_frame(vp, s):
+            try:
+                frame_path = s.output.call_args[0][0]
+            except Exception:  # noqa: BLE001
+                frame_path = str(tmp_path / "frame.0001.jpg")
+            Path(frame_path).write_bytes(b"img")
+
+        viewer.flipbook.side_effect = _write_frame
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            launch_result = mod.flipbook(out, frame_range=[1, 2, 1])
+
+            job_id = launch_result["context"]["job_id"]
+            import _flipbook_chunked as chunked
+            job = chunked._flipbook_jobs[job_id]
+            runner = job["runner"]
+
+            # Run to completion
+            assert runner.step() is True
+            assert runner.step() is False  # terminal
+            assert runner.is_terminal is True
+
+            # Further steps are no-ops
+            assert runner.step() is False
+            assert runner.step() is False
+
+            final = mod.get_flipbook_job(job_id)
+            assert final["context"]["state"] == "completed"
+
+    def test_flipbook_chunked_get_unknown_job(self) -> None:
+        mod = _load_script("houdini-render", "flipbook.py")
+        result = mod.get_flipbook_job("nonexistent-job-id")
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()
+
+    def test_flipbook_chunked_cancel_unknown_job(self) -> None:
+        mod = _load_script("houdini-render", "flipbook.py")
+        result = mod.cancel_flipbook_job("nonexistent-job-id")
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()
+
+    def test_flipbook_chunked_empty_sequence(self, tmp_path: Path) -> None:
+        """A frame range with zero frames should fail validation."""
+        mod = _load_script("houdini-render", "flipbook.py")
+        mock_hou = MagicMock()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.flipbook(
+                str(tmp_path / "frame.$F4.jpg"),
+                frame_range=[5, 1],  # end < start
+            )
+
+        assert result["success"] is False
+        assert "end" in result["error"].lower() or "range" in result["error"].lower()
 
 
 class TestRenderSettings:

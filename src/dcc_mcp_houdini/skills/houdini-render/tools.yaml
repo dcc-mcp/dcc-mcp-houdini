@@ -31,21 +31,21 @@ tools:
           type: number
   - name: flipbook
     description: >-
-      Flipbook the current viewport across a frame range to image files (use a
-      $F token in output_path). Supports an optional frame increment and an
-      explicit camera. UI-aware.
+      Launch a chunked flipbook job that renders one frame per host event-loop
+      tick. Returns a job_id for polling via get_flipbook_job. Cooperative
+      cancellation is available via cancel_flipbook_job. UI-aware.
     source_file: scripts/flipbook.py
-    execution: async
+    execution: sync
     affinity: main
-    timeout_hint_secs: 600
+    timeout_hint_secs: 30
     group: viewport
     read_only: false
     destructive: false
-    idempotent: true
+    idempotent: false
     annotations:
       read_only_hint: false
       destructive_hint: false
-      idempotent_hint: true
+      idempotent_hint: false
     input_schema:
       type: object
       required: [output_path, frame_range]
@@ -67,6 +67,51 @@ tools:
         camera_path:
           type: string
           description: "Optional camera node to activate before capture."
+  - name: get_flipbook_job
+    description: >-
+      Read bounded status, output progress, and written files for a chunked
+      flipbook job. Terminal states (completed/cancelled/failed) report
+      written_files and skipped_frames.
+    source_file: scripts/flipbook.py
+    execution: sync
+    affinity: any
+    timeout_hint_secs: 10
+    group: viewport
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
+          description: "Job identifier returned by the flipbook launch."
+  - name: cancel_flipbook_job
+    description: Cancel a running chunked flipbook job. Repeated calls are safe.
+    source_file: scripts/flipbook.py
+    execution: sync
+    affinity: any
+    timeout_hint_secs: 10
+    group: viewport
+    read_only: false
+    destructive: true
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
+          description: "Job identifier returned by the flipbook launch."
   - name: get_render_settings
     description: >-
       Read renderer, camera, resolution, frame range, output path, and image
