@@ -602,6 +602,7 @@ class TestViewportCapture:
 
             # Access the cached module that flipbook.py imported
             import _flipbook_chunked as chunked
+
             job = chunked._flipbook_jobs[job_id]
             runner = job["runner"]
 
@@ -658,6 +659,7 @@ class TestViewportCapture:
 
             job_id = launch_result["context"]["job_id"]
             import _flipbook_chunked as chunked
+
             job = chunked._flipbook_jobs[job_id]
             runner = job["runner"]
 
@@ -707,6 +709,7 @@ class TestViewportCapture:
 
             job_id = launch_result["context"]["job_id"]
             import _flipbook_chunked as chunked
+
             job = chunked._flipbook_jobs[job_id]
             runner = job["runner"]
 
