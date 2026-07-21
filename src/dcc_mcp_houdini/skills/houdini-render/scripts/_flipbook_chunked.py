@@ -14,25 +14,19 @@ import glob
 import os
 import time
 import uuid
-from typing import Any
-from typing import Callable
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 # Import third-party modules
 # (hou is imported lazily inside functions that need it)
-
 # Import dcc_mcp_core modules
-from dcc_mcp_core.cancellation import CancelledError
-from dcc_mcp_core.cancellation import CancelToken
+from dcc_mcp_core.cancellation import CancelledError, CancelToken
 
 # ---------------------------------------------------------------------------
 # Embedded ChunkedRunner (PIP-2788, pending next dcc-mcp-core release).
 # Once the release ships this block can be replaced by:
 #   from dcc_mcp_core.chunked_runner import ChunkedRunner, ChunkedStep, ChunkedProgress, ChunkedOutcome
 # ---------------------------------------------------------------------------
+
 
 class ChunkedStep:
     """One bounded unit of work executed on the main/affinity thread."""
@@ -95,9 +89,7 @@ class ChunkedRunner:
             elif callable(item):
                 self._steps.append(ChunkedStep(i, item))
             else:
-                raise TypeError(
-                    f"Expected ChunkedStep or callable, got {type(item).__name__}"
-                )
+                raise TypeError(f"Expected ChunkedStep or callable, got {type(item).__name__}")
         self._cancel_token = cancel_token
         self._clock = clock
         self._index: int = 0
@@ -227,7 +219,6 @@ def _render_single_frame(
     resolution: Optional[List[int]] = None,
 ) -> Optional[str]:
     """Render one flipbook frame. Returns the written file path or None."""
-    import hou  # noqa: PLC0415
 
     settings = viewer.flipbookSettings().stash()
     settings.frameRange((frame, frame))
@@ -250,6 +241,7 @@ def _render_single_frame(
     basename = os.path.basename(output_path)
     # Replace frame number with wildcard
     import re
+
     pattern = re.sub(r"\d+", "*", basename)
     candidates = sorted(glob.glob(os.path.join(dirname, pattern)))
     return candidates[0] if candidates else None
@@ -343,6 +335,7 @@ def _make_frame_chunk(
 
     Late-binding is avoided by capturing the values as default arguments.
     """
+
     def _chunk() -> Optional[str]:
         return _render_single_frame(
             viewer=viewer,
