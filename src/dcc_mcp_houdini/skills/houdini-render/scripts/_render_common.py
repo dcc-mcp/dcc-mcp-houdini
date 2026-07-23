@@ -5,7 +5,7 @@ from __future__ import annotations
 import glob
 import os
 import re
-from typing import Any, Optional, Sequence
+from typing import Any, Callable, List, Optional, Sequence
 
 MAX_DIMENSION = 4096
 PRIMARY_OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
@@ -224,3 +224,43 @@ def node_summary(node: Any) -> dict:
 def existing_outputs(output_path: str) -> list:
     """Return [output_path] when it is an existing file, else []."""
     return [output_path] if output_path and os.path.isfile(output_path) else []
+
+
+def build_per_frame_steps(
+    node: Any,
+    frame_range: Sequence[float],
+) -> List[Callable[[], None]]:
+    """Expand a frame range into one callable per frame for ChunkedRunner.
+
+    Each callable renders a single frame by calling ``node.render()`` with
+    a single-frame ``frame_range=(f, f, 1)``.  This keeps each step bounded
+    so the event loop gets a checkpoint between frames.
+
+    Only usable for standard ROP nodes (``hou.RopNode.render``).  Solaris
+    ``usdrender_rop`` nodes use ``execute.pressButton()`` which cannot be
+    decomposed per-frame, so they must not use this function.
+    """
+    start = float(frame_range[0])
+    end = float(frame_range[1])
+    step = float(frame_range[2]) if len(frame_range) > 2 else 1.0
+    if step == 0 or (end - start) * step < 0:
+        raise ValueError("frame_range step must move from start toward end")
+
+    steps: List[Callable[[], None]] = []
+    frame = start
+    tolerance = abs(step) * 1e-9
+    while (step > 0 and frame <= end + tolerance) or (step < 0 and frame >= end - tolerance):
+        # Capture by default-argument to avoid late-binding issues
+        steps.append(_make_single_frame_step(node, float(frame)))
+        frame += step
+    return steps
+
+
+def _make_single_frame_step(node: Any, frame: float) -> Callable[[], None]:
+    """Return a closure that renders one frame on *node*."""
+
+    def _step() -> None:
+        node.render(verbose=False, frame_range=(frame, frame, 1))
+
+    _step._frame = frame  # type: ignore[attr-defined]
+    return _step

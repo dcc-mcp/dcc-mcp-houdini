@@ -10,6 +10,7 @@ from typing import List, Optional
 from _background_render import launch_background_render  # noqa: E402
 from _render_common import (  # noqa: E402
     PRIMARY_OUTPUT_PARMS,
+    build_per_frame_steps,
     eval_first_parm,
     expanded_outputs,
     get_node,
@@ -85,13 +86,101 @@ def render_rop(
         warnings: List[str] = []
         start = time.time()
         rendered = True
-        try:
-            applied_range, execution_mode = render_node(rop, frame_range)
-        except Exception as render_exc:  # noqa: BLE001
-            rendered = False
-            applied_range = None
-            execution_mode = None
-            errors.append("Render failed: {}".format(render_exc))
+        applied_range = None
+        execution_mode = None
+
+        # Decide whether to use chunked runner for foreground multi-frame renders.
+        # Solaris (usdrender_rop) cannot render per-frame, so it stays single-call.
+        has_multi_frame = frame_range is not None and len(frame_range) >= 2
+        if has_multi_frame:
+            f_start = float(frame_range[0])
+            f_end = float(frame_range[1])
+            multi_frame = abs(f_end - f_start) > 1e-9
+        else:
+            multi_frame = False
+
+        use_chunked = has_multi_frame and multi_frame and not is_solaris
+
+        if use_chunked:
+            from _chunked_utils import _register_foreground_job, pump_runner_via_event_loop
+
+            from dcc_mcp_core.cancellation import CancelToken
+            from dcc_mcp_core.chunked_runner import ChunkedRunner
+
+            steps = build_per_frame_steps(rop, frame_range)
+            token = CancelToken()
+            runner = ChunkedRunner(steps, total=len(steps), cancel_token=token)
+            job_id = _register_foreground_job(
+                runner, token, rop.path(), list(frame_range), len(steps)
+            )
+
+            # Block until terminal by pumping the runner through the event loop
+            pump_runner_via_event_loop(runner)
+
+            outcome = runner.outcome
+            if outcome is None:
+                rendered = False
+                errors.append("Chunked runner finished without a terminal outcome")
+            elif outcome.status == "cancelled":
+                rendered = True
+                errors.append(
+                    "Render cancelled after {} of {} frames".format(
+                        outcome.progress.completed, outcome.progress.total
+                    )
+                )
+            elif outcome.status == "failed":
+                rendered = False
+                errors.append("Render failed: {}".format(outcome.error))
+            else:
+                rendered = True
+
+            applied_range = [float(frame_range[0]), float(frame_range[1])]
+            execution_mode = "chunked"
+            elapsed = round(time.time() - start, 3)
+
+            # Collect partial/completed outputs
+            if outcome is not None:
+                completed_frames = outcome.progress.completed
+            else:
+                completed_frames = 0
+
+            rop_errors = getattr(rop, "errors", None)
+            if callable(rop_errors):
+                errors.extend(str(error) for error in rop_errors())
+            rop_warnings = getattr(rop, "warnings", None)
+            if callable(rop_warnings):
+                warnings.extend(str(warning) for warning in rop_warnings())
+
+            written = expanded_outputs(output_pattern)
+            total_frames = len(steps)
+            skipped = list(
+                range(int(frame_range[0]) + completed_frames, int(frame_range[1]) + 1)
+            ) if completed_frames < total_frames else []
+
+            return skill_success(
+                "Rendered ROP (chunked)" if rendered else "ROP render cancelled/failed",
+                rop=node_summary(rop),
+                rendered=rendered,
+                execution_mode=execution_mode,
+                elapsed_secs=elapsed,
+                frame_range=applied_range,
+                output_pattern=output_pattern,
+                written_files=written,
+                completed_frames=completed_frames,
+                total_frames=total_frames,
+                skipped=skipped,
+                errors=errors,
+                warnings=warnings,
+            )
+        else:
+            try:
+                applied_range, execution_mode = render_node(rop, frame_range)
+            except Exception as render_exc:  # noqa: BLE001
+                rendered = False
+                applied_range = None
+                execution_mode = None
+                errors.append("Render failed: {}".format(render_exc))
+
         elapsed = round(time.time() - start, 3)
         rop_errors = getattr(rop, "errors", None)
         if callable(rop_errors):
