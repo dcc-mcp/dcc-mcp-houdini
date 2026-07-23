@@ -35,7 +35,7 @@ from packaging.version import Version
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 CORE_PACKAGE = "dcc-mcp-core"
-MIN_CORE_VERSION = "0.19.69"
+MIN_CORE_VERSION = "0.19.70"
 PLATFORMS = ("win64", "linux", "macos")
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 

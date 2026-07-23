@@ -6,7 +6,7 @@ description: >-
   workflows from color, roughness, metallic, normal, or displacement maps. Not
   for generic node graph edits.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.69+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.70+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
