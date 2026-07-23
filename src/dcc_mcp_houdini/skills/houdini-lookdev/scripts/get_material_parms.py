@@ -7,6 +7,8 @@ from typing import Optional
 from _lookdev_common import get_node, node_summary  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 
 def get_material_parms(material_path: str, name_filter: Optional[str] = None) -> dict:
     """Return evaluated parameter values for the material at *material_path*."""
@@ -23,7 +25,7 @@ def get_material_parms(material_path: str, name_filter: Optional[str] = None) ->
             if name_filter and name_filter.lower() not in name.lower():
                 continue
             try:
-                value = parm.eval()
+                value = safe_parm_eval(parm)
             except Exception:  # noqa: BLE001
                 value = None
             parms.append({"name": name, "value": value})

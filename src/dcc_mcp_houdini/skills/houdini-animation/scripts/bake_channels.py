@@ -7,6 +7,8 @@ from typing import List
 from _anim_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 _MAX_FRAMES = 100000
 
 
@@ -59,7 +61,7 @@ def bake_channels(
         while frame <= end + 1e-6:
             hou.setFrame(frame)
             for name, parm in parms.items():
-                samples[name].append((frame, parm.eval()))
+                samples[name].append((frame, safe_parm_eval(parm)))
             frame += step
         hou.setFrame(original_frame)
 
