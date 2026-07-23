@@ -249,9 +249,9 @@ tools:
             exact ROP output parameter and creates same-directory staging names;
             the source HIP and final paths are never changed or overwritten.
           properties:
-          mode:
-            type: string
-            enum: [staged_no_clobber]
+            mode:
+              type: string
+              enum: [staged_no_clobber]
   - name: render_rop_chunked
     description: >-
       Render a ROP/output driver using per-frame chunked execution via the core

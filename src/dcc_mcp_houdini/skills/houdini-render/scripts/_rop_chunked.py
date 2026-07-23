@@ -242,6 +242,29 @@ def launch_rop_job(
         "total_frames": len(chunks),
     }
 
+    # Drive the runner from Houdini's event loop: each pump tick
+    # executes one bounded frame step. The callback removes itself
+    # when the runner reaches a terminal state.
+    def _pump_callback() -> None:
+        job = _rop_jobs.get(job_id)
+        if job is None:
+            return
+        r: ChunkedRunner = job["runner"]
+        if r.is_terminal:
+            try:
+                hou.ui.removeEventLoopCallback(_pump_callback)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        r.step()
+        if r.is_terminal:
+            try:
+                hou.ui.removeEventLoopCallback(_pump_callback)
+            except Exception:  # noqa: BLE001
+                pass
+
+    hou.ui.addEventLoopCallback(_pump_callback)
+
     return {
         "success": True,
         "job_id": job_id,
