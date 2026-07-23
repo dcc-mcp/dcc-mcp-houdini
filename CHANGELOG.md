@@ -16,6 +16,23 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.26.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.25.0...v0.26.0) (2026-07-23)
+
+
+### Features
+
+* **render:** wire multi-frame ROP render into core ChunkedRunner ([8e99d73](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8e99d7355d86e406c1d5cf741354ce8f0f87846f))
+
+
+### Bug Fixes
+
+* guard parm.eval() against SIGSEGV on deleted Houdini nodes ([8eae3ea](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8eae3ead3bfc8cd7df6ee6fd0327b46cd5daeb7b))
+* include import skill in interchange stage ([#184](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/184)) ([a8dec55](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a8dec558e1d994380aa23d5763a4d9bf68bec8a3))
+* prevent pump wedge when pre_drain_check fails or raises ([e55c5bb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e55c5bbe67c563dbb8f24637c400396781ab2096))
+* **render:** preserve Solaris fallback fields ([#186](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/186)) ([e7ac9a4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e7ac9a4bd67f3a7de79f21fd7bf2fd013eea7d96))
+* **render:** resolve effective Solaris settings ([2ab9860](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2ab9860d4d45dfd2552ba510d12b73ef514d6418))
+* ruff check --fix import sorting and unused imports ([edba5d3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/edba5d383d5f5e6eabb305fe25e65a8f91d24693))
+
 ## [0.25.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.24.1...v0.25.0) (2026-07-20)
 
 
