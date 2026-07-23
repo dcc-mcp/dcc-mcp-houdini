@@ -753,6 +753,114 @@ class TestViewportCapture:
 
 
 class TestRenderSettings:
+    def test_get_render_settings_resolves_effective_solaris_products(self) -> None:
+        mod = _load_script("houdini-render", "get_render_settings.py")
+
+        def attribute(name, value):
+            result = MagicMock()
+            result.GetName.return_value = name
+            result.Get.return_value = value
+            return result
+
+        def prim(path, type_name, attributes=None, relationships=None):
+            result = MagicMock()
+            result.GetPath.return_value = path
+            result.GetTypeName.return_value = type_name
+            attributes = attributes or {}
+            relationships = relationships or {}
+            result.GetAttribute.side_effect = lambda name: attributes.get(name)
+            result.GetAttributes.return_value = list(attributes.values())
+
+            def relationship(name):
+                targets = relationships.get(name)
+                if targets is None:
+                    return None
+                value = MagicMock()
+                value.GetTargets.return_value = targets
+                return value
+
+            result.GetRelationship.side_effect = relationship
+            return result
+
+        render_var = prim(
+            "/Render/Vars/beauty",
+            "RenderVar",
+            {
+                "sourceName": attribute("sourceName", "C"),
+                "sourceType": attribute("sourceType", "raw"),
+                "dataType": attribute("dataType", "color3f"),
+            },
+        )
+        product = prim(
+            "/Render/Products/beauty",
+            "RenderProduct",
+            {"productName": attribute("productName", "/renders/beauty.$F4.exr")},
+            {"orderedVars": ["/Render/Vars/beauty"]},
+        )
+        settings = prim(
+            "/Render/Settings",
+            "RenderSettings",
+            {
+                "resolution": attribute("resolution", (1920, 1080)),
+                "karma:global:engine": attribute("karma:global:engine", "xpu"),
+                "karma:global:pathsamples": attribute("karma:global:pathsamples", 64),
+            },
+            {
+                "camera": ["/cameras/shot"],
+                "products": ["/Render/Products/beauty"],
+            },
+        )
+        stage = MagicMock()
+        stage.GetMetadata.return_value = "/Render/Settings"
+        stage.GetPrimAtPath.side_effect = {
+            "/Render/Settings": settings,
+            "/Render/Products/beauty": product,
+            "/Render/Vars/beauty": render_var,
+        }.get
+        lop = _node("/stage/karma_settings", "karma_settings", "karmarendersettings")
+        lop.stage.return_value = stage
+        rop = _node("/out/usdrender1", "usdrender1", "usdrender_rop")
+        rop.parm.side_effect = lambda name: {
+            "loppath": _scalar_parm("/stage/karma_settings"),
+            "renderer": _scalar_parm("Karma"),
+            "lopoutput": _scalar_parm("C:/tmp/__render__.usd"),
+        }.get(name)
+        frame_tuple = MagicMock()
+        frame_tuple.eval.return_value = (1, 24, 2)
+        rop.parmTuple.side_effect = lambda name: frame_tuple if name == "f" else None
+        mock_hou = MagicMock()
+        mock_hou.frame.return_value = 7.0
+        mock_hou.node.side_effect = lambda path: {
+            "/out/usdrender1": rop,
+            "/stage/karma_settings": lop,
+        }.get(path)
+        mock_hou.text.expandStringAtFrame.return_value = "/renders/beauty.0007.exr"
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_render_settings("/out/usdrender1")
+
+        context = result["context"]
+        assert context["camera"] == "/cameras/shot"
+        assert context["resolution"] == [1920, 1080]
+        assert context["frame_range"] == [1, 24, 2]
+        assert context["output_path_pattern"] == ["/renders/beauty.$F4.exr"]
+        assert context["output_path"] == ["/renders/beauty.0007.exr"]
+        assert "__render__.usd" not in str(context["output_path"])
+        assert context["intermediate_usd"]["path"] == "C:/tmp/__render__.usd"
+        assert context["renderer"] == "karma"
+        assert context["delegate"] == "Karma"
+        assert context["engine"] == "xpu"
+        assert context["samples"] == {"karma:global:pathsamples": 64}
+        assert context["aovs"] == [
+            {
+                "path": "/Render/Vars/beauty",
+                "source_name": "C",
+                "source_type": "raw",
+                "data_type": "color3f",
+            }
+        ]
+        assert context["unresolved"] == []
+
     def test_get_render_settings_reports_raw_pattern_and_resolution_frame(self) -> None:
         mod = _load_script("houdini-render", "get_render_settings.py")
         pattern = "$HIP/renders/beauty.$F4.exr"

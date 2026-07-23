@@ -117,7 +117,9 @@ tools:
       Read renderer, camera, resolution, frame range, output path, and image
       format from a ROP node. Preserves the existing resolved output_path and
       also reports its raw tokenized pattern plus the frame-to-path resolution
-      used for that value. Read-only.
+      used for that value. For a Solaris USD Render ROP, resolves the composed
+      RenderSettings, RenderProducts, samples, and AOVs without treating the
+      intermediate USD export as the rendered image. Read-only.
     source_file: scripts/get_render_settings.py
     execution: sync
     affinity: main
