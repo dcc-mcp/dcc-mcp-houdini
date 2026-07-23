@@ -81,6 +81,22 @@ def test_get_cook_job_remains_queryable_after_adapter_ownership_is_lost(tmp_path
     assert recovered["owned_by_current_process"] is False
 
 
+def test_get_cook_job_reports_live_elapsed_time_after_disconnect() -> None:
+    status = {
+        "job_id": "b" * 32,
+        "job_kind": "node_cook",
+        "state": "running",
+        "started_at": 100.0,
+        "owned_by_current_process": False,
+    }
+    with patch.object(_cook_jobs._isolated_jobs, "read_job", return_value=status), patch.object(
+        _cook_jobs.time, "time", return_value=112.3456
+    ):
+        recovered = _cook_jobs.get_cook_job(status["job_id"])
+
+    assert recovered["elapsed_secs"] == 12.346
+
+
 def test_cook_worker_writes_terminal_status(tmp_path: Path) -> None:
     status_path = tmp_path / "status.json"
     write_status(status_path, {"job_id": "c" * 32, "job_kind": "node_cook", "state": "queued"})
