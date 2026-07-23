@@ -44,6 +44,11 @@ def get_cook_job(job_id: str) -> Dict[str, Any]:
     started_at = result.get("started_at")
     if result.get("state") not in _isolated_jobs._TERMINAL_STATES and isinstance(started_at, (int, float)):
         result["elapsed_secs"] = round(max(0.0, time.time() - started_at), 3)
+    if result.get("worker_liveness") == "unknown":
+        result["recovery_note"] = (
+            "Worker liveness cannot be verified after adapter restart; "
+            "poll this job_id until terminal and do not launch a duplicate cook."
+        )
     return result
 
 

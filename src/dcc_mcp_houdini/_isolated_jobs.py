@@ -101,12 +101,16 @@ def launch_job(
     result["pid"] = process.pid
     with _PROCESS_LOCK:
         _PROCESS_HANDLES[job_id] = process
-    return result
+    return _with_ownership(result, True)
 
 
 def _with_ownership(status: Mapping[str, Any], owned: bool) -> Dict[str, Any]:
     result = dict(status)
     result["owned_by_current_process"] = owned
+    if result.get("state") in _TERMINAL_STATES:
+        result["worker_liveness"] = "stopped"
+    else:
+        result["worker_liveness"] = "alive" if owned else "unknown"
     return result
 
 
