@@ -6,7 +6,7 @@ description: >-
   loading .hda/.otl assets, building reusable interfaces, or publishing an HDA
   library. Not for generic node edits.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.68+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.69+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

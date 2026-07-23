@@ -8,7 +8,7 @@ description: >-
   with houdini-camera-light for individual light control and houdini-render
   for render output.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.4+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
+compatibility: "dcc-mcp-houdini 0.4+, Houdini 20.5+, dcc-mcp-core 0.19.69+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

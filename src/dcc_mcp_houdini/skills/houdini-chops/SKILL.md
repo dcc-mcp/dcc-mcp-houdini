@@ -6,7 +6,7 @@ description: >-
   export. Create and manage CHOP networks, motion clips, audio-driven
   channels, and filter effects.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.69+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
