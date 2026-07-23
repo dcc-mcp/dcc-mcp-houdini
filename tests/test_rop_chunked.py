@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from skill_loader import skill_script_import_context
@@ -20,9 +20,7 @@ _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skill
 
 def _load_script(skill_name: str, script_name: str):
     path = _SKILLS_ROOT / skill_name / "scripts" / script_name
-    spec = importlib.util.spec_from_file_location(
-        f"{skill_name}_{path.stem}", path
-    )
+    spec = importlib.util.spec_from_file_location(f"{skill_name}_{path.stem}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -125,7 +123,7 @@ class TestCreateRopChunks:
     def test_set_single_frame_range_mutates_parms(self) -> None:
         mod = _load_script("houdini-render", "_rop_chunked.py")
         rop = _mock_rop()
-        hou = _mock_hou(rop)
+        _ = _mock_hou(rop)  # registers mock hou in sys.modules
 
         mod._set_single_frame_range(rop, 7.0)
         # After setting, f1/f2 should be 7.0, f3 should be 1.0
@@ -139,7 +137,7 @@ class TestCreateRopChunks:
     def test_snapshot_restore_roundtrip(self) -> None:
         mod = _load_script("houdini-render", "_rop_chunked.py")
         rop = _mock_rop()
-        hou = _mock_hou(rop)
+        _ = _mock_hou(rop)  # registers mock hou in sys.modules
 
         # Snapshot original values
         snapshot = mod._snapshot_frame_parms(rop)
@@ -162,7 +160,6 @@ class TestCreateRopChunks:
 
 
 class TestRenderRopChunkedDispatch:
-
     @pytest.fixture(autouse=True)
     def _preload(self) -> None:
         """Ensure _rop_chunked is importable by render_rop's lazy import."""
@@ -176,9 +173,7 @@ class TestRenderRopChunkedDispatch:
         hou = _mock_hou(rop)
 
         with patch.dict(sys.modules, {"hou": hou}):
-            result = mod.render_rop_chunked(
-                rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch"
-            )
+            result = mod.render_rop_chunked(rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch")
 
         assert result["success"] is True
         assert result["context"]["job_id"] is not None
@@ -190,14 +185,10 @@ class TestRenderRopChunkedDispatch:
         hou = _mock_hou(rop)
 
         with patch.dict(sys.modules, {"hou": hou}):
-            launch_result = mod.render_rop_chunked(
-                rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch"
-            )
+            launch_result = mod.render_rop_chunked(rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch")
             job_id = launch_result["context"]["job_id"]
 
-            poll_result = mod.render_rop_chunked(
-                action="poll", job_id=job_id
-            )
+            poll_result = mod.render_rop_chunked(action="poll", job_id=job_id)
 
         assert poll_result["success"] is True
         assert poll_result["context"]["state"] == "running"
@@ -205,9 +196,7 @@ class TestRenderRopChunkedDispatch:
     def test_poll_unknown_job(self) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
 
-        result = mod.render_rop_chunked(
-            action="poll", job_id="rop-nonexistent"
-        )
+        result = mod.render_rop_chunked(action="poll", job_id="rop-nonexistent")
 
         assert result["success"] is False
         assert "not found" in result["error"].lower()
@@ -218,14 +207,10 @@ class TestRenderRopChunkedDispatch:
         hou = _mock_hou(rop)
 
         with patch.dict(sys.modules, {"hou": hou}):
-            launch_result = mod.render_rop_chunked(
-                rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch"
-            )
+            launch_result = mod.render_rop_chunked(rop_path="/out/mantra1", frame_range=[1, 5, 1], action="launch")
             job_id = launch_result["context"]["job_id"]
 
-            cancel_result = mod.render_rop_chunked(
-                action="cancel", job_id=job_id
-            )
+            cancel_result = mod.render_rop_chunked(action="cancel", job_id=job_id)
 
         assert cancel_result["success"] is True
         assert cancel_result["context"]["state"] == "cancelling"
@@ -233,9 +218,7 @@ class TestRenderRopChunkedDispatch:
     def test_cancel_unknown_job(self) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
 
-        result = mod.render_rop_chunked(
-            action="cancel", job_id="rop-ghost"
-        )
+        result = mod.render_rop_chunked(action="cancel", job_id="rop-ghost")
 
         assert result["success"] is False
         assert "not found" in result["error"].lower()
@@ -264,9 +247,7 @@ class TestRenderRopChunkedDispatch:
     def test_launch_missing_frame_range(self) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
 
-        result = mod.render_rop_chunked(
-            action="launch", rop_path="/out/mantra1"
-        )
+        result = mod.render_rop_chunked(action="launch", rop_path="/out/mantra1")
         assert result["success"] is False
         assert "frame_range" in result["error"].lower()
 
@@ -422,7 +403,7 @@ class TestChunkedRunnerIntegration:
         assert len(result["skipped_frames"]) == 8  # frames 3-10
 
     def test_generator_failure(self) -> None:
-        mod = _load_script("houdini-render", "_rop_chunked.py")
+        _ = _load_script("houdini-render", "_rop_chunked.py")  # ensure module loaded
 
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
