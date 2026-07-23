@@ -7,6 +7,8 @@ from typing import Optional
 from _parm_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 
 def list_parms(node_path: str, name_filter: Optional[str] = None) -> dict:
     """List parameters with name, label, and current value.
@@ -26,7 +28,7 @@ def list_parms(node_path: str, name_filter: Optional[str] = None) -> dict:
             if name_filter and name_filter.lower() not in name.lower():
                 continue
             try:
-                value = parm.eval()
+                value = safe_parm_eval(parm)
             except Exception:  # noqa: BLE001
                 value = None
             entry = {"name": name, "value": value}

@@ -7,6 +7,8 @@ from typing import Any, Dict
 from _parm_common import channel_write_conflict, coerce_scalar, get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 
 def set_parms(node_path: str, parameters: Dict[str, Any]) -> dict:
     """Set the given parameters, reporting per-parameter validation errors.
@@ -52,7 +54,7 @@ def set_parms(node_path: str, parameters: Dict[str, Any]) -> dict:
                         errors[name] = conflict
                         continue
                     try:
-                        current = parm.eval()
+                        current = safe_parm_eval(parm)
                     except Exception:  # noqa: BLE001
                         current = None
                     coerced = coerce_scalar(value, current)

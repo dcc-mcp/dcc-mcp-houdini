@@ -63,6 +63,8 @@ from dcc_mcp_houdini.api import (
     houdini_from_exception,
     houdini_success,
     require_param,
+    safe_parm_eval,
+    safe_parm_node,
     with_houdini,
 )
 from dcc_mcp_houdini.api import (
@@ -148,6 +150,8 @@ __all__ = [
     "require_param",
     "resolve_enable_gateway_failover",
     "resolve_minimal_mode_enabled",
+    "safe_parm_eval",
+    "safe_parm_node",
     "serve_headless",
     "skills_for_stage",
     "start_server",

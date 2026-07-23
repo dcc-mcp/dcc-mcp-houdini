@@ -5,6 +5,8 @@ from __future__ import annotations
 from _parm_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 
 def get_expression(node_path: str, parm_name: str) -> dict:
     """Return the parm's expression and language, or the plain value when none."""
@@ -30,7 +32,7 @@ def get_expression(node_path: str, parm_name: str) -> dict:
                 node_path=node.path(),
                 parm=parm_name,
                 has_expression=False,
-                value=parm.eval(),
+                value=safe_parm_eval(parm),
             )
         language = None
         try:

@@ -24,6 +24,7 @@ class HoudiniEventLoopTimerAdapter:
         *,
         clock: Callable[[], float] = time.monotonic,
         error_retry_secs: float = 0.05,
+        pre_drain_check: Optional[Callable[[], bool]] = None,
     ) -> None:
         if error_retry_secs <= 0:
             raise ValueError("error_retry_secs must be > 0")
@@ -34,6 +35,7 @@ class HoudiniEventLoopTimerAdapter:
         self._callback: Optional[Callable[[], None]] = None
         self._next_due = 0.0
         self._tick_thread_ident: Optional[int] = None
+        self._pre_drain_check = pre_drain_check
 
     @property
     def installed(self) -> bool:
@@ -63,6 +65,20 @@ class HoudiniEventLoopTimerAdapter:
                     if due_tick is None or now < self._next_due:
                         return
                     self._next_due = float("inf")
+
+                # Pre-drain validity check: skip this tick if the Houdini
+                # scene is no longer available (e.g. session closed, node
+                # graph destroyed).  This prevents pump drain from touching
+                # stale hou.Parm references whose backing HOM objects have
+                # been freed, which would trigger a native SIGSEGV.
+                pre_check = self._pre_drain_check
+                if pre_check is not None:
+                    try:
+                        if not pre_check():
+                            return
+                    except Exception:  # noqa: BLE001
+                        logger.warning("Pre-drain validity check failed; skipping tick")
+                        return
 
                 self._tick_thread_ident = threading.get_ident()
                 try:
@@ -301,7 +317,12 @@ class HoudiniUiPump:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._dispatcher = dispatcher
-        self._timer = timer_adapter or HoudiniEventLoopTimerAdapter(clock=clock)
+        if timer_adapter is None:
+            timer_adapter = HoudiniEventLoopTimerAdapter(
+                clock=clock,
+                pre_drain_check=_make_houdini_scene_validity_check(),
+            )
+        self._timer = timer_adapter
         self._controller = HostPumpController(
             dispatcher,
             self._timer,
@@ -394,3 +415,31 @@ class HoudiniHost(HostAdapter):
             with contextlib.suppress(Exception):
                 hou.ui.removeEventLoopCallback(callback)
         self._callback = None
+
+
+def _make_houdini_scene_validity_check() -> Callable[[], bool]:
+    """Return a callable that quickly tests whether the Houdini scene is alive.
+
+    The check probes ``hou.node("/obj")`` — the standard root object node
+    that exists in every valid Houdini session.  A ``None`` result means the
+    scene graph has been torn down (session closed, catastrophic error) and
+    no further pump ticks should drain queued jobs.
+
+    When the ``hou`` module cannot be imported (tests, CI, or any non-Houdini
+    environment), there is no native scene that can cause a SIGSEGV, so the
+    check returns ``True`` unconditionally — the pump runs normally.
+    """
+    try:
+        import hou  # noqa: PLC0415
+    except ImportError:
+        # Outside Houdini there is no native scene to crash on — let the
+        # pump run normally (tests, CI, headless linters).
+        return lambda: True
+
+    def _check() -> bool:
+        try:
+            return hou.node("/obj") is not None
+        except Exception:  # noqa: BLE001
+            return False
+
+    return _check

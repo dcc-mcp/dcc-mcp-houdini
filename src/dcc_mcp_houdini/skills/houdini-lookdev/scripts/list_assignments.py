@@ -5,6 +5,8 @@ from __future__ import annotations
 from _lookdev_common import MATERIAL_ASSIGN_PARMS, get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import safe_parm_eval
+
 
 def list_assignments(parent_path: str = "/obj") -> dict:
     """Return material assignments for objects under *parent_path*."""
@@ -22,7 +24,7 @@ def list_assignments(parent_path: str = "/obj") -> dict:
                 parm = child.parm(parm_name)
                 if parm is not None:
                     try:
-                        value = parm.eval()
+                        value = safe_parm_eval(parm)
                     except Exception:  # noqa: BLE001
                         value = None
                     if value:

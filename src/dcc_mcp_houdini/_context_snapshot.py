@@ -17,6 +17,18 @@ Design
 
 Both helpers obey *Single Responsibility* — they only collect state.  They
 never mutate Houdini, and they never raise.
+
+Thread / concurrency safety
+---------------------------
+All ``collect()`` call sites (post-tool hook, gateway metadata sync, REST
+``/v1/context`` endpoint) execute on Houdini's single-threaded UI event
+loop.  There is **no true concurrent access** to ``hou.*`` objects from this
+module.  The only sequencing concern is that a ``collect()`` invoked between
+``_callback()``'s pre-drain validity check and the actual ``drain_queue()``
+could observe a partially torn-down scene.  This is harmless because
+``collect()`` is read-only and every ``hou.*`` probe is individually
+guarded by ``_safe()`` — a failed probe produces a ``None`` value, not an
+exception and certainly not a SIGSEGV.
 """
 
 from __future__ import annotations
