@@ -57,7 +57,9 @@ Typed HOM node-graph operations for agents. Prefer these tools before using
      Houdini event-loop tick.
    - `start_cook_job` for one potentially long cook in isolated `hython`.
      Save the HIP first, then poll `get_cook_job`; status remains readable
-     after transport loss or adapter restart.
+     after transport loss or adapter restart. A non-terminal result with
+     `worker_liveness: unknown` is last-known state, not proof that the worker
+     is still alive; keep polling the same `job_id` and never launch a duplicate.
 5. `layout_children`
 
 Never retry a timed-out cook blindly. Keep the returned core or isolated

@@ -79,6 +79,7 @@ def test_get_cook_job_remains_queryable_after_adapter_ownership_is_lost(tmp_path
     assert recovered["state"] == "completed"
     assert recovered["node_path"] == "/obj/geo1/cache1"
     assert recovered["owned_by_current_process"] is False
+    assert recovered["worker_liveness"] == "stopped"
 
 
 def test_get_cook_job_reports_live_elapsed_time_after_disconnect() -> None:
@@ -88,6 +89,7 @@ def test_get_cook_job_reports_live_elapsed_time_after_disconnect() -> None:
         "state": "running",
         "started_at": 100.0,
         "owned_by_current_process": False,
+        "worker_liveness": "unknown",
     }
     with patch.object(_cook_jobs._isolated_jobs, "read_job", return_value=status), patch.object(
         _cook_jobs.time, "time", return_value=112.3456
@@ -95,6 +97,8 @@ def test_get_cook_job_reports_live_elapsed_time_after_disconnect() -> None:
         recovered = _cook_jobs.get_cook_job(status["job_id"])
 
     assert recovered["elapsed_secs"] == 12.346
+    assert recovered["worker_liveness"] == "unknown"
+    assert "do not launch a duplicate cook" in recovered["recovery_note"]
 
 
 def test_cook_worker_writes_terminal_status(tmp_path: Path) -> None:
