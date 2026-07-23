@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -40,6 +41,9 @@ def get_cook_job(job_id: str) -> Dict[str, Any]:
     result = _isolated_jobs.read_job(job_id)
     if result.get("job_kind") != "node_cook":
         raise ValueError("job_id does not identify a node-cook job")
+    started_at = result.get("started_at")
+    if result.get("state") not in _isolated_jobs._TERMINAL_STATES and isinstance(started_at, (int, float)):
+        result["elapsed_secs"] = round(max(0.0, time.time() - started_at), 3)
     return result
 
 
