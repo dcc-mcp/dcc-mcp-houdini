@@ -237,8 +237,7 @@ def test_pre_drain_check_failure_does_not_wedge_pump() -> None:
         assert len(ticks) == 0
         # _next_due must be a finite retry value, NOT inf
         assert adapter._next_due == clock() + adapter._error_retry_secs, (
-            f"Expected _next_due={clock() + adapter._error_retry_secs}, "
-            f"got {adapter._next_due}"
+            f"Expected _next_due={clock() + adapter._error_retry_secs}, got {adapter._next_due}"
         )
 
         # --- Advance past retry interval ---
@@ -279,8 +278,7 @@ def test_pre_drain_check_exception_does_not_wedge_pump() -> None:
         ui.callbacks[0]()
         assert len(ticks) == 0
         assert adapter._next_due == clock() + adapter._error_retry_secs, (
-            f"Expected _next_due={clock() + adapter._error_retry_secs}, "
-            f"got {adapter._next_due}"
+            f"Expected _next_due={clock() + adapter._error_retry_secs}, got {adapter._next_due}"
         )
 
         adapter.uninstall()
