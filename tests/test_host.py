@@ -199,3 +199,88 @@ def test_ui_dispatcher_cancels_queued_work_and_survives_task_errors() -> None:
     assert cancelled[0]["error"] == "Cancelled"
     assert failed[0]["error"] == "task failed"
     assert recovered[0]["output"] == "ok"
+
+
+def test_pre_drain_check_failure_does_not_wedge_pump() -> None:
+    """pre_drain_check returning False must NOT leave _next_due=inf.
+
+    Regression test for the pump wedge fixed in PIP-2826: when
+    pre_drain_check fails (returns False or raises), _callback() must
+    reset _next_due under the lock so the next event-loop invocation
+    can retry instead of being permanently blocked.
+    """
+    from dcc_mcp_houdini.host import HoudiniEventLoopTimerAdapter
+
+    clock = _FakeClock()
+    ticks = []
+    check_results = [False, True]  # first check fails, second succeeds
+
+    def _pre_drain() -> bool:
+        return check_results.pop(0) if check_results else True
+
+    adapter = HoudiniEventLoopTimerAdapter(
+        clock=clock,
+        pre_drain_check=_pre_drain,
+    )
+    hou, ui = _fake_hou()
+
+    def _tick() -> float:
+        ticks.append(clock())
+        return 0.1
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        adapter.install(_tick)
+
+        # --- First callback: pre_drain returns False ---
+        ui.callbacks[0]()
+        # The tick should NOT have been called
+        assert len(ticks) == 0
+        # _next_due must be a finite retry value, NOT inf
+        assert adapter._next_due == clock() + adapter._error_retry_secs, (
+            f"Expected _next_due={clock() + adapter._error_retry_secs}, "
+            f"got {adapter._next_due}"
+        )
+
+        # --- Advance past retry interval ---
+        clock.advance(adapter._error_retry_secs)
+
+        # --- Second callback: pre_drain returns True, pump should tick ---
+        ui.callbacks[0]()
+        assert len(ticks) == 1
+        assert ticks[0] == clock()
+
+        adapter.uninstall()
+
+
+def test_pre_drain_check_exception_does_not_wedge_pump() -> None:
+    """pre_drain_check raising an exception must NOT leave _next_due=inf."""
+    from dcc_mcp_houdini.host import HoudiniEventLoopTimerAdapter
+
+    clock = _FakeClock()
+    ticks = []
+
+    def _pre_drain() -> bool:
+        raise RuntimeError("simulated pre_drain failure")
+
+    adapter = HoudiniEventLoopTimerAdapter(
+        clock=clock,
+        pre_drain_check=_pre_drain,
+    )
+    hou, ui = _fake_hou()
+
+    def _tick() -> float:
+        ticks.append(clock())
+        return 0.1
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        adapter.install(_tick)
+
+        # Callback: pre_drain raises → must not wedge
+        ui.callbacks[0]()
+        assert len(ticks) == 0
+        assert adapter._next_due == clock() + adapter._error_retry_secs, (
+            f"Expected _next_due={clock() + adapter._error_retry_secs}, "
+            f"got {adapter._next_due}"
+        )
+
+        adapter.uninstall()
