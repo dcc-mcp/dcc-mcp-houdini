@@ -64,6 +64,64 @@ def _set_single_frame_range(rop: Any, frame: float) -> None:
                 pass
 
 
+def _snapshot_frame_parms(rop: Any) -> Dict[str, Any]:
+    """Snapshot frame-range parms before the chunked render mutates them.
+
+    Returns a dict that can be passed to :func:`_restore_frame_parms`.
+    """
+    snapshot: Dict[str, Any] = {}
+
+    trange = rop.parm("trange")
+    if trange is not None:
+        try:
+            snapshot["trange"] = trange.eval()
+        except Exception:  # noqa: BLE001
+            pass
+
+    f_parm = rop.parmTuple("f")
+    if f_parm is not None:
+        try:
+            snapshot["f"] = list(f_parm.eval())
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        for name in ("f1", "f2", "f3"):
+            parm = rop.parm(name)
+            if parm is not None:
+                try:
+                    snapshot[name] = parm.eval()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    return snapshot
+
+
+def _restore_frame_parms(rop: Any, snapshot: Dict[str, Any]) -> None:
+    """Restore frame-range parms from a prior snapshot."""
+    if "trange" in snapshot:
+        try:
+            rop.parm("trange").set(snapshot["trange"])
+        except Exception:  # noqa: BLE001
+            pass
+
+    if "f" in snapshot:
+        try:
+            f_parm = rop.parmTuple("f")
+            if f_parm is not None:
+                f_parm.set(tuple(snapshot["f"]))
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        for name in ("f1", "f2", "f3"):
+            if name in snapshot:
+                try:
+                    parm = rop.parm(name)
+                    if parm is not None:
+                        parm.set(snapshot[name])
+                except Exception:  # noqa: BLE001
+                    pass
+
+
 def _eval_output_pattern(rop: Any) -> Optional[str]:
     """Evaluate the first available output parm on a ROP."""
     output_parms = ("picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage")
@@ -141,11 +199,13 @@ def create_rop_chunks(
         raise ValueError(f"Node is not a render node: {rop_path}")
 
     output_pattern = _eval_output_pattern(rop)
+    parm_snapshot = _snapshot_frame_parms(rop)
 
     metadata: Dict[str, Any] = {
         "frame_range": [start, end, increment],
         "rop_path": rop_path,
         "output_pattern": output_pattern,
+        "parm_snapshot": parm_snapshot,
     }
 
     # Build one callable per frame
@@ -237,20 +297,23 @@ def launch_rop_job(
         "runner": runner,
         "token": token,
         "rop_path": rop_path,
+        "rop": rop,
         "frame_range": metadata["frame_range"],
         "output_pattern": metadata.get("output_pattern"),
+        "parm_snapshot": metadata.get("parm_snapshot", {}),
         "total_frames": len(chunks),
     }
 
     # Drive the runner from Houdini's event loop: each pump tick
     # executes one bounded frame step. The callback removes itself
-    # when the runner reaches a terminal state.
+    # and restores original parms when the runner reaches a terminal state.
     def _pump_callback() -> None:
         job = _rop_jobs.get(job_id)
         if job is None:
             return
         r: ChunkedRunner = job["runner"]
         if r.is_terminal:
+            _restore_frame_parms(job["rop"], job.get("parm_snapshot", {}))
             try:
                 hou.ui.removeEventLoopCallback(_pump_callback)
             except Exception:  # noqa: BLE001
@@ -258,6 +321,7 @@ def launch_rop_job(
             return
         r.step()
         if r.is_terminal:
+            _restore_frame_parms(job["rop"], job.get("parm_snapshot", {}))
             try:
                 hou.ui.removeEventLoopCallback(_pump_callback)
             except Exception:  # noqa: BLE001

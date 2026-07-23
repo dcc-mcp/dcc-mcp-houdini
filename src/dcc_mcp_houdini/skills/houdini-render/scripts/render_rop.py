@@ -123,8 +123,8 @@ def render_rop(
 
 
 def render_rop_chunked(
-    rop_path: str,
-    frame_range: List[float],
+    rop_path: Optional[str] = None,
+    frame_range: Optional[List[float]] = None,
     action: str = "launch",
     job_id: Optional[str] = None,
 ) -> dict:
@@ -132,12 +132,12 @@ def render_rop_chunked(
 
     Parameters
     ----------
-    rop_path : str
-        Path to the ROP node.
-    frame_range : list of float
-        ``[start, end]`` or ``[start, end, increment]``.
     action : str
         ``"launch"`` (default), ``"poll"``, or ``"cancel"``.
+    rop_path : str, optional
+        Path to the ROP node. Required for ``"launch"``.
+    frame_range : list of float, optional
+        ``[start, end]`` or ``[start, end, increment]``. Required for ``"launch"``.
     job_id : str, optional
         Required for ``"poll"`` and ``"cancel"`` actions.
 
@@ -156,7 +156,7 @@ def render_rop_chunked(
         result = cancel_rop_job(job_id)
         if result["success"]:
             return skill_success("ROP chunked job cancel requested", **result)
-        return skill_error(result["error"], job_id=job_id)
+        return skill_error("Cancel failed", result["error"], job_id=job_id)
 
     if action == "poll":
         if not job_id:
@@ -164,9 +164,11 @@ def render_rop_chunked(
         result = get_rop_job(job_id)
         if result["success"]:
             return skill_success("ROP chunked job status", **result)
-        return skill_error(result["error"], job_id=job_id)
+        return skill_error("Poll failed", result["error"], job_id=job_id)
 
     # action == "launch"
+    if not rop_path:
+        return skill_error("Missing rop_path", "rop_path is required for launch action")
     if not frame_range or len(frame_range) < 2:
         return skill_error(
             "Invalid frame range",

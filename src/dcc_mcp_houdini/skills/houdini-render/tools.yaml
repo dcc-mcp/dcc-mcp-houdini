@@ -273,22 +273,23 @@ tools:
       idempotent_hint: false
     input_schema:
       type: object
-      required: [rop_path, frame_range]
+      required: [action]
       properties:
+        action:
+          type: string
+          enum: [launch, poll, cancel]
         rop_path:
           type: string
+          description: "Required for launch action."
         frame_range:
           type: array
           items: {type: number}
           minItems: 2
           maxItems: 3
-        action:
-          type: string
-          enum: [launch, poll, cancel]
-          default: launch
+          description: "Required for launch action. [start, end] or [start, end, increment]."
         job_id:
           type: string
-          description: "Required for poll/cancel actions."
+          description: "Required for poll and cancel actions."
   - name: get_render_job
     description: >-
       Read bounded status, output progress, elapsed time, and ETA for a background
