@@ -69,6 +69,21 @@ adapter instance.
   complete without a discoverable output pattern and report output verification
   as `unavailable`; render and cache jobs continue to require updated output.
 
+## Node cook routing
+
+- One expected-short live-scene `hou.Node.cook()` is a monolithic async core
+  job. The request returns a core job id; cancellation is acknowledged only
+  after the native call returns.
+- A list of independently bounded node cooks uses the shared chunked host pump,
+  one node per event-loop tick.
+- One potentially long cook uses an isolated `hython` worker against a saved,
+  clean HIP. It returns a durable adapter job id immediately and is polled from
+  disk. The isolated result does not update the GUI scene's in-memory cook
+  cache.
+- Transport timeout, adapter unreachability, and process death are distinct.
+  Agents query existing job state before retrying and rediscover a replacement
+  instance after owner/PID death.
+
 ## Alternatives Considered
 
 - Run render calls on the host thread: rejected because it blocks interactive Houdini.

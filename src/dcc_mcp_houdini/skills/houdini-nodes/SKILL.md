@@ -5,7 +5,7 @@ description: >-
   Houdini nodes through typed HOM operations. Use when building SOP/OBJ/ROP
   networks or automating graph edits. Not for arbitrary Python snippets.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.68+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 18.5+, dcc-mcp-core 0.19.69+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
@@ -50,5 +50,17 @@ Typed HOM node-graph operations for agents. Prefer these tools before using
 1. `create_node`
 2. `set_node_parms`
 3. `connect_nodes`
-4. `cook_node`
+4. Choose the cook contract:
+   - `cook_node` for one expected-short live-scene cook. It is an async core
+     job but native `hou.Node.cook()` remains monolithic.
+   - `cook_nodes_chunked` for several independently bounded nodes, one per
+     Houdini event-loop tick.
+   - `start_cook_job` for one potentially long cook in isolated `hython`.
+     Save the HIP first, then poll `get_cook_job`; status remains readable
+     after transport loss or adapter restart.
 5. `layout_children`
+
+Never retry a timed-out cook blindly. Keep the returned core or isolated
+`job_id`, rediscover the Houdini instance, and query status first. If Houdini
+crashed, wait for a new instance registration; persisted core jobs recover as
+`interrupted`, while isolated cook status remains available on disk.

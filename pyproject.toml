@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.19.68: first release with ChunkedRunner (bounded-step main-thread work)
-    "dcc-mcp-core>=0.19.68,<1.0.0",
+    # 0.19.69: recoverable job strategies and automatic chunk scheduling.
+    "dcc-mcp-core>=0.19.69,<1.0.0",
 ]
 
 [project.optional-dependencies]

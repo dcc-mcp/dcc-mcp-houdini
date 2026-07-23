@@ -8,7 +8,7 @@ description: >-
   houdini-materials (create/assign) and houdini-lookdev (shader-network
   editing, adapter-owned presets).
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.19.68+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 19.5+, dcc-mcp-core 0.19.69+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

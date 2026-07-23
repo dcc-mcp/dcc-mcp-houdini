@@ -159,7 +159,7 @@ tools:
     read_only: false
     destructive: false
     idempotent: false
-    execution: sync
+    execution: async
     affinity: main
     timeout_hint_secs: 300
     source_file: scripts/cook_node.py
@@ -173,6 +173,107 @@ tools:
     next-tools:
       on-failure:
         - houdini_scripting__get_session_info
+
+  - name: cook_nodes_chunked
+    description: >-
+      Cook several independently bounded Houdini nodes, advancing one node per
+      UI event-loop tick. Use this only when each individual node cook is
+      expected to stay short; use start_cook_job for one potentially long cook.
+    input_schema:
+      type: object
+      required: [node_paths]
+      properties:
+        node_paths:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        force:
+          type: boolean
+          default: false
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: async
+    job_strategy: chunked
+    affinity: main
+    timeout_hint_secs: 300
+    source_file: scripts/cook_nodes_chunked.py
+    tool_role: action
+    risk: medium
+    search_aliases: [chunked cook, batch cook nodes, responsive cook]
+
+  - name: start_cook_job
+    description: >-
+      Start one potentially long node cook in an isolated hython process and
+      return a durable job_id immediately. Requires a saved, clean HIP file and
+      does not update the live GUI scene's in-memory cook cache.
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+        force:
+          type: boolean
+          default: false
+    read_only: false
+    destructive: false
+    idempotent: false
+    execution: sync
+    job_strategy: isolated
+    affinity: main
+    timeout_hint_secs: 10
+    source_file: scripts/start_cook_job.py
+    tool_role: action
+    risk: medium
+    search_aliases: [background cook, durable cook, long cook, isolated hython cook]
+    next-tools:
+      on-success:
+        - houdini_nodes__get_cook_job
+
+  - name: get_cook_job
+    description: >-
+      Query a durable isolated node-cook job after transport disconnects or
+      adapter restart. Terminal status remains readable from disk.
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: any
+    timeout_hint_secs: 5
+    source_file: scripts/get_cook_job.py
+    tool_role: read_only
+    risk: low
+    search_aliases: [cook job status, resume cook, query durable cook, recover cook job]
+
+  - name: cancel_cook_job
+    description: >-
+      Cancel an isolated node-cook job only while this adapter process still
+      owns its worker handle. After adapter restart, status stays queryable but
+      cancellation ownership is intentionally not reconstructed.
+    input_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
+    read_only: false
+    destructive: true
+    idempotent: true
+    execution: sync
+    affinity: any
+    timeout_hint_secs: 10
+    source_file: scripts/cancel_cook_job.py
+    tool_role: destructive
+    risk: high
+    search_aliases: [cancel cook, stop background cook, terminate cook job]
 
   - name: layout_children
     description: "Layout children under a Houdini network node. Mutates node positions only."

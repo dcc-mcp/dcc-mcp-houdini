@@ -19,7 +19,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Scene lifecycle | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__open_scene` / `houdini_scene_edit__save_scene` |
 | Select & frame | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__find_nodes` → `houdini_scene_edit__set_selection` → `houdini_scene_edit__get_bounding_box` |
 | Edit existing object | `load_skill("houdini-object-ops")` → `houdini_object_ops__get_transform` → `houdini_object_ops__set_transform` → `houdini_object_ops__set_node_flags` |
-| Build SOP/OBJ network | `load_skill("houdini-nodes")` → `houdini_nodes__create_node` → `houdini_nodes__set_node_parms` → `houdini_nodes__connect_nodes` → `houdini_nodes__cook_node` |
+| Build SOP/OBJ network | `load_skill("houdini-nodes")` → `houdini_nodes__create_node` → `houdini_nodes__set_node_parms` → `houdini_nodes__connect_nodes` → choose `cook_node` (short monolithic), `cook_nodes_chunked` (bounded list), or `start_cook_job` + `get_cook_job` (long durable) |
 | Edit parameters & expressions | `load_skill("houdini-parameters")` → `houdini_parameters__list_parms` → `houdini_parameters__set_parms` / `houdini_parameters__set_expression` |
 | Inspect & rewire graph | `load_skill("houdini-node-graph")` → `houdini_node_graph__get_connections` → `houdini_node_graph__connect_input` / `houdini_node_graph__disconnect_input` |
 | Create & inspect geometry | `load_skill("houdini-geometry")` → `houdini_geometry__create_primitive` → `houdini_geometry__get_geometry_info` → `houdini_geometry__list_attributes` / `houdini_geometry__list_groups` |
