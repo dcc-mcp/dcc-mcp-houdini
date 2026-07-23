@@ -105,7 +105,7 @@ class TestChunkedRopRunner:
         mod = _load_script("houdini-render", "_render_common.py")
         rop = _mock_rop("/out/mantra1", "mantra1")
         steps = mod.build_per_frame_steps(rop, [1, 4, 1])
-        runner = ChunkedRunner(steps, total=4)
+        runner = ChunkedRunner(steps)
 
         # Step 1
         assert runner.step() is True
@@ -135,7 +135,7 @@ class TestChunkedRopRunner:
         mod = _load_script("houdini-render", "_render_common.py")
         rop = _mock_rop("/out/mantra1", "mantra1")
         steps = mod.build_per_frame_steps(rop, [1, 5, 1])
-        runner = ChunkedRunner(steps, total=5)
+        runner = ChunkedRunner(steps)
 
         # Run 2 frames
         assert runner.step() is True
@@ -158,7 +158,7 @@ class TestChunkedRopRunner:
         mod = _load_script("houdini-render", "_render_common.py")
         rop = _mock_rop("/out/mantra1", "mantra1")
         steps = mod.build_per_frame_steps(rop, [1, 3, 1])
-        runner = ChunkedRunner(steps, total=3)
+        runner = ChunkedRunner(steps)
 
         runner.cancel()
         assert runner.step() is False
@@ -172,7 +172,7 @@ class TestChunkedRopRunner:
         mod = _load_script("houdini-render", "_render_common.py")
         rop = _mock_rop("/out/mantra1", "mantra1")
         steps = mod.build_per_frame_steps(rop, [1, 2, 1])
-        runner = ChunkedRunner(steps, total=2)
+        runner = ChunkedRunner(steps)
 
         # Complete all steps
         assert runner.step() is True
@@ -192,7 +192,7 @@ class TestChunkedRopRunner:
             raise RuntimeError("render aborted")
 
         steps = [_failing_step]
-        runner = ChunkedRunner(steps, total=1)
+        runner = ChunkedRunner(steps)
 
         assert runner.step() is False
         assert runner.outcome is not None
@@ -266,7 +266,7 @@ class TestForegroundJobRegistry:
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
         steps = [lambda: None] * 10
-        runner = ChunkedRunner(steps, total=10)
+        runner = ChunkedRunner(steps)
         token = CancelToken()
         job_id = mod._register_foreground_job(
             runner, token, "/out/mantra1", [1, 10, 1], 10
@@ -289,7 +289,7 @@ class TestForegroundJobRegistry:
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
         steps = [lambda: None] * 5
-        runner = ChunkedRunner(steps, total=5)
+        runner = ChunkedRunner(steps)
         token = CancelToken()
         job_id = mod._register_foreground_job(
             runner, token, "/out/mantra1", [1, 5, 1], 5
@@ -315,7 +315,7 @@ class TestForegroundJobRegistry:
         from dcc_mcp_core.cancellation import CancelToken
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
-        runner = ChunkedRunner([], total=0)
+        runner = ChunkedRunner([])
         token = CancelToken()
         job_id = mod._register_foreground_job(
             runner, token, "/out/mantra1", [1, 3, 1], 3
@@ -331,7 +331,7 @@ class TestForegroundJobRegistry:
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
         steps = [lambda: None, lambda: None, lambda: None]
-        runner = ChunkedRunner(steps, total=3)
+        runner = ChunkedRunner(steps)
         token = CancelToken()
         job_id = mod._register_foreground_job(
             runner, token, "/out/mantra1", [1, 3, 1], 3
@@ -366,7 +366,7 @@ class TestCancelRenderJob:
         from dcc_mcp_core.chunked_runner import ChunkedRunner
 
         steps = [lambda: None] * 3
-        runner = ChunkedRunner(steps, total=3)
+        runner = ChunkedRunner(steps)
         token = CancelToken()
         job_id = utils_mod._register_foreground_job(
             runner, token, "/out/mantra1", [1, 3, 1], 3

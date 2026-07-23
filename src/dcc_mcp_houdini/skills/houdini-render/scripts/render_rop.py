@@ -103,14 +103,13 @@ def render_rop(
 
         if use_chunked:
             from _chunked_utils import _register_foreground_job, pump_runner_via_event_loop
-
             from dcc_mcp_core.cancellation import CancelToken
             from dcc_mcp_core.chunked_runner import ChunkedRunner
 
             steps = build_per_frame_steps(rop, frame_range)
             token = CancelToken()
-            runner = ChunkedRunner(steps, total=len(steps), cancel_token=token)
-            job_id = _register_foreground_job(
+            runner = ChunkedRunner(steps, cancel_token=token)
+            _register_foreground_job(
                 runner, token, rop.path(), list(frame_range), len(steps)
             )
 
