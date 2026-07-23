@@ -71,13 +71,22 @@ class HoudiniEventLoopTimerAdapter:
                 # graph destroyed).  This prevents pump drain from touching
                 # stale hou.Parm references whose backing HOM objects have
                 # been freed, which would trigger a native SIGSEGV.
+                #
+                # When the check fails we MUST reset _next_due under the
+                # lock — otherwise it stays at inf (set on entry at L67)
+                # and the pump is permanently wedged with queued jobs
+                # never drained.  A short retry interval keeps the pump
+                # alive while avoiding a tight spin on a dead scene.
                 pre_check = self._pre_drain_check
                 if pre_check is not None:
                     try:
-                        if not pre_check():
-                            return
+                        ok = pre_check()
                     except Exception:  # noqa: BLE001
                         logger.warning("Pre-drain validity check failed; skipping tick")
+                        ok = False
+                    if not ok:
+                        with self._lock:
+                            self._next_due = now + self._error_retry_secs
                         return
 
                 self._tick_thread_ident = threading.get_ident()
