@@ -165,12 +165,21 @@ def get_render_settings(rop_path: str) -> dict:
 
     try:
         rop = get_node(hou, rop_path)
+        solaris_error = None
         if rop.type().name().split("::", 1)[0] == "usdrender_rop":
-            return skill_success("Read effective Solaris render settings", **_solaris_settings(hou, rop))
+            try:
+                return skill_success("Read effective Solaris render settings", **_solaris_settings(hou, rop))
+            except ValueError as exc:
+                solaris_error = str(exc)
         res_x = eval_first_parm(rop, ("res_overridex", "resx", "vm_resx"))
         res_y = eval_first_parm(rop, ("res_overridey", "resy", "vm_resy"))
         output_frame = float(hou.frame())
-        output_parm_name, output_path_pattern = eval_first_parm_named(rop, PRIMARY_OUTPUT_PARMS, preserve_string=True)
+        output_parms = (
+            tuple(name for name in PRIMARY_OUTPUT_PARMS if name != "lopoutput")
+            if solaris_error
+            else PRIMARY_OUTPUT_PARMS
+        )
+        output_parm_name, output_path_pattern = eval_first_parm_named(rop, output_parms, preserve_string=True)
         output_path = eval_first_parm(rop, (output_parm_name,)) if output_parm_name else None
         settings = {
             "rop": node_summary(rop),
@@ -189,6 +198,17 @@ def get_render_settings(rop_path: str) -> dict:
             },
             "image_format": eval_first_parm(rop, ("vm_image_format", "image_format")),
         }
+        if solaris_error:
+            settings.update(
+                intermediate_usd={
+                    "parm_name": "lopoutput",
+                    "path": eval_first_parm(rop, ("lopoutput",)),
+                    "path_pattern": eval_first_parm_named(rop, ("lopoutput",), preserve_string=True)[1],
+                },
+                unresolved=["effective_solaris_stage"],
+                unsupported=[],
+                warnings=[solaris_error],
+            )
         return skill_success("Read render settings", **settings)
     except Exception as exc:
         return skill_exception(exc, message="Failed to read render settings")

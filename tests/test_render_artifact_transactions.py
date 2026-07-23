@@ -579,6 +579,8 @@ def test_get_render_settings_prefers_outputimage_and_reports_exact_parm() -> Non
         result = module.get_render_settings("/stage/karma")["context"]
     assert result["output_parm_name"] == "outputimage"
     assert result["output_path_pattern"] == "/tmp/beauty.$F4.exr"
+    assert result["intermediate_usd"]["path"] == "/tmp/render.usd"
+    assert result["unresolved"] == ["effective_solaris_stage"]
 
 
 def test_render_rop_opts_in_only_for_background(tmp_path: Path) -> None:
