@@ -5,7 +5,7 @@ description: >-
   configure rig skeletons, set rig poses, capture joint skinning weights,
   and apply motion capture data via SOP-level KineFX nodes.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

@@ -6,7 +6,7 @@ description: >-
   tools. Use instead of arbitrary Python for reading/setting parms, adding spare
   parms, and managing expressions. For node connections use houdini-node-graph.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

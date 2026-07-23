@@ -7,7 +7,7 @@ description: >-
   everyday scene navigation and file operations. Not for node authoring (use
   houdini-nodes) or geometry/transform edits (use houdini-object-ops).
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
