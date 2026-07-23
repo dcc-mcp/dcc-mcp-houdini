@@ -28,7 +28,6 @@ jobs:
       - name: Install package with dev dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install git+https://github.com/dcc-mcp/dcc-mcp-core.git@3d3b5fad3f7e9275fbff1188c33aaff601bde792
           python -m pip install -e ".[dev]"
       - name: Ruff check
         run: ruff check src/ tests/ tools/ packaging/
@@ -70,7 +69,6 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install git+https://github.com/dcc-mcp/dcc-mcp-core.git@3d3b5fad3f7e9275fbff1188c33aaff601bde792
           python -m pip install -e ".[dev]"
       - name: Run unit tests
         run: python -m pytest

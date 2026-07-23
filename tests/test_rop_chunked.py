@@ -410,7 +410,7 @@ class TestChunkedRunnerIntegration:
         def _failing_step() -> None:
             raise RuntimeError("render aborted")
 
-        runner = ChunkedRunner([_failing_step], total=1)
+        runner = ChunkedRunner([_failing_step])
         assert runner.step() is False
         assert runner.outcome.status == "failed"
         assert "RuntimeError: render aborted" in (runner.outcome.error or "")

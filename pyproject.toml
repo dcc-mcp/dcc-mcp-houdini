@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.19.45: instance ports default to operating-system assignment.
-    "dcc-mcp-core>=0.19.45,<1.0.0",
+    # 0.19.68: first release with ChunkedRunner (bounded-step main-thread work)
+    "dcc-mcp-core>=0.19.68,<1.0.0",
 ]
 
 [project.optional-dependencies]

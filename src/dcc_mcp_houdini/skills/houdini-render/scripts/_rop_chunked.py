@@ -290,7 +290,7 @@ def launch_rop_job(
         }
 
     token = CancelToken()
-    runner = ChunkedRunner(chunks, cancel_token=token, total=len(chunks))
+    runner = ChunkedRunner(chunks, cancel_token=token)
     job_id = f"rop-{uuid.uuid4().hex[:12]}"
 
     _rop_jobs[job_id] = {
