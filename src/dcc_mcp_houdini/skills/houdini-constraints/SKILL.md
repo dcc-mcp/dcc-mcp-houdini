@@ -6,7 +6,7 @@ description: >-
   constraints using OBJ-level blend nodes and CHOP-driven channel
   referencing. List and delete existing constraints.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.69+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.70+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
