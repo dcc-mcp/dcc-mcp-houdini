@@ -6,7 +6,7 @@ description: >-
   session diagnostics. Not for routine scene edits — prefer houdini-scene or
   future domain skills.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.45+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.68+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

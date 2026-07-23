@@ -1,4 +1,4 @@
-"""Render a ROP node and report written files, elapsed time, and diagnostics."""
+"""Render a ROP node — blocking, background, and chunked variants."""
 
 from __future__ import annotations
 
@@ -115,6 +115,70 @@ def render_rop(
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to render ROP")
+
+
+# ---------------------------------------------------------------------------
+# Chunked ROP — launch / poll / cancel via core ChunkedRunner
+# ---------------------------------------------------------------------------
+
+
+def render_rop_chunked(
+    rop_path: Optional[str] = None,
+    frame_range: Optional[List[float]] = None,
+    action: str = "launch",
+    job_id: Optional[str] = None,
+) -> dict:
+    """Render a ROP node with per-frame chunked execution via core ChunkedRunner.
+
+    Parameters
+    ----------
+    action : str
+        ``"launch"`` (default), ``"poll"``, or ``"cancel"``.
+    rop_path : str, optional
+        Path to the ROP node. Required for ``"launch"``.
+    frame_range : list of float, optional
+        ``[start, end]`` or ``[start, end, increment]``. Required for ``"launch"``.
+    job_id : str, optional
+        Required for ``"poll"`` and ``"cancel"`` actions.
+
+    Returns
+    -------
+    dict
+        For ``launch``: ``{success, job_id, state, progress, frame_range, ...}``
+        For ``poll``: ``{success, job_id, state, progress, written_files, ...}``
+        For ``cancel``: ``{success, job_id, state, progress}``
+    """
+    from _rop_chunked import cancel_rop_job, get_rop_job, launch_rop_job  # noqa: E402, PLC0415
+
+    if action == "cancel":
+        if not job_id:
+            return skill_error("Missing job_id", "job_id is required for cancel action")
+        result = cancel_rop_job(job_id)
+        if result["success"]:
+            return skill_success("ROP chunked job cancel requested", **result)
+        return skill_error("Cancel failed", result["error"], job_id=job_id)
+
+    if action == "poll":
+        if not job_id:
+            return skill_error("Missing job_id", "job_id is required for poll action")
+        result = get_rop_job(job_id)
+        if result["success"]:
+            return skill_success("ROP chunked job status", **result)
+        return skill_error("Poll failed", result["error"], job_id=job_id)
+
+    # action == "launch"
+    if not rop_path:
+        return skill_error("Missing rop_path", "rop_path is required for launch action")
+    if not frame_range or len(frame_range) < 2:
+        return skill_error(
+            "Invalid frame range",
+            "frame_range must be [start, end, optional increment]",
+        )
+
+    result = launch_rop_job(rop_path=rop_path, frame_range=frame_range)
+    if result["success"]:
+        return skill_success("ROP chunked job launched", **result)
+    return skill_error(result["error"], rop_path=rop_path)
 
 
 @skill_entry
