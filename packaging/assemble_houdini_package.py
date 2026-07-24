@@ -318,11 +318,136 @@ def _shelf_file() -> str:
     return r"""<?xml version="1.0" encoding="UTF-8"?>
 <shelfDocument>
   <toolshelf name="DCC-MCP" label="DCC-MCP">
+    <memberTool name="dcc_mcp_houdini_copy_id"/>
+    <memberTool name="dcc_mcp_houdini_server_info"/>
+    <memberTool name="dcc_mcp_houdini_about"/>
     <memberTool name="dcc_mcp_houdini_start"/>
     <memberTool name="dcc_mcp_houdini_stop"/>
-    <memberTool name="dcc_mcp_houdini_status"/>
-    <memberTool name="dcc_mcp_houdini_docs"/>
   </toolshelf>
+  <tool name="dcc_mcp_houdini_copy_id" label="Copy Instance ID" icon="BUTTONS_info" helpText="Copy the DCC-MCP instance UUID to the clipboard.">
+    <script scriptType="python"><![CDATA[
+try:
+    import dcc_mcp_houdini
+    server = dcc_mcp_houdini.get_server()
+except Exception:
+    server = None
+
+instance_id = None
+if server is not None:
+    for attr in ("instance_id", "_config"):
+        val = getattr(server, attr, None)
+        if isinstance(val, str):
+            instance_id = val
+            break
+        if hasattr(val, "instance_id"):
+            instance_id = getattr(val, "instance_id", None)
+            if isinstance(instance_id, str):
+                break
+    if instance_id is None:
+        instance_id = getattr(server, "instance_id", None) or "unknown"
+
+copied = False
+try:
+    from PySide2.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is not None:
+        clipboard = app.clipboard()
+        if clipboard is not None:
+            clipboard.setText(str(instance_id))
+            copied = True
+except Exception:
+    pass
+# Fallback: copy to stdout for headless / non-Qt sessions
+if not copied:
+    print("Instance ID: {}".format(instance_id))
+
+message = "Instance ID copied: {}".format(instance_id) if copied else "Instance ID: {}".format(instance_id)
+try:
+    import hou
+    hou.ui.setStatusMessage(message)
+except Exception:
+    print(message)
+]]></script>
+  </tool>
+  <tool name="dcc_mcp_houdini_server_info" label="Server Info" icon="BUTTONS_info" helpText="Show DCC-MCP Houdini server information.">
+    <script scriptType="python"><![CDATA[
+try:
+    import dcc_mcp_houdini
+    server = dcc_mcp_houdini.get_server()
+except Exception:
+    server = None
+
+if server is not None and getattr(server, "is_running", False):
+    instance_id = None
+    for attr in ("instance_id", "_config"):
+        val = getattr(server, attr, None)
+        if isinstance(val, str):
+            instance_id = val
+            break
+        if hasattr(val, "instance_id"):
+            instance_id = getattr(val, "instance_id", None)
+            if isinstance(instance_id, str):
+                break
+    if instance_id is None:
+        instance_id = getattr(server, "instance_id", None) or "unknown"
+
+    try:
+        from dcc_mcp_houdini import __version__ as adapter_version
+    except Exception:
+        adapter_version = "unknown"
+
+    try:
+        from dcc_mcp_houdini._version_probe import get_houdini_version_string
+        houdini_version = get_houdini_version_string()
+    except Exception:
+        houdini_version = "unknown"
+
+    lines = [
+        "DCC-MCP Houdini Server Info",
+        "  MCP URL:       {}".format(server.mcp_url),
+        "  Instance UUID: {}".format(instance_id),
+        "  Adapter:       dcc-mcp-houdini {}".format(adapter_version),
+        "  Houdini:       {}".format(houdini_version),
+        "  Port:          {}".format(server.port),
+    ]
+    info = "\n".join(lines)
+else:
+    info = "DCC-MCP Houdini server is not running."
+
+try:
+    import hou
+    hou.ui.displayMessage(info, title="DCC-MCP Houdini Server Info")
+except Exception:
+    print(info)
+]]></script>
+  </tool>
+  <tool name="dcc_mcp_houdini_about" label="About DCC MCP" icon="BUTTONS_help" helpText="About DCC-MCP Houdini.">
+    <script scriptType="python"><![CDATA[
+try:
+    from dcc_mcp_houdini import __version__ as adapter_version
+except Exception:
+    adapter_version = "unknown"
+
+try:
+    from dcc_mcp_houdini._version_probe import get_houdini_version_string
+    houdini_version = get_houdini_version_string()
+except Exception:
+    houdini_version = "unknown"
+
+about = (
+    "DCC-MCP Houdini v{}\n"
+    "Houdini {}\n\n"
+    "GitHub: https://github.com/dcc-mcp/dcc-mcp-houdini\n"
+    "Docs:   https://github.com/dcc-mcp/dcc-mcp-houdini#readme"
+).format(adapter_version, houdini_version)
+
+try:
+    import hou
+    hou.ui.displayMessage(about, title="About DCC-MCP Houdini")
+except Exception:
+    print(about)
+]]></script>
+  </tool>
   <tool name="dcc_mcp_houdini_start" label="Start MCP" icon="MISC_python" helpText="Start the DCC-MCP Houdini server.">
     <script scriptType="python"><![CDATA[
 try:
@@ -357,42 +482,6 @@ try:
     hou.ui.setStatusMessage(message)
 except Exception:
     print(message)
-]]></script>
-  </tool>
-  <tool name="dcc_mcp_houdini_status" label="Status" icon="BUTTONS_info" helpText="Show the DCC-MCP Houdini server status.">
-    <script scriptType="python"><![CDATA[
-try:
-    import dcc_mcp_houdini
-
-    server = dcc_mcp_houdini.get_server()
-    if server is not None and getattr(server, "is_running", False):
-        message = "DCC-MCP Houdini server is running: {}".format(server.mcp_url)
-    else:
-        message = "DCC-MCP Houdini server is not running."
-except Exception as exc:
-    message = "DCC-MCP Houdini status failed: {}".format(exc)
-
-try:
-    import hou
-
-    hou.ui.setStatusMessage(message)
-except Exception:
-    print(message)
-]]></script>
-  </tool>
-  <tool name="dcc_mcp_houdini_docs" label="Docs" icon="BUTTONS_help" helpText="Open DCC-MCP Houdini documentation.">
-    <script scriptType="python"><![CDATA[
-import webbrowser
-
-url = "https://github.com/dcc-mcp/dcc-mcp-houdini"
-webbrowser.open(url)
-
-try:
-    import hou
-
-    hou.ui.setStatusMessage("Opened DCC-MCP Houdini docs: {}".format(url))
-except Exception:
-    print("Opened DCC-MCP Houdini docs: {}".format(url))
 ]]></script>
   </tool>
 </shelfDocument>
