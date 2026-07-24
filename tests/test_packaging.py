@@ -94,12 +94,18 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     shelf = ET.fromstring(shelf_xml)
     tool_names = {tool.attrib["name"] for tool in shelf.findall("tool")}
     assert tool_names == {
+        "dcc_mcp_houdini_copy_id",
+        "dcc_mcp_houdini_server_info",
+        "dcc_mcp_houdini_about",
         "dcc_mcp_houdini_start",
         "dcc_mcp_houdini_stop",
-        "dcc_mcp_houdini_status",
-        "dcc_mcp_houdini_docs",
     }
     assert "wait_ready=False" in shelf_xml
+    assert "Copy Instance ID" in shelf_xml
+    assert "Server Info" in shelf_xml
+    assert "About DCC MCP" in shelf_xml
+    assert "PySide2" in shelf_xml
+    assert "clipboard" in shelf_xml
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
     assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
@@ -110,7 +116,7 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert "${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}" in install_sh
     assert "get_server" in shelf_xml
     assert "setStatusMessage" in shelf_xml
-    assert "displayMessage" not in shelf_xml
+    assert "displayMessage" in shelf_xml
 
 
 @pytest.mark.packaging
