@@ -16,21 +16,26 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
-## [0.26.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.25.0...v0.26.0) (2026-07-23)
+## [0.26.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.25.0...v0.26.0) (2026-07-24)
 
 
 ### Features
 
+* **houdini:** add unified shelf menu with Copy Instance ID ([fad33db](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fad33db7fdebc2a10ac46124eeb6bc9e72105e86))
 * **render:** wire multi-frame ROP render into core ChunkedRunner ([8e99d73](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8e99d7355d86e406c1d5cf741354ce8f0f87846f))
+* report durable cook elapsed time ([bc724c6](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/bc724c6b7b77e9c4f4f4f1ee6695e39b669bc920))
 
 
 ### Bug Fixes
 
 * guard parm.eval() against SIGSEGV on deleted Houdini nodes ([8eae3ea](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8eae3ead3bfc8cd7df6ee6fd0327b46cd5daeb7b))
 * include import skill in interchange stage ([#184](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/184)) ([a8dec55](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a8dec558e1d994380aa23d5763a4d9bf68bec8a3))
+* make long cook jobs recoverable ([3d65ce8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3d65ce8a2f6d534fe2de36a15c8e5d53baa63a20))
 * prevent pump wedge when pre_drain_check fails or raises ([e55c5bb](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e55c5bbe67c563dbb8f24637c400396781ab2096))
 * **render:** preserve Solaris fallback fields ([#186](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/186)) ([e7ac9a4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e7ac9a4bd67f3a7de79f21fd7bf2fd013eea7d96))
 * **render:** resolve effective Solaris settings ([2ab9860](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2ab9860d4d45dfd2552ba510d12b73ef514d6418))
+* report isolated worker liveness honestly ([f82b7fc](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f82b7fc06f39cf21c2686018a695917af6304a91))
+* require recoverable core release ([8c72b2c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8c72b2cc1456506cbb76ca757e263b22e079e750))
 * ruff check --fix import sorting and unused imports ([edba5d3](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/edba5d383d5f5e6eabb305fe25e65a8f91d24693))
 
 ## [0.25.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.24.1...v0.25.0) (2026-07-20)
