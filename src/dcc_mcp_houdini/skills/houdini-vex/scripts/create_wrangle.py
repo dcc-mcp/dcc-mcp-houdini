@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from _vex_common import resolve_vex_context, resolve_wrangle_type  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def create_wrangle(
@@ -30,8 +30,8 @@ def create_wrangle(
         return skill_error("Houdini not available", "hou could not be imported")
 
     try:
-        from dcc_mcp_houdini._vex_types import VexSnippet, WrangleNodeSpec
         from dcc_mcp_houdini._vex_executor import create_wrangle as _create
+        from dcc_mcp_houdini._vex_types import VexSnippet, WrangleNodeSpec
         from dcc_mcp_houdini._vex_validator import validate_vex_snippet_client
     except ImportError as exc:
         return skill_error("VEX module not available", str(exc))

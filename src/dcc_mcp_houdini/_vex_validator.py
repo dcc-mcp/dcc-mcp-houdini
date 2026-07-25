@@ -14,8 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from dcc_mcp_houdini._vex_types import VexContext, VexSeverity, VexSyntaxError, WrangleType
-
+from dcc_mcp_houdini._vex_types import VexSeverity, VexSyntaxError, WrangleType
 
 # ---------------------------------------------------------------------------
 # Client-side (no hou) validation

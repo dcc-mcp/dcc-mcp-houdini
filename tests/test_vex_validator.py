@@ -9,7 +9,6 @@ from dcc_mcp_houdini._vex_validator import (
     validate_wrangle_parameters,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_vex_snippet_client — allowlist
 # ---------------------------------------------------------------------------

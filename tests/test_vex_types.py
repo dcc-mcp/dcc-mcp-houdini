@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from dcc_mcp_houdini._vex_types import (
@@ -14,7 +16,6 @@ from dcc_mcp_houdini._vex_types import (
     WrangleNodeSpec,
     WrangleType,
 )
-
 
 # ---------------------------------------------------------------------------
 # VexContext
@@ -125,7 +126,7 @@ class TestVexSnippet:
 
     def test_frozen_after_construction(self) -> None:
         snip = VexSnippet(code="@P += 1;", context=VexContext.POINTS)
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             snip.code = "@Cd += 1;"  # type: ignore
 
 

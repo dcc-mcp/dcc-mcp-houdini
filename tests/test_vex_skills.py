@@ -15,7 +15,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from skill_loader import skill_script_import_context
 
@@ -176,17 +176,19 @@ class TestCreateWrangle:
         for wt in ["volumewrangle", "geometrywrangle", "vertexwrangle", "detailwrangle"]:
             mod = _load_script("houdini-vex", "create_wrangle.py")
             new = _node(f"/obj/geo1/{wt}1", f"{wt}1", wt)
-            snip_parm = MagicMock()
-            class_parm = MagicMock()
+            _snip_parm = MagicMock()
+            _class_parm = MagicMock()
 
-            def _parm_side_effect(name):
-                if name == "snippet":
-                    return snip_parm
-                if name == "class":
-                    return class_parm
-                return None
+            def _make_side_effect(snip, cls):
+                def _parm_side_effect(name):
+                    if name == "snippet":
+                        return snip
+                    if name == "class":
+                        return cls
+                    return None
+                return _parm_side_effect
 
-            new.parm.side_effect = _parm_side_effect
+            new.parm.side_effect = _make_side_effect(_snip_parm, _class_parm)
             parent = _node("/obj/geo1", "geo1")
             parent.createNode.return_value = new
             mock_hou = MagicMock()
@@ -926,9 +928,9 @@ class TestVexWorkflowIntegration:
         """Simulate the full VEX workflow tracer-bullet."""
         create_mod = _load_script("houdini-vex", "create_wrangle.py")
         cook_mod = _load_script("houdini-vex", "cook_wrangle.py")
-        diag_mod = _load_script("houdini-vex", "diagnose_wrangle.py")
+        _diag_mod = _load_script("houdini-vex", "diagnose_wrangle.py")
         update_mod = _load_script("houdini-vex", "update_vex_snippet.py")
-        info_mod = _load_script("houdini-vex", "get_vex_info.py")
+        _info_mod = _load_script("houdini-vex", "get_vex_info.py")
 
         # ── Step 1: Create a point wrangle ─────────────────────────────
         snippet = "@P += {0, 1, 0};"

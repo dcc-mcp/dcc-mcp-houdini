@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from _vex_common import _get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 

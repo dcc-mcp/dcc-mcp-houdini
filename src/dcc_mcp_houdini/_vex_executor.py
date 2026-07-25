@@ -21,7 +21,6 @@ from dcc_mcp_houdini._vex_types import (
     CookDiagnostic,
     VexContext,
     VexSnippet,
-    VexSyntaxError,
     WrangleInfo,
     WrangleNodeSpec,
     WrangleType,

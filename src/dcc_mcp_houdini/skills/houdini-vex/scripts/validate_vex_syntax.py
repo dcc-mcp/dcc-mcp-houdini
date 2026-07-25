@@ -22,9 +22,7 @@ def validate_vex_syntax(
         from dcc_mcp_houdini._vex_validator import (
             validate_attribute_bindings,
             validate_vex_snippet_client,
-            validate_wrangle_parameters,
         )
-        from dcc_mcp_houdini._vex_types import WrangleType
     except ImportError as exc:
         return skill_error("VEX module not available", str(exc))
 
@@ -35,11 +33,6 @@ def validate_vex_syntax(
     if known_attributes:
         binding_errors = validate_attribute_bindings(vex_code, known_attributes)
         errors.extend(binding_errors)
-
-    # ── Parameter type check ───────────────────────────────────────────
-    wt = next((w for w in WrangleType if w.value == wrangle_type), WrangleType.ATTRIB_WRANGLE)
-    # We don't have actual parameter values to check in validate mode;
-    # the parameter validation is informational.
 
     if errors:
         return skill_error(

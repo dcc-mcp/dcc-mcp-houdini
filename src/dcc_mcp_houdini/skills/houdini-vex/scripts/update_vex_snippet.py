@@ -27,8 +27,8 @@ def update_vex_snippet(
         return skill_error("Houdini not available", "hou could not be imported")
 
     try:
-        from dcc_mcp_houdini._vex_types import VexContext, VexSnippet
         from dcc_mcp_houdini._vex_executor import update_vex_snippet as _update
+        from dcc_mcp_houdini._vex_types import VexContext, VexSnippet
         from dcc_mcp_houdini._vex_validator import validate_vex_snippet_client
     except ImportError as exc:
         return skill_error("VEX module not available", str(exc))
