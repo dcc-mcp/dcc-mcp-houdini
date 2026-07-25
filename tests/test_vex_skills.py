@@ -24,9 +24,7 @@ _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skill
 
 def _load_script(skill_name: str, script_name: str) -> ModuleType:
     path = _SKILLS_ROOT / skill_name / "scripts" / script_name
-    spec = importlib.util.spec_from_file_location(
-        f"skill_{skill_name}_{path.stem}", path
-    )
+    spec = importlib.util.spec_from_file_location(f"skill_{skill_name}_{path.stem}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -186,6 +184,7 @@ class TestCreateWrangle:
                     if name == "class":
                         return cls
                     return None
+
                 return _parm_side_effect
 
             new.parm.side_effect = _make_side_effect(_snip_parm, _class_parm)

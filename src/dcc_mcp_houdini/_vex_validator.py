@@ -162,8 +162,6 @@ _WRANGLE_PARM_RULES: Dict[WrangleType, Dict[str, tuple]] = {
 }
 
 
-
-
 def validate_vex_snippet_client(code: str) -> List[VexSyntaxError]:
     """Client-side (no ``hou``) VEX snippet validation.
 
@@ -232,21 +230,14 @@ def validate_wrangle_parameters(
     for parm_name, value in parameters.items():
         rule = rules.get(parm_name)
         if rule is None:
-            errors.append(
-                f"Unknown parameter '{parm_name}' for wrangle type '{wrangle_type.value}'"
-            )
+            errors.append(f"Unknown parameter '{parm_name}' for wrangle type '{wrangle_type.value}'")
             continue
 
         expected_type, allowed_values, _required = rule
         if not isinstance(value, expected_type):
-            errors.append(
-                f"Parameter '{parm_name}' expected type {expected_type.__name__}, "
-                f"got {type(value).__name__}"
-            )
+            errors.append(f"Parameter '{parm_name}' expected type {expected_type.__name__}, got {type(value).__name__}")
         if allowed_values is not None and value not in allowed_values:
-            errors.append(
-                f"Parameter '{parm_name}' value '{value}' not in allowed: {allowed_values}"
-            )
+            errors.append(f"Parameter '{parm_name}' value '{value}' not in allowed: {allowed_values}")
 
     return errors
 
@@ -265,8 +256,22 @@ def validate_attribute_bindings(
 
     # Find @attribute references that are NOT built-in globals.
     builtin_attrs = {
-        "P", "N", "Cd", "uv", "v", "id", "ptnum", "primnum", "vtxnum",
-        "numpt", "numprim", "numvtx", "Time", "Frame", "elemnum", "numelem",
+        "P",
+        "N",
+        "Cd",
+        "uv",
+        "v",
+        "id",
+        "ptnum",
+        "primnum",
+        "vtxnum",
+        "numpt",
+        "numprim",
+        "numvtx",
+        "Time",
+        "Frame",
+        "elemnum",
+        "numelem",
     }
 
     attr_refs = re.findall(r"@(\w+)", snippet_code)

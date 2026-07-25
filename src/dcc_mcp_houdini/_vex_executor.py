@@ -484,8 +484,7 @@ def locate_wrangle_failure(diagnostic: CookDiagnostic) -> Dict[str, Any]:
 
     # Cook timeout or process failure.
     if diagnostic.cook_error and (
-        "timeout" in str(diagnostic.cook_error).lower()
-        or "timed out" in str(diagnostic.cook_error).lower()
+        "timeout" in str(diagnostic.cook_error).lower() or "timed out" in str(diagnostic.cook_error).lower()
     ):
         result["likely_cause"] = "cook_timeout"
         result["error_location"] = diagnostic.cook_error
