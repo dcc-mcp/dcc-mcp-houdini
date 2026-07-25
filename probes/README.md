@@ -1,39 +1,45 @@
-# PIP-2930 Stage-1 Probes
+# PIP-2930 Compatibility Gate
 
-> **Audience: Developer / QA only.** These are spike verification scripts, not
-> product features. They create temporary Houdini nodes and produce
-> engineering diagnostics. End users should use marketplace extension
-> packages instead (see PIP-2932, PIP-2933).
+> **Audience: Developer / QA only.** These are pre-flight verification
+> scripts, not product features. They create temporary Houdini nodes and
+> produce engineering diagnostics. End users should use marketplace
+> extension packages (PIP-2932, PIP-2933).
 
-Scripts to validate Houdini HOM APIs for marketplace extensions (COP shader,
-OpenCL GPU, MaterialX `op:` path).
+Repeatable smoke gate for Houdini COP/OpenCL/MaterialX compatibility.
+Run before marketplace extension development or release on any new
+Houdini version, OS, or GPU configuration.
 
 ## Quick Start
 
 ```powershell
-# Canonical command (H21-corrected):
-hython probes/probe_cop_v2.py
+# Canonical smoke probe (COP network + OpenCL COP + MaterialX op: path):
+hython probes/probe_cop.py
 
 # Standalone OpenCL device enumeration (safe, no scene changes):
 hython probes/probe_opencl_devices.py
-
-# OFX safety probe (optional, read-only):
-hython probes/probe_ofx.py
 ```
+
+## Scripts
+
+| Script | Purpose | Side effects |
+|--------|---------|--------------|
+| `probe_cop.py` | **Gate.** Create Copernicus COP network, OpenCL COP node, MaterialX `op:` wire, cook test, OpenCL device listing. Corrected for H21 API surface. | Creates `/img/_pip2930_probe_copnet` and `/mat/_pip2930_probe_mtlx` |
+| `probe_opencl_devices.py` | **Gate.** Enumerate OpenCL devices via hgpuinfo, hconfig, env, and HOM introspection. | None (read-only) |
+| `matrix.md` | **Record.** Compatibility matrix — H21 Windows filled, others pending. | N/A |
 
 ## Agent / Gateway Execution
 
-Agents connecting through the dcc-mcp gateway can materialize and execute
-probes without local `hython`:
+Agents connecting through the dcc-mcp gateway can execute probes without
+local `hython`:
 
-1. Discover the target Houdini instance via `GET http://127.0.0.1:9765/instances`
-2. Use `execute_python` tool with `exec(open(".../probe_cop_v2.py").read())`
+1. Discover target Houdini instance via `GET http://127.0.0.1:9765/instances`
+2. Call `execute_python` with `exec(open(".../probe_cop.py").read())`
    against the instance's MCP endpoint
 3. Collect stdout and the JSON output file
 
-### JSON Output Contract
+## JSON Output Contract
 
-Every probe writes a structured JSON file. Schema:
+Every probe writes a structured JSON file:
 
 ```json
 {
@@ -48,7 +54,7 @@ Every probe writes a structured JSON file. Schema:
       "section": "cop_network_create",
       "status": "pass|fail|blocked|skipped|info",
       "detail": "human-readable one-liner",
-      "evidence": { "...": "structured evidence dict" }
+      "evidence": { "...": "structured dict" }
     }
   ],
   "summary": {"pass": 4, "fail": 1, "blocked": 0}
@@ -57,24 +63,13 @@ Every probe writes a structured JSON file. Schema:
 
 Exit code: `0` = all sections pass; `1` = at least one `fail`.
 
-## Scripts
-
-| Script | Purpose | Side effects |
-|--------|---------|--------------|
-| `probe_cop_v2.py` | **Canonical.** Create Copernicus COP network, OpenCL COP node, MaterialX `op:` wire, cook test, OpenCL device listing. Corrected for H21 API surface. | Creates `/img/_pip2930_probe_copnet` and `/mat/_pip2930_probe_mtlx` |
-| `probe_cop.py` | Original (pre-H21) probe. Retained for H20.5 fallback only; may fail on H21 due to `gradient`/`kernel_code` assumptions. | Same as v2 |
-| `probe_opencl_devices.py` | Enumerate OpenCL devices via 7 methods | None (read-only) |
-| `probe_ofx.py` | Enumerate OFX bundles safely (reads plist/xml only, never loads DLLs) | None (read-only) |
-| `matrix.md` | Compatibility matrix — H21 Windows filled, others pending | N/A |
-
 ## Side Effects & Cleanup
 
-`probe_cop_v2.py` and `probe_cop.py` create Houdini nodes:
+`probe_cop.py` creates Houdini nodes:
 - `/img/_pip2930_probe_copnet` — Copernicus COP network (constant, null, opencl)
 - `/mat/_pip2930_probe_mtlx` — MaterialX builder subnet with mtlximage
 
-Probes attempt to destroy leftover nodes from prior runs before creating new
-ones. To manually clean up:
+Probes attempt to destroy leftovers from prior runs. Manual cleanup:
 
 ```python
 import hou
@@ -83,38 +78,45 @@ for path in ("/img/_pip2930_probe_copnet", "/mat/_pip2930_probe_mtlx"):
     if n: n.destroy()
 ```
 
-## H21 Verified Results
+## H21 Verified Results (Windows GUI, `houdini@21.0.631`)
 
-| Section | Status |
-|---------|:------:|
-| COP network create | pass |
-| COP cook | pass |
-| OpenCL COP create | pass |
-| OpenCL kernel source set | pass |
-| OpenCL COP cook | **fail** — CPU-only OpenCL on this host |
-| MaterialX `op:` path wire | pass |
-| OpenCL device enumeration | pass |
-| `hou.opencl` module | **fail** — not available in H21 |
+**11/13 primary cells PASS, 2 FAIL.**
 
-Host: `houdini@21.0.631`, Windows 11 GUI. OpenCL COP cook failure is
-platform-specific: Intel OpenCL 1.2 on AMD Ryzen 9 9950X (CPU only, no
-GPU OpenCL runtime). May pass on a GPU-enabled machine. See `matrix.md`
-for full evidence.
+| Section | Status | Note |
+|---------|:------:|------|
+| hython import | pass | |
+| GUI session | pass | |
+| Copernicus available | pass | `CopNet` category |
+| COP network create | pass | `copnet` + `constant` + `null` |
+| COP cook | pass | `null.layer()` ok |
+| OpenCL COP create | pass | `opencl` node type exists |
+| OpenCL kernel source set | pass | `kernelcode` param |
+| OpenCL COP cook | **fail** | CPU-only OpenCL, raw C kernel binding fails |
+| MaterialX builder | pass | `mtlximage` created |
+| mtlximage op: path set | pass | `file = "op:/img/..."` |
+| op: path resolve | pass | `eval()` returns `op:` string |
+| OpenCL devices detected | pass | `hgpuinfo -c -l` |
+| hou.opencl module | **fail** | Not in H21.0.631 |
 
-## Running Specific Sections
+OpenCL COP cook is the **primary gate** for GPU/OpenCL readiness (PIP-2933).
+It failed on this CPU-only platform (Intel OpenCL 1.2 on AMD Ryzen 9 9950X).
+May pass with GPU OpenCL runtime. See `matrix.md` for full evidence.
 
-```powershell
-hython probes/probe_cop_v2.py --sections cop_network,opencl_devices
-```
+**Conclusion**: Copernicus COP + MaterialX `op:` path → ready for stage-2.
+GPU/OpenCL COP cook → **not ready**; needs GPU-enabled host re-test.
 
-## macOS Notes
+## H21 API Corrections
 
-- Vulkan viewport: **blocked** — macOS doesn't support Vulkan; Houdini uses Metal
-- OpenCL: **likely blocked** — Apple deprecated OpenCL in macOS 10.14; GPU OpenCL unavailable on Apple Silicon
-- Run `probe_opencl_devices.py` on macOS to confirm the actual state
+Discovered during live H21 gateway execution:
 
-## OFX Safety Decision
+| Assumption | H21 actual |
+|---|---|
+| `gradient` node inside copnet | FAILS — use `constant` |
+| `kernel`/`kernel_code` param | `kernelcode` |
+| `hou.opencl` module | Not available; use `hgpuinfo` |
+| Copernicus in `Cop2` category | Also in `CopNet` category |
 
-- **Enumeration**: SAFE — reading `.ofx.bundle/Contents/Info.plist` and directory walking doesn't load binaries
-- **Loading**: UNSAFE — any `.ofx.bundle` loading involves `dlopen`/`LoadLibrary` of third-party native code
-- **Product decision**: OFX remains product-declined for v1 per PIP-2925
+## OFX Safety
+
+Enumeration via `Info.plist`/`Plugin.xml` text reading is safe. Loading any
+`.ofx.bundle` involves native code execution — product-declined for v1.
