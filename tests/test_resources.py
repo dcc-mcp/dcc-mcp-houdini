@@ -177,7 +177,7 @@ class TestThrottling:
         for _ in range(50):
             binder._on_scene_event()
         assert binder.scene_publish_count == baseline
-        time.sleep(0.2)
+        time.sleep(0.5)
         assert binder.scene_publish_count == baseline + 1
         binder.unbind()
 

@@ -31,7 +31,7 @@ def _inspection_to_dict(inspection) -> dict:
 def inspect_network(parent_path: str) -> dict:
     """Run full semantic inspection on a Houdini parent network."""
     try:
-        import hou  # noqa: PLC0415
+        __import__("hou")
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 

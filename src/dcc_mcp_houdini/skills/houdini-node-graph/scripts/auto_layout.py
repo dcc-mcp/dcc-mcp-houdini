@@ -12,8 +12,6 @@ Pass ``dry_run=true`` to preview without mutating.
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -27,7 +25,7 @@ def auto_layout(
 ) -> dict:
     """Auto-arrange nodes under *parent_path*."""
     try:
-        import hou  # noqa: PLC0415
+        __import__("hou")
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
