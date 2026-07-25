@@ -84,3 +84,75 @@ tools:
           type: integer
           minimum: 0
           description: Input index to disconnect.
+  - name: inspect_network
+    description: >-
+      Full semantic inspection of a Houdini parent network. Reports broken
+      inputs (unconnected input slots), orphaned nodes (zero connections),
+      directed cycles, disconnected subgraphs, type-mismatched connections
+      (cross-context wiring e.g. SOP→ROP), and chain roots/ends. Read-only.
+    source_file: scripts/inspect_network.py
+    execution: sync
+    affinity: main
+    group: graph-inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [parent_path]
+      properties:
+        parent_path:
+          type: string
+          description: Parent network path to inspect (e.g. /obj/geo1).
+  - name: auto_layout
+    description: >-
+      Auto-arrange nodes under a parent network with controllable user-layout
+      preservation. When preserve_user_layout=true (default), nodes whose
+      positions differ from Houdini's default layoutChildren() result are
+      treated as user-touched and left unchanged. Two strategies:
+      'houdini_default' (use built-in layoutChildren then restore preserved
+      nodes) and 'tree_left_to_right' (topological tree layout, sinks on the
+      right). Pass dry_run=true to preview without mutating the scene.
+    source_file: scripts/auto_layout.py
+    execution: sync
+    affinity: main
+    group: graph-layout
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path]
+      properties:
+        parent_path:
+          type: string
+          description: Parent network path to layout (e.g. /obj/geo1).
+        strategy:
+          type: string
+          enum: [houdini_default, tree_left_to_right]
+          default: houdini_default
+          description: Layout strategy.
+        preserve_user_layout:
+          type: boolean
+          default: true
+          description: Skip nodes whose positions appear user-touched.
+        spacing_x:
+          type: number
+          default: 200.0
+          description: Horizontal spacing (tree_left_to_right only).
+        spacing_y:
+          type: number
+          default: 100.0
+          description: Vertical spacing (tree_left_to_right only).
+        dry_run:
+          type: boolean
+          default: false
+          description: Preview the layout plan without mutating.
