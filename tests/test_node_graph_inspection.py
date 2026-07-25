@@ -175,12 +175,7 @@ class FakeHou:
 
 
 def _load_core_module() -> ModuleType:
-    path = (
-        Path(__file__).parent.parent
-        / "src"
-        / "dcc_mcp_houdini"
-        / "_node_graph_inspection.py"
-    )
+    path = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "_node_graph_inspection.py"
     spec = importlib.util.spec_from_file_location("node_graph_inspection", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -498,9 +493,7 @@ class TestAutoLayout:
 
 def _load_skill_script(script_name: str) -> ModuleType:
     path = _SKILLS_ROOT / "houdini-node-graph" / "scripts" / script_name
-    spec = importlib.util.spec_from_file_location(
-        "skill_node_graph_{}".format(path.stem), path
-    )
+    spec = importlib.util.spec_from_file_location("skill_node_graph_{}".format(path.stem), path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
