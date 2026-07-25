@@ -52,7 +52,9 @@ def _host_info() -> Dict[str, Any]:
 def _check_copernicus_available(hou: Any) -> bool:
     """Probe whether Copernicus COP context is available."""
     try:
-        return hou.nodeTypeCategories().get("Cop2") is not None  # HOM uses "Cop2" key
+        # H21: check CopNet category (not just Cop2). Copernicus uses both.
+        cats = hou.nodeTypeCategories()
+        return cats.get("CopNet") is not None and cats.get("Cop2") is not None
     except Exception:
         return False
 
@@ -103,13 +105,14 @@ def probe_cop_network(hou: Any) -> Dict[str, Any]:
         # Verify it's the correct type
         type_name = copnet.type().name()
 
-        # Add a simple gradient node to confirm node creation works
-        gradient = copnet.createNode("gradient", node_name="_probe_gradient")
-        grad_type = gradient.type().name()
+        # H21 quirk: "gradient" node fails with "Invalid node type name" inside copnet.
+        # Use "constant" (safe across H20.5/H21) as the source node.
+        src_node = copnet.createNode("constant", node_name="_probe_source")
+        src_type = src_node.type().name()
 
         # Add a null output
         null_node = copnet.createNode("null", node_name="_probe_output")
-        null_node.setInput(0, gradient, 0)
+        null_node.setInput(0, src_node, 0)
 
         # Check COP-specific methods exist
         has_layer = hasattr(null_node, "layer")
@@ -119,8 +122,9 @@ def probe_cop_network(hou: Any) -> Dict[str, Any]:
         evidence = {
             "copnet_path": copnet.path(),
             "copnet_type": type_name,
-            "gradient_type": grad_type,
+            "source_type": src_type,
             "null_path": null_node.path(),
+            "note": "gradient node fails inside copnet in H21; using constant as source"
             "has_layer_method": has_layer,
             "has_geometry_method": has_geometry,
             "has_cable_method": has_cable,
@@ -204,8 +208,8 @@ def probe_opencl_cop(hou: Any) -> Dict[str, Any]:
             "parms": parm_names,
         }
 
-        # Set kernel source — parameter name may be "kernel" or "kernel_code" or "code"
-        kernel_parm_candidates = ("kernel", "kernel_code", "code", "clcode", "source")
+        # Set kernel source — H21 actual param is "kernelcode", not "kernel"/"kernel_code"
+        kernel_parm_candidates = ("kernelcode", "kernel", "kernel_code", "code", "clcode", "source")
         kernel_parm = None
         for candidate in kernel_parm_candidates:
             p = ocl_node.parm(candidate)
@@ -222,6 +226,7 @@ def probe_opencl_cop(hou: Any) -> Dict[str, Any]:
         try:
             ocl_node.parm(kernel_parm).set(OPENCL_KERNEL_SOURCE)
             evidence["kernel_source_set"] = True
+            evidence["kernel_parm_note"] = "H21 uses 'kernelcode' param (not 'kernel'); raw OpenCL C may need Houdini kernel DSL for GPU cook"
         except Exception as set_err:
             evidence["kernel_source_set"] = False
             evidence["kernel_source_error"] = str(set_err)
@@ -397,7 +402,7 @@ def probe_opencl_devices(hou: Any) -> Dict[str, Any]:
     except Exception as exc:
         evidence["approaches"]["hgpuinfo"] = {"available": False, "error": str(exc)}
 
-    # Approach 2: HOM introspection — hou.opencl module
+    # Approach 2: HOM introspection — hou.opencl module (NOT available in H21)
     try:
         ocl = hou.opencl if hasattr(hou, "opencl") else None
         if ocl is not None:
