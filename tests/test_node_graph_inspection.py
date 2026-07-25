@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import MagicMock, patch
 
@@ -173,7 +174,7 @@ class FakeHou:
 # ---------------------------------------------------------------------------
 
 
-def _load_core_module() -> "module":
+def _load_core_module() -> ModuleType:
     path = (
         Path(__file__).parent.parent
         / "src"
@@ -285,7 +286,7 @@ class TestInspectNetwork:
         # Two subgraphs of size 2 each
         assert len(result.subgraphs) == 2
         sizes = {sg.size for sg in result.subgraphs}
-        assert sizes == {2, 2}
+        assert sizes == {2}
 
     def test_cycle_detection_simple(self) -> None:
         module = _load_core_module()
@@ -397,7 +398,7 @@ class TestAutoLayout:
         module = _load_core_module()
         parent = FakeParent("/obj/geo1")
         # Place a node at the "default" position (0, 0) — this will be rearranged
-        box1 = parent.add_child("box1", "box", position=(0.0, 0.0))
+        parent.add_child("box1", "box", position=(0.0, 0.0))
         # Place another at a clearly user-touched position
         null1 = parent.add_child("null1", "null", position=(5000.0, 5000.0))
         original_null_pos = null1.position()
@@ -495,7 +496,7 @@ class TestAutoLayout:
 # ---------------------------------------------------------------------------
 
 
-def _load_skill_script(script_name: str) -> "module":
+def _load_skill_script(script_name: str) -> ModuleType:
     path = _SKILLS_ROOT / "houdini-node-graph" / "scripts" / script_name
     spec = importlib.util.spec_from_file_location(
         "skill_node_graph_{}".format(path.stem), path
@@ -665,8 +666,8 @@ class TestUserLayoutPreservation:
         parent = FakeParent("/obj/geo1")
         # Pre-position nodes as if Houdini's layoutChildren already ran:
         # node at index 0 → (0, 0), node at index 1 → (200, 0)
-        auto_node = parent.add_child("auto_placed", "box", position=(0.0, 0.0))
-        user_node = parent.add_child("user_placed", "null", position=(5000.0, 5000.0))
+        parent.add_child("auto_placed", "box", position=(0.0, 0.0))
+        parent.add_child("user_placed", "null", position=(5000.0, 5000.0))
         hou = FakeHou(parent)
 
         # After computing fingerprint, layoutChildren sets both to (0,0) and (200,0).
@@ -685,8 +686,8 @@ class TestUserLayoutPreservation:
     def test_no_preservation_moves_everything(self) -> None:
         module = _load_core_module()
         parent = FakeParent("/obj/geo1")
-        user_node = parent.add_child("user_placed", "null", position=(5000.0, 5000.0))
-        auto_node = parent.add_child("auto_placed", "box", position=(0.0, 0.0))
+        parent.add_child("user_placed", "null", position=(5000.0, 5000.0))
+        parent.add_child("auto_placed", "box", position=(0.0, 0.0))
         hou = FakeHou(parent)
 
         result = module.auto_layout(

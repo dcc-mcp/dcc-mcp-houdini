@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -386,8 +386,8 @@ def inspect_network(parent_path: str, hou_provider: Optional[Callable[[], Any]] 
     if hou_provider is None:
         try:
             import hou  # noqa: PLC0415
-        except ImportError:
-            raise RuntimeError("hou module is not available — not running inside Houdini")
+        except ImportError as err:
+            raise RuntimeError("hou module is not available — not running inside Houdini") from err
     else:
         hou = hou_provider()
 
@@ -549,9 +549,9 @@ def _tree_layout_positions(
     # Group by layer (layer 0 = rightmost = sinks)
     max_layer = max(layer.values()) if layer else 0
     by_layer: Dict[int, List[str]] = defaultdict(list)
-    for p, l in layer.items():
-        # Invert: max_layer - l so that sinks are at x=0, roots at x=max_layer*spacing
-        by_layer[max_layer - l].append(p)
+    for p, level in layer.items():
+        # Invert: max_layer - level so that sinks are at x=0, roots at x=max_layer*spacing
+        by_layer[max_layer - level].append(p)
 
     positions: Dict[str, Tuple[float, float]] = {}
     moved: List[str] = []
@@ -675,8 +675,8 @@ def auto_layout(
     if hou_provider is None:
         try:
             import hou  # noqa: PLC0415
-        except ImportError:
-            raise RuntimeError("hou module is not available — not running inside Houdini")
+        except ImportError as err:
+            raise RuntimeError("hou module is not available — not running inside Houdini") from err
     else:
         hou = hou_provider()
 
