@@ -430,9 +430,7 @@ def inspect_network(parent_path: str, hou_provider: Optional[Callable[[], Any]] 
 # ---------------------------------------------------------------------------
 
 
-def _compute_default_fingerprint(
-    hou: Any, parent_path: str, children: Sequence[Any]
-) -> Dict[str, Tuple[float, float]]:
+def _compute_default_fingerprint(hou: Any, parent_path: str, children: Sequence[Any]) -> Dict[str, Tuple[float, float]]:
     """Compute where ``parent.layoutChildren()`` would place each node.
 
     This runs a speculative layout on a **temporary clone** of the network
