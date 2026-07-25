@@ -1,0 +1,274 @@
+tools:
+  - name: create_wrangle
+    description: >-
+      Create a typed Wrangle SOP node (attribwrangle, pointwrangle,
+      geometrywrangle, etc.) under a parent SOP network, optionally with a
+      validated VEX snippet.  The run-over context and bindings are set
+      explicitly — no raw-string passthrough.
+    source_file: scripts/create_wrangle.py
+    execution: sync
+    affinity: main
+    group: vex-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path]
+      properties:
+        parent_path:
+          type: string
+          description: SOP network path to create the Wrangle inside (e.g. /obj/geo1).
+        wrangle_type:
+          type: string
+          default: attribwrangle
+          enum:
+            - attribwrangle
+            - volumewrangle
+            - geometrywrangle
+            - pointwrangle
+            - primitivewrangle
+            - vertexwrangle
+            - detailwrangle
+            - topologywrangle
+          description: Houdini Wrangle SOP node type.
+        node_name:
+          type: string
+          description: Optional node name (Houdini auto-names if omitted).
+        run_over:
+          type: string
+          default: points
+          enum: [points, prims, verts, detail, global, attribs, numbers]
+          description: Geometry component to run VEX over.
+        vex_code:
+          type: string
+          description: >-
+            VEX snippet to set on the wrangle.  Validated client-side against
+            allowlist/denylist before being committed to the node.
+        bindings:
+          type: object
+          description: Optional attribute bindings (name -> type map).
+          additionalProperties:
+            type: string
+        parameters:
+          type: object
+          description: Optional extra parameter values (e.g. group).
+          additionalProperties: {}
+        set_display:
+          type: boolean
+          default: false
+          description: Set the display flag on the new node.
+        set_render:
+          type: boolean
+          default: false
+          description: Set the render flag on the new node.
+    next-tools:
+      on-success:
+        - houdini_vex__cook_wrangle
+        - houdini_vex__get_vex_info
+
+  - name: update_vex_snippet
+    description: >-
+      Update the VEX snippet (and optionally run-over context and bindings)
+      on an existing Wrangle node.  The new snippet is validated client-side
+      before being committed.  Returns the previous snippet preview.
+    source_file: scripts/update_vex_snippet.py
+    execution: sync
+    affinity: main
+    group: vex-edit
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_path, vex_code]
+      properties:
+        node_path:
+          type: string
+          description: Path to an existing Wrangle node.
+        vex_code:
+          type: string
+          description: New VEX snippet (validated client-side before commit).
+        run_over:
+          type: string
+          enum: [points, prims, verts, detail, global, attribs, numbers]
+          description: Optional new run-over context.
+        bindings:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional new attribute bindings.
+        parameters:
+          type: object
+          additionalProperties: {}
+          description: Optional extra parameter values.
+    next-tools:
+      on-success:
+        - houdini_vex__cook_wrangle
+
+  - name: validate_vex_syntax
+    description: >-
+      Validate VEX snippet syntax client-side without touching Houdini.
+      Checks against the VEX allowlist and deny-list, validates bindings
+      against known attributes, and returns structured diagnostics with
+      line/column location.  Read-only — no scene mutation.
+    source_file: scripts/validate_vex_syntax.py
+    execution: sync
+    affinity: main
+    group: vex-validate
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [vex_code]
+      properties:
+        vex_code:
+          type: string
+          description: VEX snippet to validate.
+        run_over:
+          type: string
+          default: points
+          enum: [points, prims, verts, detail, global, attribs, numbers]
+          description: Expected run-over context (for context-aware checks).
+        known_attributes:
+          type: array
+          items:
+            type: string
+          description: Known geometry attribute names for binding validation.
+        wrangle_type:
+          type: string
+          default: attribwrangle
+          enum:
+            - attribwrangle
+            - volumewrangle
+            - geometrywrangle
+            - pointwrangle
+            - primitivewrangle
+            - vertexwrangle
+            - detailwrangle
+            - topologywrangle
+          description: Target wrangle type for parameter context.
+    next-tools:
+      on-success:
+        - houdini_vex__create_wrangle
+
+  - name: cook_wrangle
+    description: >-
+      Cook a Wrangle node and return cook status plus geometry diagnostics
+      (point/prim/vertex counts, attribute names, group names, errors and
+      warnings).  This is the sole path that evaluates VEX.
+    source_file: scripts/cook_wrangle.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 120
+    group: vex-cook
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Path to the Wrangle node to cook.
+        force:
+          type: boolean
+          default: false
+          description: Force recook even if already cooked.
+    next-tools:
+      on-failure:
+        - houdini_vex__diagnose_wrangle
+
+  - name: diagnose_wrangle
+    description: >-
+      Analyse a failed Wrangle cook and locate the failure: VEX compile
+      error with line hints, missing attribute bindings, zero geometry,
+      or cook timeout.  Returns a suggested fix.  Read-only.
+    source_file: scripts/diagnose_wrangle.py
+    execution: sync
+    affinity: main
+    group: vex-cook
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Path to the Wrangle node to diagnose.
+    next-tools:
+      on-success:
+        - houdini_vex__update_vex_snippet
+
+  - name: get_vex_info
+    description: >-
+      Read back metadata from a Wrangle node: node type, run-over mode,
+      snippet preview, cook state, and input/output count.  Read-only
+      — never cooks or mutates.
+    source_file: scripts/get_vex_info.py
+    execution: sync
+    affinity: main
+    group: vex-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Path to the Wrangle node to inspect.
+
+  - name: list_wrangles
+    description: >-
+      List all Wrangle-type nodes under a parent path, recursively.
+      Returns node path, name, and wrangle type for each match.
+      Read-only.
+    source_file: scripts/list_wrangles.py
+    execution: sync
+    affinity: main
+    group: vex-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: []
+      properties:
+        parent_path:
+          type: string
+          default: /obj
+          description: Root path to search for Wrangle nodes.
