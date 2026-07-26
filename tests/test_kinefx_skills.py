@@ -30,15 +30,16 @@ class TestCreateRig:
         geo = MagicMock()
         geo.path.return_value = "/obj/geo1"
 
-        # rig_sop = geo.createNode("null", node_name=rig_name)
         rig_sop = MagicMock()
         rig_sop.path.return_value = "/obj/geo1/rig1"
         rig_geo = MagicMock()
-        rig_sop.geometry.return_value = rig_geo
+        stash = MagicMock()
+        rig_sop.parm.return_value = stash
 
         geo.createNode.return_value = rig_sop
 
         mock_hou = MagicMock()
+        mock_hou.Geometry.return_value = rig_geo
         # Use side_effect to differentiate: rig doesn't exist yet, return None
         mock_hou.node.side_effect = lambda p: None if "rig1" in p else geo
 
@@ -61,6 +62,9 @@ class TestCreateRig:
         assert result["success"] is True
         assert result["context"]["rig_path"] == "/obj/geo1/rig1"
         assert result["context"]["joint_count"] == 3
+        geo.createNode.assert_called_once_with("kinefx::skeleton", node_name="rig1")
+        rig_sop.geometry.assert_not_called()
+        stash.set.assert_called_once_with(rig_geo)
 
     def test_create_rig_with_auto_capture(self) -> None:
         mod = _load_script("create_rig.py")
@@ -70,17 +74,25 @@ class TestCreateRig:
         rig_sop = MagicMock()
         rig_sop.path.return_value = "/obj/geo1/rig1"
         rig_geo = MagicMock()
-        rig_sop.geometry.return_value = rig_geo
+        rig_sop.parm.return_value = MagicMock()
 
-        bone_deform = MagicMock()
-        bone_deform.path.return_value = "/obj/geo1/bonedeform_rig1"
+        rest_rig = MagicMock()
+        rest_rig.path.return_value = "/obj/geo1/rest_rig1"
+        rest_stash = MagicMock()
+        rest_rig.parm.return_value = rest_stash
+        rest_geo = MagicMock()
+        capture = MagicMock()
+        capture.path.return_value = "/obj/geo1/capture_rig1"
+        joint_deform = MagicMock()
+        joint_deform.path.return_value = "/obj/geo1/jointdeform_rig1"
 
         mesh_node = MagicMock()
         mesh_node.path.return_value = "/obj/geo1/body"
 
-        geo.createNode.side_effect = [rig_sop, bone_deform]
+        geo.createNode.side_effect = [rig_sop, rest_rig, capture, joint_deform]
 
         mock_hou = MagicMock()
+        mock_hou.Geometry.side_effect = [rig_geo, rest_geo]
         mock_hou.node.side_effect = lambda p: {
             "/obj/geo1": geo,
             "/obj/geo1/body": mesh_node,
@@ -102,22 +114,87 @@ class TestCreateRig:
 
         assert result["success"] is True
         assert result["context"]["auto_capture"] is True
-        assert len(result["context"]["created_nodes"]) == 2
-        bone_deform.setFirstInput.assert_called_once_with(mesh_node)
-        bone_deform.setInput.assert_called_with(1, rig_sop)
+        assert len(result["context"]["created_nodes"]) == 4
+        rest_stash.set.assert_called_once_with(rest_geo)
+        capture.setInput.assert_any_call(0, mesh_node)
+        capture.setInput.assert_any_call(1, rest_rig)
+        capture.setInput.assert_any_call(2, rig_sop)
+        joint_deform.setInput.assert_any_call(0, capture)
+        joint_deform.setInput.assert_any_call(1, rest_rig)
+        joint_deform.setInput.assert_any_call(2, rig_sop)
+        joint_deform.cook.assert_called_once_with(force=True)
+
+    def test_create_rig_validates_joint_chain_before_creating_nodes(self) -> None:
+        mod = _load_script("create_rig.py")
+        geo = MagicMock()
+        geo.path.return_value = "/obj/geo1"
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: geo if path == "/obj/geo1" else None
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_rig(
+                "/obj/geo1",
+                rig_name="rig1",
+                joint_chain=[
+                    {"name": "duplicate", "translate": [0, 0, 0]},
+                    {"name": "duplicate", "translate": [0, 1, 0]},
+                ],
+            )
+
+        assert result["success"] is False
+        geo.createNode.assert_not_called()
+
+    def test_create_rig_validates_joint_name_before_creating_nodes(self) -> None:
+        mod = _load_script("create_rig.py")
+        geo = MagicMock()
+        geo.path.return_value = "/obj/geo1"
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: geo if path == "/obj/geo1" else None
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_rig(
+                "/obj/geo1",
+                rig_name="rig1",
+                joint_chain=[{"name": None, "translate": [0, 0, 0]}],
+            )
+
+        assert result["success"] is False
+        geo.createNode.assert_not_called()
+
+    def test_create_rig_auto_capture_requires_joint_chain_before_creating_nodes(self) -> None:
+        mod = _load_script("create_rig.py")
+        geo = MagicMock()
+        geo.path.return_value = "/obj/geo1"
+        mesh = MagicMock()
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/obj/geo1": geo,
+            "/obj/geo1/body": mesh,
+        }.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_rig("/obj/geo1", auto_capture=True, capture_mesh="body")
+
+        assert result["success"] is False
+        geo.createNode.assert_not_called()
 
 
 class TestSetRigPose:
     def test_set_rig_pose_by_index(self) -> None:
         mod = _load_script("set_rig_pose.py")
         pt = MagicMock()
-        geo = MagicMock()
-        geo.iterPoints.return_value = [pt]
+        cooked_geo = MagicMock()
+        editable_geo = MagicMock()
+        editable_geo.iterPoints.return_value = [pt]
+        editable_geo.points.return_value = [pt]
         node = MagicMock()
         node.path.return_value = "/obj/geo1/rig1"
-        node.geometry.return_value = geo
+        node.geometry.return_value = cooked_geo
+        stash = MagicMock()
+        node.parm.return_value = stash
         mock_hou = MagicMock()
         mock_hou.node.return_value = node
+        mock_hou.Geometry.return_value = editable_geo
         mock_hou.Vector3 = lambda *args: list(args) if args else [0.0, 0.0, 0.0]
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
@@ -130,22 +207,34 @@ class TestSetRigPose:
         assert result["success"] is True
         assert result["context"]["applied"]["translate"] == [0.0, 1.0, 0.0]
         pt.setPosition.assert_called_once()
+        mock_hou.Geometry.assert_called_once_with(cooked_geo)
+        stash.set.assert_called_once_with(editable_geo)
 
     def test_set_rig_pose_with_rotation(self) -> None:
         mod = _load_script("set_rig_pose.py")
         pt = MagicMock()
-        geo = MagicMock()
-        geo.iterPoints.return_value = [pt]
-        geo.points.return_value = [pt]
-        geo.findPointAttrib.return_value = None  # rot attr doesn't exist yet
-        geo.addAttrib.return_value = "rot"
+        cooked_geo = MagicMock()
+        editable_geo = MagicMock()
+        editable_geo.iterPoints.return_value = [pt]
+        editable_geo.points.return_value = [pt]
+        editable_geo.findPointAttrib.return_value = "transform"
+        pt.attribValue.return_value = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
         node = MagicMock()
         node.path.return_value = "/obj/geo1/rig1"
-        node.geometry.return_value = geo
+        node.geometry.return_value = cooked_geo
+        node.parm.return_value = MagicMock()
         mock_hou = MagicMock()
         mock_hou.node.return_value = node
-        mock_hou.Vector3 = lambda *args: list(args) if args else [0.0, 0.0, 0.0]
-        mock_hou.attribType.Point = "point"
+        mock_hou.Geometry.return_value = editable_geo
+        current_matrix = MagicMock()
+        current_matrix.extractRotates.return_value = (0.0, 0.0, 0.0)
+        current_matrix.extractScales.return_value = (1.0, 1.0, 1.0)
+        mock_hou.Matrix4.return_value = current_matrix
+        built_matrix = MagicMock()
+        result_matrix = MagicMock()
+        result_matrix.asTuple.return_value = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0)
+        mock_hou.hmath.buildTransform.return_value = built_matrix
+        mock_hou.Matrix3.side_effect = [MagicMock(), result_matrix]
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.set_rig_pose(
@@ -155,7 +244,11 @@ class TestSetRigPose:
 
         assert result["success"] is True
         assert result["context"]["applied"]["rotate"] == [90.0, 0.0, 0.0]
-        geo.addAttrib.assert_called_once()
+        pt.setAttribValue.assert_called_once_with(
+            "transform",
+            (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0),
+        )
+        editable_geo.addAttrib.assert_not_called()
 
     def test_set_rig_pose_no_geometry_returns_error(self) -> None:
         mod = _load_script("set_rig_pose.py")
@@ -169,6 +262,26 @@ class TestSetRigPose:
             result = mod.set_rig_pose("/obj/geo1/rig1")
 
         assert result["success"] is False
+
+    def test_set_rig_pose_rejects_short_vectors(self) -> None:
+        mod = _load_script("set_rig_pose.py")
+        mock_hou = MagicMock()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_rig_pose("/obj/geo1/rig1", rotate=[90.0, 0.0])
+
+        assert result["success"] is False
+        mock_hou.node.assert_not_called()
+
+    def test_set_rig_pose_rejects_negative_joint_index(self) -> None:
+        mod = _load_script("set_rig_pose.py")
+        mock_hou = MagicMock()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_rig_pose("/obj/geo1/rig1", joint_index=-1, translate=[0.0, 1.0, 0.0])
+
+        assert result["success"] is False
+        mock_hou.node.assert_not_called()
 
 
 class TestCaptureJoints:

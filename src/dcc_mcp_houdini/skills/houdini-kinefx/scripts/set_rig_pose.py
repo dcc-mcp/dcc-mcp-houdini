@@ -8,6 +8,14 @@ from _kinefx_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
+def _vector3(values: Optional[List[float]], label: str) -> Optional[tuple]:
+    if values is None:
+        return None
+    if len(values) != 3:
+        raise ValueError("{} must contain exactly 3 values".format(label))
+    return tuple(float(value) for value in values)
+
+
 def set_rig_pose(
     rig_node: str,
     joint_index: Optional[int] = None,
@@ -22,8 +30,8 @@ def set_rig_pose(
     omitted, sets a uniform pose on the entire rig geometry (if applicable).
 
     The transform is applied to the point position/attributes on the rig SOP
-    geometry.  For KineFX skeleton points, ``P`` (position), ``rot``, and
-    ``scale`` point attributes are the standard pose controls.
+    geometry. For KineFX skeleton points, world transforms are stored in
+    ``P`` (position) and the ``transform`` matrix3 point attribute.
 
     Args:
         rig_node: Path to the rig SOP node (e.g. ``/obj/geo1/rig1``).
@@ -39,10 +47,22 @@ def set_rig_pose(
         return skill_error("Houdini not available", "hou could not be imported")
 
     try:
+        if joint_index is not None and joint_index < 0:
+            return skill_error("Joint index out of range", joint_index=joint_index)
+        translate_values = _vector3(translate, "translate")
+        rotate_values = _vector3(rotate, "rotate")
+        scale_values = _vector3(scale, "scale")
+        if translate_values is None and rotate_values is None and scale_values is None:
+            return skill_error("No pose supplied", "Provide translate, rotate, and/or scale")
+
         node = get_node(hou, rig_node)
-        geo = node.geometry()
-        if geo is None:
+        cooked_geo = node.geometry()
+        if cooked_geo is None:
             return skill_error("No geometry", "Rig node has no editable geometry")
+        geo = hou.Geometry(cooked_geo)
+        transform_attr = geo.findPointAttrib("transform")
+        if (rotate_values is not None or scale_values is not None) and transform_attr is None:
+            return skill_error("No transform attribute", "Rig geometry has no 'transform' matrix3 point attribute")
 
         # Find the target point(s).
         target_pts = []
@@ -53,7 +73,7 @@ def set_rig_pose(
                 return skill_error(
                     "Joint index out of range",
                     joint_index=joint_index,
-                    point_count=geo.floatListAttribValue("P") or 0,
+                    point_count=len(geo.points()),
                 )
         elif joint_name is not None:
             name_attr = geo.findPointAttrib("name")
@@ -70,25 +90,28 @@ def set_rig_pose(
 
         applied = {}
         for pt in target_pts:
-            if translate is not None and len(translate) >= 3:
-                pt.setPosition(hou.Vector3(float(translate[0]), float(translate[1]), float(translate[2])))
-                applied["translate"] = translate
-            if rotate is not None and len(rotate) >= 3:
-                rot_attr = geo.findPointAttrib("rot")
-                if rot_attr:
-                    pt.setAttribValue(rot_attr, hou.Vector3(float(rotate[0]), float(rotate[1]), float(rotate[2])))
-                else:
-                    rot_attr = geo.addAttrib(hou.attribType.Point, "rot", hou.Vector3())
-                    pt.setAttribValue(rot_attr, hou.Vector3(float(rotate[0]), float(rotate[1]), float(rotate[2])))
-                applied["rotate"] = rotate
-            if scale is not None and len(scale) >= 3:
-                scale_attr = geo.findPointAttrib("scale")
-                if scale_attr:
-                    pt.setAttribValue(scale_attr, hou.Vector3(float(scale[0]), float(scale[1]), float(scale[2])))
-                else:
-                    scale_attr = geo.addAttrib(hou.attribType.Point, "scale", hou.Vector3())
-                    pt.setAttribValue(scale_attr, hou.Vector3(float(scale[0]), float(scale[1]), float(scale[2])))
-                applied["scale"] = scale
+            if translate_values is not None:
+                pt.setPosition(hou.Vector3(*translate_values))
+                applied["translate"] = list(translate_values)
+            if rotate_values is not None or scale_values is not None:
+                current = hou.Matrix4(hou.Matrix3(pt.attribValue(transform_attr)))
+                transform = hou.hmath.buildTransform(
+                    {
+                        "rotate": rotate_values if rotate_values is not None else current.extractRotates(),
+                        "scale": scale_values if scale_values is not None else current.extractScales(),
+                    }
+                )
+                pt.setAttribValue(transform_attr, hou.Matrix3(transform).asTuple())
+                if rotate_values is not None:
+                    applied["rotate"] = list(rotate_values)
+                if scale_values is not None:
+                    applied["scale"] = list(scale_values)
+
+        stash = node.parm("stash")
+        if stash is None:
+            return skill_error("Unsupported rig node", "Rig node has no stash parameter")
+        stash.set(geo)
+        node.cook(force=True)
 
         return skill_success(
             "Set rig pose",
