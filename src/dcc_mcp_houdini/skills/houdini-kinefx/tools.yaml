@@ -23,7 +23,7 @@ tools:
           description: Path to the Geometry SOP container (e.g. /obj/geo1).
         rig_name:
           type: string
-          description: Name for the rig null/container node.
+          description: Name for the KineFX Skeleton SOP.
           default: "rig1"
         joint_chain:
           type: array
@@ -33,14 +33,20 @@ tools:
               name:
                 type: string
                 description: Joint name.
+              parent_index:
+                type: integer
+                minimum: -1
+                description: Earlier parent joint index, or -1 for a root. Defaults to the previous joint.
               translate:
                 type: array
                 items: {type: number}
+                minItems: 3
+                maxItems: 3
                 description: Joint position [x, y, z].
           description: List of joint definitions.
         auto_capture:
           type: boolean
-          description: If true, wire a bonedeform for immediate skinning.
+          description: If true, capture and deform capture_mesh with KineFX SOPs.
           default: false
         capture_mesh:
           type: string
@@ -69,6 +75,7 @@ tools:
           description: Path to the rig SOP node.
         joint_index:
           type: integer
+          minimum: 0
           description: Zero-based joint point index.
         joint_name:
           type: string
@@ -76,16 +83,19 @@ tools:
         translate:
           type: array
           items: {type: number}
+          minItems: 3
           maxItems: 3
           description: Translation [x, y, z] to set.
         rotate:
           type: array
           items: {type: number}
+          minItems: 3
           maxItems: 3
           description: Rotation [rx, ry, rz] in degrees.
         scale:
           type: array
           items: {type: number}
+          minItems: 3
           maxItems: 3
           description: Scale [sx, sy, sz] factors.
   - name: capture_joints
