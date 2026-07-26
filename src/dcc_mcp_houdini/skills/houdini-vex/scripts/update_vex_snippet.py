@@ -55,7 +55,12 @@ def update_vex_snippet(
     except ValueError as exc:
         return skill_error("Invalid VEX snippet", str(exc))
 
-    result = _update(hou, node_path, snippet)
+    result = _update(
+        hou,
+        node_path,
+        snippet,
+        run_over=context if run_over is not None else None,
+    )
     if result.get("success"):
         return skill_success("Updated VEX snippet", **result)
     return skill_error("Failed to update VEX snippet", **result)

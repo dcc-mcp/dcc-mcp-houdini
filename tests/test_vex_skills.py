@@ -241,6 +241,7 @@ class TestUpdateVexSnippet:
         assert result["success"] is True
         assert result["context"]["previous_snippet_preview"] == old_snippet
         snip_parm.set.assert_called_once_with(new_snippet)
+        class_parm.set.assert_not_called()
 
     def test_update_with_validation_rejects_forbidden(self) -> None:
         mod = _load_script("houdini-vex", "update_vex_snippet.py")
@@ -374,6 +375,16 @@ class TestValidateVexSyntax:
 
 
 class TestCookWrangle:
+    def test_in_process_cook_rejects_unenforceable_timeout(self) -> None:
+        from dcc_mcp_houdini._vex_executor import cook_and_diagnose
+
+        try:
+            cook_and_diagnose(MagicMock(), "/obj/geo1/pointwrangle1", timeout_secs=1)
+        except ValueError as exc:
+            assert "cannot enforce" in str(exc)
+        else:
+            raise AssertionError("timeout_secs must not be silently ignored")
+
     def test_cook_successful_wrangle(self) -> None:
         mod = _load_script("houdini-vex", "cook_wrangle.py")
         node = _node("/obj/geo1/pointwrangle1", "pointwrangle1", "pointwrangle")

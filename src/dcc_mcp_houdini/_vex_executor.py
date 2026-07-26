@@ -35,13 +35,6 @@ from dcc_mcp_houdini._vex_types import (
 _MAX_VEX_LINES = 2000
 _MAX_VEX_CHARS = 64 * 1024  # 64KB
 
-# Default cook timeout for in-process cooks (no isolated job).
-_DEFAULT_COOK_TIMEOUT_SECS = 60.0
-
-# Threshold beyond which a cook is launched as an isolated hython job.
-_ISOLATED_COOK_THRESHOLD_SECS = 10.0
-
-
 # ---------------------------------------------------------------------------
 # Core operations (each expects ``hou`` as an explicit parameter)
 # ---------------------------------------------------------------------------
@@ -128,6 +121,7 @@ def update_vex_snippet(
     hou: Any,
     node_path: str,
     snippet: VexSnippet,
+    run_over: Optional[VexContext] = None,
 ) -> Dict[str, Any]:
     """Update the VEX snippet on an existing Wrangle node.
 
@@ -138,6 +132,8 @@ def update_vex_snippet(
         hou: The ``hou`` module.
         node_path: Path to an existing Wrangle node.
         snippet: The validated VEX snippet to set.
+        run_over: Optional new run-over context.  ``None`` preserves the
+            node's current context.
 
     Returns:
         Dict with ``success``, ``node_path``, and ``previous_snippet_preview``.
@@ -165,8 +161,8 @@ def update_vex_snippet(
 
     snip_parm.set(snippet.code)
 
-    # Update run-over if context changed.
-    _set_run_over(node, snippet.context)
+    if run_over is not None:
+        _set_run_over(node, run_over)
 
     # Apply bindings.
     if snippet.bindings:
@@ -199,19 +195,23 @@ def cook_and_diagnose(
 ) -> CookDiagnostic:
     """Cook a Wrangle node and collect geometry diagnostics.
 
-    For cooks that may exceed the timeout threshold, use
-    :func:`launch_durable_cook` instead.
+    Houdini's in-process ``node.cook`` call is monolithic.  A hard deadline
+    requires an isolated Houdini process; this helper rejects timeout values
+    rather than silently pretending it can interrupt the host call.
 
     Args:
         hou: The ``hou`` module.
         node_path: Path to the Wrangle node.
         force: Force a recook even if already cooked.
-        timeout_secs: Soft timeout (best-effort; Houdini cooks cannot be
-            interrupted mid-cook from Python).
+        timeout_secs: Unsupported for in-process cooks.  Passing a value
+            raises :class:`ValueError`.
 
     Returns:
         A :class:`CookDiagnostic` with cook status and geometry stats.
     """
+    if timeout_secs is not None:
+        raise ValueError("in-process Houdini cooks cannot enforce timeout_secs")
+
     t0 = time.monotonic()
 
     try:
