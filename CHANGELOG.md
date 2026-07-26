@@ -16,6 +16,30 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.27.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.26.0...v0.27.0) (2026-07-26)
+
+
+### Features
+
+* PIP-2930 H21 live probe results + API corrections ([f191ced](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f191cedb9531cfc8bddefdd387532a25fd209501))
+* PIP-2930 stage-1 HOM probe scripts for COP/OpenCL/MaterialX tech verification ([fb37e79](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fb37e79ff527ee848e8b0286d07e919d595011e7))
+* **PIP-2930:** H21 Windows matrix filled via gateway execution ([c53f965](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c53f9653a5dad2720c0ea6e9722608a9820fb757))
+* semantic node graph inspection and controllable auto-layout ([941595c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/941595c9033c490393a3f71d6e1b5cf192030f4a))
+* **vex:** add typed VEX workflow module for Houdini adapter ([eefd809](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/eefd8098765117cbd59b803ae1a1e8f282b06646))
+
+
+### Bug Fixes
+
+* **ci:** resolve 15 ruff lint errors and macOS throttling test flakiness ([733b90a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/733b90adf97308461db17c3ba364f94ebe275291))
+* **kinefx:** preserve rest pose and affine transforms ([a77991c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a77991c91720d89b8aa20a30a4738dea242e1018))
+* **kinefx:** preserve rest pose and affine transforms ([0e5205f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0e5205f5d219a8c64436e9f1762d5b8af15f1990))
+* preserve VEX context on snippet updates ([aeebefe](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/aeebefe13e0e9a71a9e4f7253b60e963126adbb3))
+
+
+### Documentation
+
+* rewrite probes/README.md with audience, contract, and gateway path ([6e81698](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6e81698ab3c66d3a801939c8fe335a850a863600))
+
 ## [0.26.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.25.0...v0.26.0) (2026-07-24)
 
 
