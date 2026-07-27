@@ -41,7 +41,7 @@ server.list_skills()
 - `houdini_scripting__execute_python`, `get_session_info`
 
 ### scene (default)
-- `houdini_scene__get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info`
+- `houdini_scene__inspect_selection`, `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info`
 - `houdini_scene_edit__new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box`
 
 ### authoring (load on demand)

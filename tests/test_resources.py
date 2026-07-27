@@ -19,7 +19,9 @@ import dcc_mcp_houdini._resources as resources
 from dcc_mcp_houdini._resources import (
     DEFAULT_SCENE_THROTTLE_SECS,
     ENV_RESOURCES,
+    HOUDINI_AGENT_QUICKSTART,
     SCHEME_HOUDINI_HELP,
+    URI_HOUDINI_AGENT_QUICKSTART,
     HoudiniResourceBinder,
     _houdini_help_producer,
     _parse_path_uri,
@@ -81,6 +83,9 @@ class _FakeServer:
         inner = MagicMock()
         inner.resources.return_value = self.resource_handle
         self._server = inner
+
+    def resources(self) -> _RecordingResourceHandle:
+        return self.resource_handle
 
 
 class TestBinderBind:
@@ -216,6 +221,20 @@ class TestInstallResources:
         assert binder is not None
         assert binder.handle is server.resource_handle
         assert binder.scene_publish_count == 1
+
+    def test_registers_compact_agent_quickstart(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(ENV_RESOURCES, raising=False)
+        server = _FakeServer()
+        assert install_resources(server, install_scene_events=False) is not None
+
+        producer = server.resource_handle.producers[URI_HOUDINI_AGENT_QUICKSTART]
+        payload = producer(URI_HOUDINI_AGENT_QUICKSTART)
+        assert payload["mimeType"] == "text/markdown"
+        assert payload["text"] == HOUDINI_AGENT_QUICKSTART
+        assert len(payload["text"].encode("utf-8")) <= 2_048
+        assert payload["text"].count("\n1.") == 1
+        assert payload["text"].count("\n2.") == 1
+        assert payload["text"].count("\n3.") == 1
 
     def test_save_as_publishes_registry_scene_after_save(self, monkeypatch: pytest.MonkeyPatch) -> None:
         callbacks: List[Callable[..., None]] = []

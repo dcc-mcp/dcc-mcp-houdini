@@ -15,6 +15,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Task | Chain |
 |------|-------|
 | Verify MCP session | `houdini_scripting__get_session_info` |
+| Inspect selection | `houdini_scene__inspect_selection` (always loaded; selection, display SOP, counts, attributes, timeline) |
 | Inspect hip | `houdini_scene__get_scene_info` → `houdini_scene__list_obj_nodes` |
 | Scene lifecycle | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__open_scene` / `houdini_scene_edit__save_scene` |
 | Select & frame | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__find_nodes` → `houdini_scene_edit__set_selection` → `houdini_scene_edit__get_bounding_box` |

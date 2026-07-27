@@ -238,7 +238,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 ### scene (partial default — `houdini-scene` only)
 | Skill | Tools | Load |
 |-------|-------|------|
-| `houdini-scene` | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` | default |
+| `houdini-scene` | `inspect_selection`, `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` | default |
 | `houdini-scene-edit` | `new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box` | on demand |
 
 ### authoring (load on demand)
