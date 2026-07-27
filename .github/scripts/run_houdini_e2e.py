@@ -45,6 +45,23 @@ def _find_tool(names, suffix):
     raise AssertionError("Tool ending with {!r} not found in {}".format(suffix, names))
 
 
+def _tool_payload(payload):
+    result = payload.get("result") or {}
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict):
+        return structured
+    for item in result.get("content") or []:
+        if item.get("type") != "text":
+            continue
+        try:
+            decoded = json.loads(item.get("text") or "")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(decoded, dict):
+            return decoded
+    raise AssertionError("Structured tool payload not found in {!r}".format(payload))
+
+
 def main() -> None:
     print("Houdini:", hou.applicationVersionString())
     server = dcc_mcp_houdini.start_server(port=0, register_builtins=True, wait_ready=True, readiness_timeout_secs=20)
@@ -66,6 +83,7 @@ def main() -> None:
         tools = _post(url, "tools/list")
         names = _tool_names(tools)
         get_session_info = _find_tool(names, "get_session_info")
+        inspect_selection = _find_tool(names, "inspect_selection")
         create_node = _find_tool(names, "create_node")
         set_node_parms = _find_tool(names, "set_node_parms")
         create_rig = _find_tool(names, "create_rig")
@@ -122,6 +140,32 @@ def main() -> None:
             },
         )
         assert "result" in mesh_configured, mesh_configured
+        mesh = hou.node(mesh_path)
+        pack = mesh.parent().createNode("pack", "ci_pack")
+        pack.setInput(0, mesh)
+        pack.setDisplayFlag(True)
+        pack.setCurrent(True, clear_all_selected=True)
+        pack.cook(force=True)
+        assert pack.geometry().countPrimType("PackedGeometry") == 1
+        inspect_started = time.monotonic()
+        inspected = _post(url, "tools/call", {"name": inspect_selection, "arguments": {}})
+        inspect_elapsed = time.monotonic() - inspect_started
+        inspect_payload = _tool_payload(inspected)
+        inspect_context = inspect_payload["context"]
+        assert inspect_context["selection"][0]["path"] == pack.path(), inspect_payload
+        assert inspect_context["display_node"]["path"] == pack.path(), inspect_payload
+        assert inspect_context["geometry"]["needs_cook"] is False, inspect_payload
+        assert inspect_context["geometry"]["point_count"] == pack.geometry().pointCount(), inspect_payload
+        assert inspect_context["geometry"]["packed_primitive_count"] == 1, inspect_payload
+        assert "P" in inspect_context["geometry"]["key_attributes"]["point"], inspect_payload
+        assert inspect_elapsed <= 60.0, "inspect_selection exceeded 60s: {:.3f}s".format(inspect_elapsed)
+        print(
+            "inspect_selection elapsed_seconds={:.3f} point_count={} packed_count={}".format(
+                inspect_elapsed,
+                inspect_context["geometry"]["point_count"],
+                inspect_context["geometry"]["packed_primitive_count"],
+            )
+        )
 
         rigged = _post(
             url,

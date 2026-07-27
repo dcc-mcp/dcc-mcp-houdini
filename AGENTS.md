@@ -44,7 +44,7 @@ print(server.mcp_url)  # OS-assigned instance endpoint
 ```
 1. search_skills(query="scene") -> find a typed Houdini skill
 2. load_skill("houdini-nodes") / load_skill("houdini-hda") when authoring tools are needed
-3. call houdini_scene__get_scene_info / houdini_nodes__create_node / houdini_hda__execute_hda
+3. call houdini_scene__inspect_selection / houdini_nodes__create_node / houdini_hda__execute_hda
 4. use houdini_scripting__execute_python only when no typed skill fits
 ```
 
@@ -86,7 +86,7 @@ When adding or changing bundled skills, load the project skill:
 ### scene stage (partial default — `houdini-scene` only)
 | Skill | Tools | Load |
 |-------|-------|------|
-| `houdini-scene` | `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` | default |
+| `houdini-scene` | `inspect_selection`, `get_scene_info`, `list_obj_nodes`, `list_child_nodes`, `get_node_info` | default |
 | `houdini-scene-edit` | `new_scene`, `open_scene`, `save_scene`, `get_selection`, `set_selection`, `find_nodes`, `list_cameras`, `get_bounding_box` | on demand |
 
 ### authoring stage (load on demand)
@@ -128,7 +128,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 31 skill packages, 199 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative index and ready-made task→skill chains.
+**Total: 32 skill packages, 216 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative index and ready-made task→skill chains.
 
 ## Key Env Vars
 

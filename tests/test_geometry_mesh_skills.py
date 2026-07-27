@@ -61,11 +61,30 @@ class TestGeometrySkills:
         bbox.minvec.return_value = (0.0, 0.0, 0.0)
         bbox.maxvec.return_value = (1.0, 2.0, 3.0)
         bbox.sizevec.return_value = (1.0, 2.0, 3.0)
-        geo = MagicMock()
-        geo.points.return_value = [1, 2, 3, 4]
-        geo.prims.return_value = [1, 2]
-        geo.iterVertices.return_value = iter([1, 2, 3, 4, 5, 6, 7, 8])
-        geo.boundingBox.return_value = bbox
+
+        class PoisonLargeGeometry:
+            def pointCount(self):
+                return 2_280_000
+
+            def primCount(self):
+                return 8_685
+
+            def vertexCount(self):
+                return 26_055
+
+            def boundingBox(self):
+                return bbox
+
+            def points(self):
+                raise AssertionError("get_geometry_info must not enumerate points")
+
+            def prims(self):
+                raise AssertionError("get_geometry_info must not enumerate primitives")
+
+            def iterVertices(self):
+                raise AssertionError("get_geometry_info must not iterate vertices")
+
+        geo = PoisonLargeGeometry()
         node = _node("/obj/geo1/box1", "box1", "box")
         node.geometry.return_value = geo
         mock_hou = MagicMock()
@@ -76,9 +95,9 @@ class TestGeometrySkills:
 
         assert result["success"] is True
         ctx = result["context"]
-        assert ctx["point_count"] == 4
-        assert ctx["primitive_count"] == 2
-        assert ctx["vertex_count"] == 8
+        assert ctx["point_count"] == 2_280_000
+        assert ctx["primitive_count"] == 8_685
+        assert ctx["vertex_count"] == 26_055
         assert ctx["bounds_max"] == [1.0, 2.0, 3.0]
 
     def test_list_attributes_groups_by_class(self) -> None:

@@ -44,6 +44,20 @@ _SKILL_STUB_PREFIX = "__skill__"
 _GROUP_STUB_PREFIX = "__group__"
 
 
+def _schema_has_arguments(schema: Any) -> bool:
+    """Return whether an input schema describes arguments worth fetching."""
+    if not isinstance(schema, dict):
+        return bool(schema)
+    if schema.get("type") != "object":
+        return bool(schema)
+    if schema.get("properties") or schema.get("required"):
+        return True
+    additional = schema.get("additionalProperties")
+    if additional is True or isinstance(additional, dict):
+        return True
+    return any(schema.get(key) for key in ("oneOf", "anyOf", "allOf", "patternProperties", "dependentSchemas"))
+
+
 # ---------------------------------------------------------------------------
 # Value object
 # ---------------------------------------------------------------------------
@@ -218,7 +232,7 @@ class HoudiniCapabilityManifestBuilder:
         affinity = _maybe_str(action.get("affinity"))
         timeout_hint = _maybe_int(action.get("timeout_hint_secs"))
 
-        has_schema = bool(action.get("input_schema") or action.get("inputSchema"))
+        has_schema = _schema_has_arguments(action.get("input_schema") or action.get("inputSchema"))
 
         slug = _slugify_tool_slug(self._dcc_name, name)
         return CapabilityRecord(
@@ -291,7 +305,7 @@ class HoudiniCapabilityManifestBuilder:
         tags = sorted({t for t in tags if t})
 
         schema = tool.get("input_schema") or tool.get("inputSchema")
-        has_schema = bool(schema) and not _is_stub(tool_name)
+        has_schema = _schema_has_arguments(schema) and not _is_stub(tool_name)
 
         return CapabilityRecord(
             tool_slug=_slugify_tool_slug(self._dcc_name, backend_tool),
