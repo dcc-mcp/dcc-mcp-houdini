@@ -86,6 +86,62 @@ def test_self_managed_rop_tools_return_adapter_job_identity_directly(
     assert "timeout_hint_secs" not in tool
 
 
+def test_cache_simulation_job_is_pollable_via_public_render_status(tmp_path: Path) -> None:
+    import uuid
+
+    from dcc_mcp_houdini import _isolated_jobs, _rop_jobs
+
+    cache = _load_script("houdini-animation", "cache_simulation.py")
+    render_status = _load_script("houdini-render", "get_render_job.py")
+
+    hip_path = tmp_path / "scene.hip"
+    hip_path.write_bytes(b"hip")
+    houdini_executable = tmp_path / ("houdini.exe" if _rop_jobs.os.name == "nt" else "houdini")
+    hython_executable = tmp_path / ("hython.exe" if _rop_jobs.os.name == "nt" else "hython")
+    hython_executable.write_bytes(b"exe")
+
+    output = tmp_path / "cache.$F4.bgeo.sc"
+    file_parm = MagicMock()
+    file_parm.eval.return_value = str(output)
+    file_parm.unexpandedString.return_value = str(output)
+    rop = MagicMock()
+    rop.path.return_value = "/out/filecache1"
+    rop.parm.side_effect = lambda name: file_parm if name == "file" else None
+
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = rop
+    mock_hou.isUIAvailable.return_value = True
+    mock_hou.hipFile.path.return_value = str(hip_path)
+    mock_hou.hipFile.hasUnsavedChanges.return_value = False
+
+    process = MagicMock(pid=4321)
+    process.poll.return_value = None
+    compact_id = None
+    try:
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            _rop_jobs.sys, "executable", str(houdini_executable)
+        ), patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            _isolated_jobs.subprocess, "Popen", return_value=process
+        ):
+            launched = cache.cache_simulation("/out/filecache1", frame_range=[1, 3, 1])
+            assert launched["success"] is True
+            compact_id = launched["context"]["job_id"]
+            dashed_id = str(uuid.UUID(hex=compact_id))
+
+            compact_status = render_status.get_render_job(compact_id)
+            dashed_status = render_status.get_render_job(dashed_id)
+    finally:
+        if compact_id is not None:
+            _isolated_jobs._PROCESS_HANDLES.pop(compact_id, None)
+
+    assert compact_status["success"] is True
+    assert dashed_status["success"] is True
+    assert compact_status["context"]["job_id"] == compact_id
+    assert dashed_status["context"]["job_id"] == compact_id
+    assert compact_status["context"]["state"] == "queued"
+    assert dashed_status["context"]["state"] == "queued"
+
+
 def test_skills_index_exists() -> None:
     index = _SKILLS_ROOT / "SKILLS_INDEX.md"
     assert index.is_file()

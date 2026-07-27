@@ -158,6 +158,7 @@ def main() -> None:
         assert inspect_context["geometry"]["point_count"] == pack.geometry().pointCount(), inspect_payload
         assert inspect_context["geometry"]["packed_primitive_count"] == 1, inspect_payload
         assert "P" in inspect_context["geometry"]["key_attributes"]["point"], inspect_payload
+        assert inspect_elapsed <= 60.0, "inspect_selection exceeded 60s: {:.3f}s".format(inspect_elapsed)
         print(
             "inspect_selection elapsed_seconds={:.3f} point_count={} packed_count={}".format(
                 inspect_elapsed,
