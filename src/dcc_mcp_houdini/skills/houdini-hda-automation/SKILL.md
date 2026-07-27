@@ -32,26 +32,27 @@ definition introspection, instantiation, validation, and graph-level cooking.
 - **`hda-query`** (read-only): `scan_hda_libraries`, `inspect_hda_definition`,
   `validate_hda`.
 - **`hda-edit`:** `instantiate_hda` (async — creates and cooks a node).
-- **`pdg-rop`** (async): `cook_top_network`, `execute_rop_chain`.
+- **`pdg-rop`:** async `cook_top_network` and self-managed
+  `execute_rop_chain`.
 
 ## Context limitations
 
 - **Headless / no license:** all tools degrade through structured
   `skill_error` envelopes when `hou` is unavailable; PDG/ROP cooking still
   requires a valid Houdini session.
-- **Long runs:** `instantiate_hda`, `validate_hda`, `cook_top_network`, and
-  `execute_rop_chain` are `execution: async` with `timeout_hint_secs` set.
-  Interactive `execute_rop_chain` returns an isolated job; poll it through
+- **Long runs:** `instantiate_hda`, `validate_hda`, and `cook_top_network` use
+  core async jobs. `execute_rop_chain` uses synchronous dispatch metadata so it
+  returns its adapter-owned isolated job identity directly; poll it through
   `houdini_render__get_render_job` instead of occupying the Houdini event loop.
 - **PDG stats:** `cook_top_network` reports `work_item_count` on a best-effort
   basis via `getPDGGraphContext()`; it may be `null` when the context is
   unavailable.
 - **ROP dependencies:** `execute_rop_chain` honours upstream ROP inputs by
   default in both foreground and isolated workers; pass `ignore_inputs=true`
-  to render only the named driver. Interactive Houdini defaults to isolated
-  `hython`, while headless Houdini defaults to foreground. Interactive isolated
-  launch requires a saved, clean HIP and never auto-saves the GUI scene.
-  Explicit headless isolated launch requires an existing HIP and captures its
+  to render only the named driver. UI and headless Houdini default to isolated
+  `hython`; pass `background=false` only for intentional foreground execution.
+  Interactive isolated launch requires a saved, clean HIP and never auto-saves
+  the GUI scene. Headless isolation requires an existing HIP and captures its
   current state in a job-owned temporary snapshot without saving the source
   scene. A chain can complete without a
   discoverable output path when it has no execution/cook errors;

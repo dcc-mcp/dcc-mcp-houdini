@@ -66,13 +66,24 @@ def test_tools_yaml_contract(skill_dir: str) -> None:
             assert tool.get("timeout_hint_secs"), f"{tool['name']} missing timeout_hint_secs"
 
 
-def test_render_rop_returns_its_render_job_identity_directly_by_default() -> None:
-    tools_path = _SKILLS_ROOT / "houdini-render" / "tools.yaml"
+@pytest.mark.parametrize(
+    ("skill_name", "tool_name"),
+    (
+        ("houdini-render", "render_rop"),
+        ("houdini-animation", "cache_simulation"),
+        ("houdini-hda-automation", "execute_rop_chain"),
+    ),
+)
+def test_self_managed_rop_tools_return_adapter_job_identity_directly(
+    skill_name: str,
+    tool_name: str,
+) -> None:
+    tools_path = _SKILLS_ROOT / skill_name / "tools.yaml"
     tools = yaml.safe_load(tools_path.read_text(encoding="utf-8"))["tools"]
-    render_rop = next(tool for tool in tools if tool["name"] == "render_rop")
+    tool = next(tool for tool in tools if tool["name"] == tool_name)
 
-    assert render_rop["execution"] == "sync"
-    assert "timeout_hint_secs" not in render_rop
+    assert tool["execution"] == "sync"
+    assert "timeout_hint_secs" not in tool
 
 
 def test_skills_index_exists() -> None:

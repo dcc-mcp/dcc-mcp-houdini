@@ -327,24 +327,34 @@ class TestBake:
         )
         rop.render.assert_not_called()
 
-    def test_cache_simulation_defaults_to_foreground_without_ui(self, tmp_path: Path) -> None:
+    def test_cache_simulation_defaults_to_background_without_ui(self, tmp_path: Path) -> None:
         mod = _load_script("cache_simulation.py")
         output = tmp_path / "cache.bgeo.sc"
         file_parm = MagicMock()
         file_parm.eval.return_value = str(output)
+        file_parm.unexpandedString.return_value = str(output)
         rop = MagicMock()
         rop.path.return_value = "/out/filecache1"
         rop.parm.side_effect = lambda name: file_parm if name == "file" else None
-        rop.parmTuple.return_value = None
-        rop.render.side_effect = lambda verbose=False: output.write_bytes(b"cache")
         mock_hou = MagicMock()
         mock_hou.node.return_value = rop
         mock_hou.isUIAvailable.return_value = False
+        job = {"job_id": "c" * 32, "state": "queued", "pid": 2468}
 
-        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "launch_background_render") as launch:
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
             result = mod.cache_simulation("/out/filecache1")
 
         assert result["success"] is True
-        assert result["context"]["background"] is False
-        launch.assert_not_called()
-        rop.render.assert_called_once_with(verbose=False)
+        assert result["context"]["background"] is True
+        assert result["context"]["job_id"] == "c" * 32
+        launch.assert_called_once_with(
+            mock_hou,
+            "/out/filecache1",
+            None,
+            str(output),
+            job_kind="cache",
+        )
+        mock_hou.isUIAvailable.assert_not_called()
+        rop.render.assert_not_called()
