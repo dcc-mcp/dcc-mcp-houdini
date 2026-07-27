@@ -37,10 +37,10 @@ Typed animation tools for agents. All tools are `affinity: main`.
 - **`validation`:** `validate_loop_contract` — bounded, read-only OBJ world-
   transform continuity checks with driver summaries. It never inspects or cooks
   geometry and restores the original frame in `finally`.
-- **`bake`** (async): `bake_channels` (per-frame sample → constant keys, hard
-  frame cap), `cache_simulation` (render a filecache/DOP/geometry ROP, report
-  a background job in interactive Houdini or `written_files` + `elapsed_secs`
-  in headless/explicit foreground mode).
+- **`bake`:** `bake_channels` (async per-frame sample → constant keys, hard
+  frame cap), `cache_simulation` (launch an isolated filecache/DOP/geometry ROP
+  job by default, or report `written_files` + `elapsed_secs` in explicit
+  foreground mode).
 
 ## Tracer-bullet flow
 
@@ -79,13 +79,13 @@ whose endpoints are both played. Supply `tolerances` to override the documented
 defaults; requests remain bounded to 64 unique `/obj` paths and six transform
 samples per resolved node.
 
-`cache_simulation` is `async` with a 1-hour timeout hint. Interactive Houdini
-defaults to isolated `hython`; poll its `job_id` with
+`cache_simulation` uses synchronous dispatch metadata so its adapter-owned job
+identity is returned directly. UI and headless Houdini default to isolated
+`hython`; poll its `job_id` with
 `houdini_render__get_render_job` and cancel it with
 `houdini_render__cancel_render_job`. Pass `background=false` for intentional
 foreground execution. Interactive background launch requires an explicitly
-saved, clean HIP and never auto-saves the GUI scene. Explicit headless
-background launch requires an existing HIP and captures its current state in a
-job-owned temporary snapshot without saving the source scene. Output-path parm
-names are probed defensively so File
-Cache, DOP I/O, and Geometry ROPs are all tolerated.
+saved, clean HIP and never auto-saves the GUI scene. Headless isolation
+requires an existing HIP and captures its current state in a job-owned
+temporary snapshot without saving the source scene. Output-path parm names are
+probed defensively so File Cache, DOP I/O, and Geometry ROPs are all tolerated.

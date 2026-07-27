@@ -30,9 +30,20 @@ _SIGTERM = getattr(signal, "SIGTERM", 15)
 _SIGKILL = getattr(signal, "SIGKILL", 9)
 
 
+def _normalize_job_id(job_id: str) -> str:
+    if not isinstance(job_id, str):
+        raise ValueError("job_id must be a 32-character hex or canonical UUID identifier")
+    try:
+        parsed = uuid.UUID(job_id)
+    except ValueError as exc:
+        raise ValueError("job_id must be a 32-character hex or canonical UUID identifier") from exc
+    if job_id.lower() not in {parsed.hex, str(parsed)}:
+        raise ValueError("job_id must be a 32-character hex or canonical UUID identifier")
+    return parsed.hex
+
+
 def _status_path(job_id: str) -> Path:
-    if not job_id or any(char not in "0123456789abcdef" for char in job_id.lower()):
-        raise ValueError("job_id must be a hexadecimal identifier")
+    job_id = _normalize_job_id(job_id)
     return Path(tempfile.gettempdir()) / _JOB_ROOT_NAME / job_id / "status.json"
 
 
@@ -67,6 +78,7 @@ def launch_job(
     env: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
     """Launch and retain ownership of one isolated worker process."""
+    job_id = _normalize_job_id(job_id)
     status_path = _status_path(job_id)
     status = _read_status(status_path)
     stdout_path = Path(status["stdout_path"])
@@ -185,6 +197,7 @@ def _terminate_process_tree(process: Any) -> None:
 
 
 def read_job(job_id: str) -> Dict[str, Any]:
+    job_id = _normalize_job_id(job_id)
     status_path = _status_path(job_id)
     with _PROCESS_LOCK:
         status = _read_status(status_path)
@@ -196,6 +209,7 @@ def read_job(job_id: str) -> Dict[str, Any]:
 
 def cancel_job(job_id: str, terminate: Any = None) -> Dict[str, Any]:
     """Cancel a live job only when this process owns its Popen handle."""
+    job_id = _normalize_job_id(job_id)
     status_path = _status_path(job_id)
     terminate = terminate or _terminate_process_tree
     with _PROCESS_LOCK:

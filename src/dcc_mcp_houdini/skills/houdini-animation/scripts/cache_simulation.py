@@ -76,7 +76,7 @@ def cache_simulation(
                 "Node has no render(); expected a ROP/file cache node",
                 node_path=rop.path(),
             )
-        use_background = bool(hou.isUIAvailable()) if background is None else background
+        use_background = True if background is None else background
         output_pattern = _eval_output(rop, preserve_string=use_background)
         if use_background:
             job = launch_background_render(

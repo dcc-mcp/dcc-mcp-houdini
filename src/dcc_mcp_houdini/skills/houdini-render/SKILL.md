@@ -87,6 +87,8 @@ Interactive Houdini defaults to an isolated process; poll
 started by the same adapter process. Pass `background=false` only when
 foreground execution is intentional. Both interactive and headless Houdini
 default to isolated background execution.
+Poll and cancel accept the returned 32-character hex job id or its canonical
+dashed UUID spelling; both resolve to the same job and process ownership.
 The default poll response is bounded: it reports `completed`, `total`,
 fractional `progress`, `elapsed_secs`, `eta_secs`, `written_file_count`, and up
 to ten `recent_written_files`. `output_verification.state` distinguishes

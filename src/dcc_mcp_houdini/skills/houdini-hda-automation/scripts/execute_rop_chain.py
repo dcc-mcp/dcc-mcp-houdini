@@ -57,7 +57,7 @@ def execute_rop_chain(
                 node=node_summary(node),
             )
 
-        use_background = bool(hou.isUIAvailable()) if background is None else background
+        use_background = True if background is None else background
         if use_background:
             job = launch_background_render(
                 hou,

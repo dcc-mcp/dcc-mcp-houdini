@@ -296,7 +296,8 @@ tools:
       ROP render/cache/chain job. Set include_details only when full internal
       output and warning lists plus traceback data are required. The bounded
       summary includes warning_count and at most ten individually truncated
-      recent_warnings.
+      recent_warnings. Accepts the returned 32-character hex job ID or its
+      canonical dashed UUID spelling.
     source_file: scripts/get_render_job.py
     execution: sync
     affinity: any
@@ -314,6 +315,7 @@ tools:
       properties:
         job_id:
           type: string
+          description: "Adapter job ID in 32-character hex or canonical dashed UUID form."
         include_details:
           type: boolean
           default: false
@@ -385,7 +387,10 @@ tools:
                     type: string
                     pattern: "^[0-9A-Fa-f]{64}$"
   - name: cancel_render_job
-    description: Cancel a background ROP render/cache/chain job owned by the current adapter process. Repeated calls are safe.
+    description: >-
+      Cancel a background ROP render/cache/chain job owned by the current
+      adapter process. Accepts 32-character hex or canonical dashed UUID form.
+      Repeated calls are safe.
     source_file: scripts/cancel_render_job.py
     execution: sync
     affinity: any
@@ -404,6 +409,7 @@ tools:
       properties:
         job_id:
           type: string
+          description: "Adapter job ID in 32-character hex or canonical dashed UUID form."
   - name: create_render_layer
     description: >-
       Create a Solaris Render Product, or clone a Mantra ifd ROP into a real

@@ -321,12 +321,12 @@ tools:
   - name: cache_simulation
     description: >-
       Bake a simulation/cache by rendering a ROP (filecache/dop/geometry) over a
-      frame range. Interactive Houdini defaults to an isolated job; headless
-      Houdini defaults to foreground execution.
+      frame range. UI and headless Houdini default to an isolated job and return
+      its adapter job_id directly; pass background=false only for intentional
+      foreground execution.
     source_file: scripts/cache_simulation.py
-    execution: async
+    execution: sync
     affinity: main
-    timeout_hint_secs: 3600
     group: bake
     read_only: false
     destructive: false
@@ -350,7 +350,6 @@ tools:
           type: boolean
           description: >-
             Explicitly select isolated hython (true) or foreground (false)
-            execution. When omitted, interactive Houdini uses an isolated job
-            and headless Houdini runs in the foreground. Explicit headless
-            isolation uses a job-owned temporary HIP snapshot without saving the
-            source scene.
+            execution. When omitted, UI and headless Houdini use an isolated
+            job. Headless isolation uses a job-owned temporary HIP snapshot
+            without saving the source scene.

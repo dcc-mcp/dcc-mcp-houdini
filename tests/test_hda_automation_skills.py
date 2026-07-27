@@ -238,23 +238,35 @@ class TestPdgRop:
 
         assert mod._output_pattern(node) == "/tmp/stage.$F4.usd"
 
-    def test_execute_rop_chain_defaults_to_foreground_without_ui(self) -> None:
+    def test_execute_rop_chain_defaults_to_background_without_ui(self) -> None:
         mod = _load_script("execute_rop_chain.py")
         node = _node("/out/mantra1", "mantra1", "ifd")
-        node.errors.return_value = []
+        picture = MagicMock()
+        picture.unexpandedString.return_value = "/tmp/beauty.$F4.exr"
+        node.parm.side_effect = lambda name: picture if name == "picture" else None
         mock_hou = MagicMock()
         mock_hou.node.return_value = node
         mock_hou.isUIAvailable.return_value = False
+        job = {"job_id": "d" * 32, "state": "queued", "pid": 1357}
 
-        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "launch_background_render") as launch:
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
             result = mod.execute_rop_chain("/out/mantra1", frame_range=[1, 24, 2], ignore_inputs=True)
 
         assert result["success"] is True
-        assert result["context"]["background"] is False
-        launch.assert_not_called()
-        _, kwargs = node.render.call_args
-        assert kwargs["frame_range"] == (1.0, 24.0, 2.0)
-        assert kwargs["ignore_inputs"] is True
+        assert result["context"]["background"] is True
+        assert result["context"]["job_id"] == "d" * 32
+        launch.assert_called_once_with(
+            mock_hou,
+            "/out/mantra1",
+            [1, 24, 2],
+            "/tmp/beauty.$F4.exr",
+            ignore_inputs=True,
+            job_kind="rop_chain",
+        )
+        mock_hou.isUIAvailable.assert_not_called()
+        node.render.assert_not_called()
 
     def test_execute_rop_chain_fallback_never_drops_ignore_inputs(self) -> None:
         mod = _load_script("execute_rop_chain.py")

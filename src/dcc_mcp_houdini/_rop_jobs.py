@@ -502,6 +502,7 @@ def finalize_render_outputs(job_id: str, validator_receipts: List[dict]) -> Dict
     """Publish externally validated staged EXRs without replacing final paths."""
     if not isinstance(validator_receipts, list) or not validator_receipts:
         raise ValueError("validator_receipts must be a non-empty array")
+    job_id = _isolated_jobs._normalize_job_id(job_id)
     _isolated_jobs.read_job(job_id)
     status_path = _isolated_jobs._status_path(job_id)
     finalized_frames = []

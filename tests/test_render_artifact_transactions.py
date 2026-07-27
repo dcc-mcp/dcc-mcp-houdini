@@ -992,6 +992,14 @@ def test_finalize_binds_receipt_and_updates_aggregate(tmp_path: Path) -> None:
     assert Path(artifact["final_path"]).read_bytes() == b"validated frame 1"
 
 
+def test_finalize_accepts_dashed_job_id_with_compact_receipt(tmp_path: Path) -> None:
+    job_id, _, artifacts = _completed_job(tmp_path)
+    receipt = _receipt(job_id, artifacts[0])
+    with patch.object(_isolated_jobs.tempfile, "gettempdir", return_value=str(tmp_path)):
+        result = _rop_jobs.finalize_render_outputs("22222222-2222-2222-2222-222222222222", [receipt])
+    assert result["job_id"] == job_id
+
+
 def test_finalize_rejects_staged_drift_without_writing_final(tmp_path: Path) -> None:
     job_id, status_path, artifacts = _completed_job(tmp_path)
     receipt = _receipt(job_id, artifacts[0])
