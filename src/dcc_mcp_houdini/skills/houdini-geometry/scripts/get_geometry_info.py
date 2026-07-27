@@ -13,6 +13,16 @@ def _vec(value) -> list:
         return [float(value[i]) for i in range(len(value))]
 
 
+def _count(geometry, method_name):
+    method = getattr(geometry, method_name, None)
+    if not callable(method):
+        return None
+    try:
+        return int(method())
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def get_geometry_info(node_path: str) -> dict:
     """Summarise geometry counts and bounds for *node_path*."""
     try:
@@ -23,19 +33,11 @@ def get_geometry_info(node_path: str) -> dict:
     try:
         node = get_node(hou, node_path)
         geo = cooked_geometry(node)
-        point_count = len(geo.points()) if hasattr(geo, "points") else None
-        prim_count = len(geo.prims()) if hasattr(geo, "prims") else None
-        vertex_count = None
-        if hasattr(geo, "iterVertices"):
-            try:
-                vertex_count = sum(1 for _ in geo.iterVertices())
-            except Exception:  # noqa: BLE001
-                vertex_count = None
         context = {
             "node_path": node.path(),
-            "point_count": point_count,
-            "primitive_count": prim_count,
-            "vertex_count": vertex_count,
+            "point_count": _count(geo, "pointCount"),
+            "primitive_count": _count(geo, "primCount"),
+            "vertex_count": _count(geo, "vertexCount"),
         }
         try:
             bbox = geo.boundingBox()

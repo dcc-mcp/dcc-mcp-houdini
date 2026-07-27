@@ -1,4 +1,31 @@
 tools:
+  - name: inspect_selection
+    description: >-
+      Inspect the current selection and its display SOP in one read-only call.
+      Returns constant-time geometry counts, packed primitive counts, key
+      attribute names, and timeline state without enumerating geometry elements.
+    source_file: scripts/inspect_selection.py
+    execution: sync
+    affinity: main
+    group: scene-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [inspect selection, selected geometry, display sop, packed pieces, point count, timeline]
+    produces: [scene_report]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    next-tools:
+      on-failure:
+        - houdini_scripting__get_session_info
   - name: get_scene_info
     description: >-
       Return hip file path, whether a file is saved, current frame, playback

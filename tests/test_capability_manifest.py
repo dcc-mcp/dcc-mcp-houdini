@@ -14,6 +14,7 @@ from dcc_mcp_houdini._capability_manifest import (
     CapabilityRecord,
     HoudiniCapabilityManifestBuilder,
     _as_dict,
+    _schema_has_arguments,
     build_manifest_payload,
     register_capability_mcp_tool,
 )
@@ -92,7 +93,7 @@ def test_builder_projects_loaded_and_unloaded_actions():
             tags=["python"],
             execution="async",
             timeout_hint_secs=120,
-            input_schema={"type": "object"},
+            input_schema={"type": "object", "properties": {"code": {"type": "string"}}},
         ),
         _action("houdini_render__render", skill="houdini-render", summary="Render", tags=["render"]),
     ]
@@ -119,6 +120,15 @@ def test_builder_projects_loaded_and_unloaded_actions():
     assert rec.has_schema is True
     assert rec.tool_slug == "houdini.instance.houdini_scripting__execute_python"
     assert set(by_name["houdini_scene__get_scene_info"].tags) >= {"scene", "io"}
+
+
+def test_empty_object_schema_does_not_require_describe():
+    assert _schema_has_arguments({"type": "object"}) is False
+    assert _schema_has_arguments({"type": "object", "properties": {}}) is False
+    assert _schema_has_arguments({"type": "object", "additionalProperties": False}) is False
+    assert _schema_has_arguments({"type": "object", "additionalProperties": True}) is True
+    assert _schema_has_arguments({"type": "object", "additionalProperties": {}}) is True
+    assert _schema_has_arguments({"type": "object", "properties": {"node_path": {"type": "string"}}}) is True
 
 
 def test_builder_drops_skill_and_group_stubs():

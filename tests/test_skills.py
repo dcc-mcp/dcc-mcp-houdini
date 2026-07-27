@@ -103,6 +103,9 @@ def test_stage_loader_maps_bootstrap_and_scene() -> None:
     cfg = build_minimal_mode_for_stages(["scene"])
     assert "houdini-scene" in cfg.skills
     assert "houdini-scripting" in cfg.skills
+    scene_tools = yaml.safe_load((_SKILLS_ROOT / "houdini-scene" / "tools.yaml").read_text(encoding="utf-8"))["tools"]
+    inspect = next(tool for tool in scene_tools if tool["name"] == "inspect_selection")
+    assert inspect["input_schema"]["additionalProperties"] is False
 
 
 class TestGetSessionInfoSkill:
@@ -154,6 +157,132 @@ class TestGetSceneInfoSkill:
         assert result["success"] is True
         assert result["context"]["obj_node_count"] == 3
         assert result["context"]["end_frame"] == 240
+
+
+class TestInspectSelectionSkill:
+    def test_large_packed_geometry_uses_constant_time_queries(self) -> None:
+        mod = _load_script("houdini-scene", "inspect_selection.py")
+
+        class PoisonLargeGeometry:
+            def pointCount(self):
+                return 2_280_000
+
+            def primCount(self):
+                return 8_685
+
+            def vertexCount(self):
+                return 8_685
+
+            def primTypeNames(self):
+                return ("Poly", "PackedFragment")
+
+            def countPrimType(self, type_name):
+                return 8_685 if type_name == "PackedFragment" else 0
+
+            def findPointAttrib(self, name):
+                return object() if name == "P" else None
+
+            def findPrimAttrib(self, name):
+                return object() if name == "name" else None
+
+            def findVertexAttrib(self, _name):
+                return None
+
+            def findGlobalAttrib(self, _name):
+                return None
+
+            def points(self):
+                raise AssertionError("inspect_selection must not enumerate points")
+
+            def prims(self):
+                raise AssertionError("inspect_selection must not enumerate primitives")
+
+            def iterPoints(self):
+                raise AssertionError("inspect_selection must not iterate points")
+
+            def iterPrims(self):
+                raise AssertionError("inspect_selection must not iterate primitives")
+
+            def iterVertices(self):
+                raise AssertionError("inspect_selection must not iterate vertices")
+
+        parent = MagicMock(spec=["displayNode"])
+        current = _mock_inspection_node(
+            "Sop",
+            "/obj/geo1/material11",
+            "material",
+            "geometry",
+            "isCurrent",
+            "isDisplayFlagSet",
+        )
+        display = _mock_inspection_node(
+            "Sop",
+            "/obj/ue_export/OUT_vat_rbd",
+            "null",
+            "geometry",
+            "isCurrent",
+            "isDisplayFlagSet",
+            "needsToCook",
+        )
+        current.parent.return_value = parent
+        current.isCurrent.return_value = True
+        parent.displayNode.return_value = display
+        display.needsToCook.return_value = False
+        display.geometry.return_value = PoisonLargeGeometry()
+
+        mock_hou = MagicMock()
+        mock_hou.selectedNodes.return_value = (current,)
+        mock_hou.frame.return_value = 42
+        mock_hou.fps.return_value = 24.0
+        mock_hou.playbar.playbackRange.return_value = (1, 160)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.inspect_selection()
+
+        assert result["success"] is True
+        context = result["context"]
+        assert context["selection"][0]["path"] == "/obj/geo1/material11"
+        assert context["display_node"]["path"] == "/obj/ue_export/OUT_vat_rbd"
+        assert context["geometry"]["needs_cook"] is False
+        assert context["geometry"]["point_count"] == 2_280_000
+        assert context["geometry"]["packed_primitive_count"] == 8_685
+        assert context["geometry"]["key_attributes"]["point"] == ["P"]
+        assert context["geometry"]["key_attributes"]["primitive"] == ["name"]
+        assert context["timeline"] == {
+            "frame": 42,
+            "start_frame": 1,
+            "end_frame": 160,
+            "fps": 24.0,
+        }
+        current.geometry.assert_not_called()
+
+    def test_dirty_display_sop_is_not_cooked(self) -> None:
+        mod = _load_script("houdini-scene", "inspect_selection.py")
+        display = _mock_inspection_node(
+            "Sop",
+            "/obj/geo1/OUT_dirty",
+            "null",
+            "geometry",
+            "isCurrent",
+            "isDisplayFlagSet",
+            "needsToCook",
+        )
+        display.isCurrent.return_value = True
+        display.isDisplayFlagSet.return_value = True
+        display.needsToCook.return_value = True
+
+        mock_hou = MagicMock()
+        mock_hou.selectedNodes.return_value = (display,)
+        mock_hou.frame.return_value = 1
+        mock_hou.fps.return_value = 24.0
+        mock_hou.playbar.playbackRange.return_value = (1, 240)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.inspect_selection()
+
+        assert result["success"] is True
+        assert result["context"]["geometry"] == {"needs_cook": True}
+        display.geometry.assert_not_called()
 
 
 class TestListObjNodesSkill:

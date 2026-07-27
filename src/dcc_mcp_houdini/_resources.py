@@ -36,6 +36,8 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from dcc_mcp_core import register_docs_resource
+
 from dcc_mcp_houdini._env import ENV_RESOURCES, resolve_resources_enabled
 
 logger = logging.getLogger(__name__)
@@ -46,10 +48,30 @@ DEFAULT_SCENE_THROTTLE_SECS: float = 0.5
 #: Houdini-specific dynamic resource URI scheme for node-type help.
 SCHEME_HOUDINI_HELP = "houdini-help://"
 
+#: Short, optional agent workflow for common read-only inspection.
+URI_HOUDINI_AGENT_QUICKSTART = "docs://houdini/agent-quickstart"
+HOUDINI_AGENT_QUICKSTART = """# Houdini agent quickstart
+
+For a warm GUI instance, avoid loading the full workflow guide or repeating
+discovery before every read-only inspection.
+
+1. Call `houdini_scene__inspect_selection({})` for selection, display-SOP
+   point/primitive/packed counts, key attributes, and timeline.
+2. Call `houdini_geometry__get_geometry_info({"node_path": "..."})` only for
+   another SOP path. Follow a correlated search/load hint directly and skip
+   `describe` when a compact schema already supplies the arguments.
+3. Call `houdini_scripting__execute_python` only when no typed tool exposes the
+   required field.
+
+Do not enumerate points or unpack packed geometry merely to count it.
+"""
+
 __all__ = [
     "ENV_RESOURCES",
     "DEFAULT_SCENE_THROTTLE_SECS",
     "SCHEME_HOUDINI_HELP",
+    "URI_HOUDINI_AGENT_QUICKSTART",
+    "HOUDINI_AGENT_QUICKSTART",
     "HoudiniResourceBinder",
     "install_resources",
     "resolve_enabled",
@@ -433,6 +455,13 @@ def install_resources(
     )
     if not binder.bind(server):
         return None
+    register_docs_resource(
+        server,
+        uri=URI_HOUDINI_AGENT_QUICKSTART,
+        name="Houdini agent quickstart",
+        description="Three-step fast path for read-only Houdini scene inspection.",
+        content=HOUDINI_AGENT_QUICKSTART,
+    )
     if install_scene_events:
         binder.install_scene_events()
     return binder
