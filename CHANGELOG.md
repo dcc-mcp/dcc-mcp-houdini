@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.28.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.27.0...v0.28.0) (2026-07-27)
+
+
+### Features
+
+* add fast Houdini inspection path ([2b1721b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2b1721b3649f9755c1687c7cf0c290dd3edabdc5))
+
+
+### Bug Fixes
+
+* unify isolated ROP job polling ([8351eb8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8351eb8bd45f4c65841ddeea14ac3a6fe0c6e548))
+
 ## [0.27.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.26.0...v0.27.0) (2026-07-26)
 
 
