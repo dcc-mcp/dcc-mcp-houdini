@@ -11,6 +11,7 @@ from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 def update_vex_snippet(
     node_path: str,
     vex_code: str,
+    wrangle_type: str = "attribwrangle",
     run_over: Optional[str] = None,
     bindings: Optional[Dict[str, str]] = None,
     parameters: Optional[Dict[str, Any]] = None,
@@ -34,7 +35,7 @@ def update_vex_snippet(
         return skill_error("VEX module not available", str(exc))
 
     # ── Client-side validation ─────────────────────────────────────────
-    client_errors = validate_vex_snippet_client(vex_code)
+    client_errors = validate_vex_snippet_client(vex_code, wrangle_type)
     if client_errors:
         return skill_error(
             "VEX snippet validation failed",

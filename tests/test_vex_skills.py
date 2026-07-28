@@ -267,6 +267,29 @@ class TestUpdateVexSnippet:
         snip_parm.set.assert_called_once_with(new_snippet)
         class_parm.set.assert_not_called()
 
+    def test_update_topology_wrangle_allows_topology_functions(self) -> None:
+        mod = _load_script("houdini-vex", "update_vex_snippet.py")
+        snippet = 'int point = addpoint(0, {0, 0, 0}); int prim = addprim(0, "poly"); addvertex(0, prim, point);'
+        snip_parm = MagicMock()
+        snip_parm.evalAsString.return_value = ""
+        class_parm = MagicMock()
+        node = _node("/obj/geo1/topology1", "topology1", "attribwrangle")
+        node.parm.side_effect = lambda name: {"snippet": snip_parm, "class": class_parm}.get(name)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.update_vex_snippet(
+                node_path="/obj/geo1/topology1",
+                vex_code=snippet,
+                wrangle_type="topologywrangle",
+                run_over="detail",
+            )
+
+        assert result["success"] is True
+        snip_parm.set.assert_called_once_with(snippet)
+        class_parm.set.assert_called_once_with("detail")
+
     def test_update_with_validation_rejects_forbidden(self) -> None:
         mod = _load_script("houdini-vex", "update_vex_snippet.py")
 
