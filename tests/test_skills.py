@@ -501,6 +501,27 @@ class TestSceneNodeInspectionSkills:
 
 
 class TestNodeSkills:
+    def test_layout_children_can_match_network_editor_selected_layout(self) -> None:
+        mod = _load_script("houdini-nodes", "layout_children.py")
+        parent = MagicMock()
+        parent.path.return_value = "/obj/geo1"
+        selected = MagicMock()
+        selected.path.return_value = "/obj/geo1/box1"
+        selected.parent.return_value = parent
+        sibling = MagicMock()
+        sibling.parent.return_value = parent
+        parent.children.return_value = [selected, sibling]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+        mock_hou.selectedNodes.return_value = [selected]
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.layout_children("/obj/geo1", selected_only=True)
+
+        assert result["success"] is True
+        parent.layoutChildren.assert_called_once_with(items=[selected])
+        assert result["context"]["node_paths"] == ["/obj/geo1/box1"]
+
     def test_create_node_with_mock_hou(self) -> None:
         mod = _load_script("houdini-nodes", "create_node.py")
         child = MagicMock()
