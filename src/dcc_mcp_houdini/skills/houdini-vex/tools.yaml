@@ -97,6 +97,11 @@ tools:
         vex_code:
           type: string
           description: New VEX snippet (validated client-side before commit).
+        wrangle_type:
+          type: string
+          default: attribwrangle
+          enum: [attribwrangle, volumewrangle, geometrywrangle, pointwrangle, primitivewrangle, vertexwrangle, detailwrangle, topologywrangle]
+          description: Semantic wrangle type used for context-aware validation.
         run_over:
           type: string
           enum: [points, prims, verts, detail, global, attribs, numbers]
