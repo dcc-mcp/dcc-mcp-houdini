@@ -21,6 +21,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 # Import dcc_mcp_core modules
 from dcc_mcp_core.cancellation import CancelledError, CancelToken
 
+from dcc_mcp_houdini._flipbook_jobs import flipbook_jobs as _flipbook_jobs
+
 # ---------------------------------------------------------------------------
 # Embedded ChunkedRunner (PIP-2788, pending next dcc-mcp-core release).
 # Once the release ships this block can be replaced by:
@@ -162,8 +164,6 @@ class ChunkedRunner:
 # ---------------------------------------------------------------------------
 # Flipbook job registry — shared state for launch / poll / cancel
 # ---------------------------------------------------------------------------
-
-_flipbook_jobs: Dict[str, Dict[str, Any]] = {}
 
 
 def _normalize_frame_range(frame_range: List[float]) -> tuple:
@@ -444,6 +444,21 @@ def launch_flipbook_job(
         "warnings": warnings,
         "total_frames": len(chunks),
     }
+
+    def _pump_callback() -> None:
+        job = _flipbook_jobs.get(job_id)
+        if job is None:
+            return
+        job_runner: ChunkedRunner = job["runner"]
+        if not job_runner.is_terminal:
+            job_runner.step()
+        if job_runner.is_terminal:
+            try:
+                hou.ui.removeEventLoopCallback(_pump_callback)
+            except Exception:  # noqa: BLE001
+                pass
+
+    hou.ui.addEventLoopCallback(_pump_callback)
 
     return {
         "success": True,

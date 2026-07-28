@@ -27,7 +27,7 @@ def validate_vex_syntax(
         return skill_error("VEX module not available", str(exc))
 
     # ── Client-side syntax check ───────────────────────────────────────
-    errors = validate_vex_snippet_client(vex_code)
+    errors = validate_vex_snippet_client(vex_code, wrangle_type)
 
     # ── Attribute binding check ────────────────────────────────────────
     if known_attributes:

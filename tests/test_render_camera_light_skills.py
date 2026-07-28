@@ -56,6 +56,13 @@ def _load_render_worker() -> ModuleType:
     return _load_script("houdini-render", "_render_worker.py")
 
 
+def test_flipbook_registry_is_shared_across_tool_module_loads() -> None:
+    first = _load_script("houdini-render", "_flipbook_chunked.py")
+    second = _load_script("houdini-render", "_flipbook_chunked.py")
+
+    assert first._flipbook_jobs is second._flipbook_jobs
+
+
 def _node(path: str, name: str, type_name: str = "geo") -> MagicMock:
     node = MagicMock()
     node.path.return_value = path
@@ -556,6 +563,7 @@ class TestViewportCapture:
         assert ctx["frame_range"] == [1.0, 10.0, 3.0]
         assert ctx["camera_path"] == "/obj/shotcam"
         assert ctx["progress"] == {"completed": 0, "total": 4}
+        mock_hou.ui.addEventLoopCallback.assert_called_once()
 
     def test_flipbook_rejects_non_positive_increment(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "flipbook.py")

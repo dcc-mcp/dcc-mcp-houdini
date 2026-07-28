@@ -82,6 +82,11 @@ float d = dot(n, {0, 1, 0});
         errors = validate_vex_snippet_client(snippet)
         assert len(errors) == 0
 
+    def test_topology_functions_require_topology_wrangle(self) -> None:
+        snippet = 'int point = addpoint(0, {0, 0, 0}); int prim = addprim(0, "poly"); addvertex(0, prim, point);'
+        assert validate_vex_snippet_client(snippet)
+        assert validate_vex_snippet_client(snippet, WrangleType.TOPOLOGY_WRANGLE) == []
+
 
 # ---------------------------------------------------------------------------
 # validate_vex_snippet_client — deny list

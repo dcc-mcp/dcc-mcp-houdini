@@ -72,7 +72,7 @@ tools:
       Read bounded status, output progress, and written files for a chunked
       flipbook job. Terminal states (completed/cancelled/failed) report
       written_files and skipped_frames.
-    source_file: scripts/flipbook.py
+    source_file: scripts/get_flipbook_job.py
     execution: sync
     affinity: any
     timeout_hint_secs: 10
@@ -93,7 +93,7 @@ tools:
           description: "Job identifier returned by the flipbook launch."
   - name: cancel_flipbook_job
     description: Cancel a running chunked flipbook job. Repeated calls are safe.
-    source_file: scripts/flipbook.py
+    source_file: scripts/cancel_flipbook_job.py
     execution: sync
     affinity: any
     timeout_hint_secs: 10

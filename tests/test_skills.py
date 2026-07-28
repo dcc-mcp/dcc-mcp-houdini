@@ -66,6 +66,15 @@ def test_tools_yaml_contract(skill_dir: str) -> None:
             assert tool.get("timeout_hint_secs"), f"{tool['name']} missing timeout_hint_secs"
 
 
+def test_flipbook_job_tools_have_dedicated_entrypoints() -> None:
+    tools_path = _SKILLS_ROOT / "houdini-render" / "tools.yaml"
+    tools = yaml.safe_load(tools_path.read_text(encoding="utf-8"))["tools"]
+    sources = {tool["name"]: tool["source_file"] for tool in tools}
+
+    assert sources["get_flipbook_job"] == "scripts/get_flipbook_job.py"
+    assert sources["cancel_flipbook_job"] == "scripts/cancel_flipbook_job.py"
+
+
 @pytest.mark.parametrize(
     ("skill_name", "tool_name"),
     (
@@ -182,6 +191,7 @@ class TestGetSessionInfoSkill:
 
     def test_with_mock_hou(self) -> None:
         mod = _load_script("houdini-scripting", "get_session_info.py")
+        mock_adapter = MagicMock(__version__="0.28.0", __file__="/tmp/dcc_mcp_houdini/__init__.py")
         mock_hou = MagicMock()
         mock_hou.applicationVersion.return_value = (20, 5, 0)
         mock_hou.applicationVersionString.return_value = "20.5.0"
@@ -189,10 +199,12 @@ class TestGetSessionInfoSkill:
         mock_hou.hipFile.isNewFile.return_value = False
         mock_hou.hipFile.name.return_value = "/tmp/test.hip"
 
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        with patch.dict(sys.modules, {"dcc_mcp_houdini": mock_adapter, "hou": mock_hou}):
             result = mod.get_session_info()
 
         assert result["success"] is True
+        assert result["context"]["adapter_version"] == "0.28.0"
+        assert result["context"]["adapter_module_path"] == "/tmp/dcc_mcp_houdini/__init__.py"
         assert result["context"]["houdini_version_string"] == "20.5.0"
         assert result["context"]["hip_file"] == "/tmp/test.hip"
 
