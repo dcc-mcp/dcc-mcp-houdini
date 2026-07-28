@@ -47,7 +47,7 @@ _ALLOWED_VEX_PATTERNS: List[re.Pattern] = [
         r"ident|illuminance|import|importdetail|importpoint|importprim|importvertex|"
         r"invert|irradiance|isfinite|isinf|isnan|"
         r"length|length2|lerp|lighter|lookat|"
-        r"match|max|min|minpos|mspace|nearpoint|nearpoints|neighbour|neighbourcount|"
+        r"match|max|min|minpos|mspace|nearpoint|nearpoints|neighbour|neighbourcount|nprimitives|"
         r"neighbours|noise|normalize|ntransform|"
         r"occlusion|onoise|outerproduct|ow_space|"
         r"pbrspecular|pcfilter|pgfind|pgnext|planepointdistance|planeside|"
