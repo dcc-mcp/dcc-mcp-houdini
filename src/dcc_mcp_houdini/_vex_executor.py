@@ -66,7 +66,7 @@ def create_wrangle(hou: Any, spec: WrangleNodeSpec) -> Dict[str, Any]:
     except ValueError as exc:
         return _fail(str(exc))
 
-    sop_type = spec.wrangle_type.value
+    sop_type = "attribwrangle" if spec.wrangle_type is WrangleType.TOPOLOGY_WRANGLE else spec.wrangle_type.value
     node = parent.createNode(sop_type, node_name=spec.node_name)
 
     if node is None:
@@ -111,7 +111,8 @@ def create_wrangle(hou: Any, spec: WrangleNodeSpec) -> Dict[str, Any]:
         "success": True,
         "node_path": node.path(),
         "node_name": node.name(),
-        "wrangle_type": sop_type,
+        "wrangle_type": spec.wrangle_type.value,
+        "node_type": sop_type,
         "run_over": spec.run_over.value,
         "has_snippet": spec.snippet is not None,
     }

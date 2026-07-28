@@ -91,6 +91,8 @@ _ALLOWED_VEX_PATTERNS: List[re.Pattern] = [
     re.compile(r"[+\-*/%=<>!&|^~?:@.;,(){}\[\]]"),
 ]
 
+_TOPOLOGY_VEX_FUNCTIONS = {"addpoint", "addprim", "addvertex", "append", "resize"}
+
 
 # Constructs that are FORBIDDEN in any VEX snippet passed through this gateway.
 # These block the "arbitrary script execution" escape hatch.
@@ -162,7 +164,10 @@ _WRANGLE_PARM_RULES: Dict[WrangleType, Dict[str, tuple]] = {
 }
 
 
-def validate_vex_snippet_client(code: str) -> List[VexSyntaxError]:
+def validate_vex_snippet_client(
+    code: str,
+    wrangle_type: WrangleType | str = WrangleType.ATTRIB_WRANGLE,
+) -> List[VexSyntaxError]:
     """Client-side (no ``hou``) VEX snippet validation.
 
     Returns a list of :class:`VexSyntaxError`.  An empty list means the
@@ -202,7 +207,7 @@ def validate_vex_snippet_client(code: str) -> List[VexSyntaxError]:
     # Variable names like `offset`, `x`, `y` are user-defined and not checked.
     func_calls = re.findall(r"([a-zA-Z_]\w*)\s*\(", stripped)
     for token in func_calls:
-        if not _is_allowed_token(token):
+        if not _is_allowed_token(token, wrangle_type):
             line = code[: code.find(token + "(")].count("\n") + 1
             errors.append(
                 VexSyntaxError(
@@ -322,8 +327,11 @@ def _strip_comments_and_strings(code: str) -> str:
     return code
 
 
-def _is_allowed_token(token: str) -> bool:
+def _is_allowed_token(token: str, wrangle_type: WrangleType | str) -> bool:
     """Check if a token matches any allowlist pattern."""
+    type_name = wrangle_type.value if isinstance(wrangle_type, WrangleType) else str(wrangle_type).lower()
+    if type_name == WrangleType.TOPOLOGY_WRANGLE.value and token in _TOPOLOGY_VEX_FUNCTIONS:
+        return True
     for pattern in _ALLOWED_VEX_PATTERNS:
         if pattern.fullmatch(token):
             return True

@@ -31,15 +31,19 @@ def create_wrangle(
 
     try:
         from dcc_mcp_houdini._vex_executor import create_wrangle as _create
-        from dcc_mcp_houdini._vex_types import VexSnippet, WrangleNodeSpec
+        from dcc_mcp_houdini._vex_types import VexContext, VexSnippet, WrangleNodeSpec
         from dcc_mcp_houdini._vex_validator import validate_vex_snippet_client
     except ImportError as exc:
         return skill_error("VEX module not available", str(exc))
 
     # ── Build snippet if VEX code provided ─────────────────────────────
+    resolved_wrangle_type = resolve_wrangle_type(wrangle_type)
+    resolved_run_over = (
+        VexContext.DETAIL if resolved_wrangle_type.value == "topologywrangle" else resolve_vex_context(run_over)
+    )
     snippet = None
     if vex_code:
-        client_errors = validate_vex_snippet_client(vex_code)
+        client_errors = validate_vex_snippet_client(vex_code, resolved_wrangle_type)
         if client_errors:
             return skill_error(
                 "VEX snippet validation failed",
@@ -50,7 +54,7 @@ def create_wrangle(
         try:
             snippet = VexSnippet(
                 code=vex_code,
-                context=resolve_vex_context(run_over),
+                context=resolved_run_over,
                 bindings=bindings or {},
                 parameter_values=parameters or {},
             )
@@ -60,8 +64,8 @@ def create_wrangle(
     spec = WrangleNodeSpec(
         parent_path=parent_path,
         node_name=node_name,
-        wrangle_type=resolve_wrangle_type(wrangle_type),
-        run_over=resolve_vex_context(run_over),
+        wrangle_type=resolved_wrangle_type,
+        run_over=resolved_run_over,
         snippet=snippet,
         set_display=set_display,
         set_render=set_render,

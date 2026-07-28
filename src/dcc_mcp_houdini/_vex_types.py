@@ -144,22 +144,21 @@ class WrangleNodeSpec:
             raise ValueError(f"snippet must be a VexSnippet, got {type(self.snippet)}")
 
 
-# Mapping from VexContext to Houdini's numeric class parameter value
-# (hou.attribType enum values).
-_VEX_CONTEXT_TO_ATTRIB_CLASS: Dict[VexContext, int] = {
-    VexContext.POINTS: 0,
-    VexContext.PRIMITIVES: 1,
-    VexContext.VERTICES: 2,
-    VexContext.DETAIL: 3,
-    VexContext.GLOBAL_VERTICES: 0,
-    VexContext.ATTRIBUTES: 0,
-    VexContext.NUMBERS: 0,
+# Mapping from VexContext to stable Attrib Wrangle menu tokens.
+_VEX_CONTEXT_TO_ATTRIB_CLASS: Dict[VexContext, str] = {
+    VexContext.POINTS: "point",
+    VexContext.PRIMITIVES: "prim",
+    VexContext.VERTICES: "vertex",
+    VexContext.DETAIL: "detail",
+    VexContext.GLOBAL_VERTICES: "point",
+    VexContext.ATTRIBUTES: "point",
+    VexContext.NUMBERS: "point",
 }
 
 
-def vex_context_to_attrib_class(context: VexContext) -> int:
-    """Map a :class:`VexContext` to the ``hou.attribType`` enum value."""
-    return _VEX_CONTEXT_TO_ATTRIB_CLASS.get(context, 0)
+def vex_context_to_attrib_class(context: VexContext) -> str:
+    """Map a :class:`VexContext` to the Attrib Wrangle menu token."""
+    return _VEX_CONTEXT_TO_ATTRIB_CLASS.get(context, "point")
 
 
 @dataclass(frozen=True)

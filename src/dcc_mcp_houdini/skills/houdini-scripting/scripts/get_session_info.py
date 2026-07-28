@@ -12,7 +12,11 @@ def get_session_info() -> dict:
     try:
         import hou  # noqa: PLC0415
 
+        import dcc_mcp_houdini  # noqa: PLC0415
+
         info = {
+            "adapter_version": dcc_mcp_houdini.__version__,
+            "adapter_module_path": dcc_mcp_houdini.__file__,
             "houdini_version": ".".join(str(v) for v in hou.applicationVersion()),
             "houdini_version_string": hou.applicationVersionString(),
             "python_version": sys.version,

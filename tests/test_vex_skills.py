@@ -100,7 +100,7 @@ class TestCreateWrangle:
         assert result["context"]["has_snippet"] is True
         parent.createNode.assert_called_once_with("pointwrangle", node_name=None)
         snip_parm.set.assert_called_once_with(snippet)
-        class_parm.set.assert_called_once_with(0)  # points -> 0
+        class_parm.set.assert_called_once_with("point")
 
     def test_create_wrangle_rejects_forbidden_vex(self) -> None:
         mod = _load_script("houdini-vex", "create_wrangle.py")
@@ -113,6 +113,30 @@ class TestCreateWrangle:
 
         assert result["success"] is False
         assert "validation" in str(result.get("error", "")).lower()
+
+    def test_create_topology_wrangle_uses_detail_attrib_wrangle(self) -> None:
+        mod = _load_script("houdini-vex", "create_wrangle.py")
+        new = _node("/obj/geo1/topology1", "topology1", "attribwrangle")
+        snip_parm = MagicMock()
+        class_parm = MagicMock()
+        new.parm.side_effect = lambda name: {"snippet": snip_parm, "class": class_parm}.get(name)
+        parent = _node("/obj/geo1", "geo1")
+        parent.createNode.return_value = new
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_wrangle(
+                parent_path="/obj/geo1",
+                wrangle_type="topologywrangle",
+                vex_code='int point = addpoint(0, {0, 0, 0}); int prim = addprim(0, "poly"); addvertex(0, prim, point);',
+            )
+
+        assert result["success"] is True
+        assert result["context"]["wrangle_type"] == "topologywrangle"
+        assert result["context"]["node_type"] == "attribwrangle"
+        parent.createNode.assert_called_once_with("attribwrangle", node_name=None)
+        class_parm.set.assert_called_once_with("detail")
 
     def test_create_wrangle_rejects_empty_vex(self) -> None:
         mod = _load_script("houdini-vex", "create_wrangle.py")
@@ -295,7 +319,7 @@ class TestUpdateVexSnippet:
             )
 
         assert result["success"] is True
-        class_parm.set.assert_called_once_with(1)  # prims -> 1
+        class_parm.set.assert_called_once_with("prim")
 
     def test_update_no_snippet_parm(self) -> None:
         mod = _load_script("houdini-vex", "update_vex_snippet.py")
