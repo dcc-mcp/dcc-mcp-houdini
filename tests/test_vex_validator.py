@@ -87,6 +87,9 @@ float d = dot(n, {0, 1, 0});
         assert validate_vex_snippet_client(snippet)
         assert validate_vex_snippet_client(snippet, WrangleType.TOPOLOGY_WRANGLE) == []
 
+    def test_geometry_count_query_is_allowed(self) -> None:
+        assert validate_vex_snippet_client("int count = nprimitives(0);") == []
+
 
 # ---------------------------------------------------------------------------
 # validate_vex_snippet_client — deny list

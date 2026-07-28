@@ -276,7 +276,7 @@ tools:
     search_aliases: [cancel cook, stop background cook, terminate cook job]
 
   - name: layout_children
-    description: "Layout children under a Houdini network node. Mutates node positions only."
+    description: "Layout all children or only currently selected children under a Houdini network node, matching the Network Editor L action. Mutates node positions only."
     input_schema:
       type: object
       properties:
@@ -284,6 +284,10 @@ tools:
           type: string
           default: "/obj"
           description: "Network path whose children should be laid out."
+        selected_only:
+          type: boolean
+          default: false
+          description: "When true, arrange only selected nodes that are direct children of parent_path."
     read_only: false
     destructive: false
     idempotent: true
@@ -293,7 +297,7 @@ tools:
     source_file: scripts/layout_children.py
     tool_role: action
     risk: low
-    search_aliases: [layout nodes, arrange network, tidy graph, organize nodes]
+    search_aliases: [layout nodes, arrange selected nodes, network editor L, tidy graph, organize nodes]
     annotations:
       read_only_hint: false
       destructive_hint: false
