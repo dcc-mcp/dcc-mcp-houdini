@@ -16,6 +16,19 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.29.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.28.0...v0.29.0) (2026-07-28)
+
+
+### Features
+
+* arrange selected Houdini nodes ([4a63b11](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4a63b11efe7484d4d5e15cd3a4dddb3d269eb69b))
+
+
+### Bug Fixes
+
+* harden live Houdini authoring and flipbooks ([c0698e1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c0698e1daee308a4c81c1758288ed346b8c582fc))
+* preserve topology context on VEX updates ([65fbbbd](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/65fbbbd796b28481f301f7e2667fad4c4d6ee6ec))
+
 ## [0.28.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.27.0...v0.28.0) (2026-07-27)
 
 
