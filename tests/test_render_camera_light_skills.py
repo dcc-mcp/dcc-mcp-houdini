@@ -434,6 +434,52 @@ class TestLightSkills:
             result = mod.create_light("/obj", light_type="laser")
         assert result["success"] is False
 
+    def test_create_hdri_world_uses_native_envlight(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-light-rig", "create_hdri_world.py")
+        hdri = tmp_path / "studio.hdr"
+        hdri.write_bytes(b"hdr")
+        light = _node("/obj/hdri", "hdri", "envlight")
+        parms = {
+            name: MagicMock()
+            for name in (
+                "light_intensity",
+                "env_map",
+                "light_contribdiff",
+                "light_contribspec",
+            )
+        }
+        light.parm.side_effect = parms.get
+        tuples = {"t": MagicMock(), "r": MagicMock()}
+        light.parmTuple.side_effect = tuples.get
+        parent = _node("/obj", "obj")
+        parent.createNode.return_value = light
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_hdri_world(str(hdri), name="hdri", intensity=2.0)
+
+        assert result["success"] is True
+        parent.createNode.assert_called_once_with("envlight", node_name="hdri")
+        parms["env_map"].set.assert_called_once_with(str(hdri))
+        assert result["context"]["applied"]["env_map"] == str(hdri)
+
+    def test_light_rig_scalar_tuple_and_envlight_are_reported(self) -> None:
+        mod = _load_script("houdini-light-rig", "_light_rig_common.py")
+        light = _node("/obj/hdri", "hdri", "envlight")
+        scalar_tuple = MagicMock()
+        scalar_tuple.eval.return_value = (2.0,)
+        light.parmTuple.side_effect = lambda name: scalar_tuple if name == "light_intensity" else None
+        env_map = MagicMock()
+        env_map.eval.return_value = "/maps/studio.hdr"
+        light.parm.side_effect = lambda name: env_map if name == "env_map" else None
+
+        result = mod.get_light_parms(light)
+
+        assert result["type"] == "environment"
+        assert result["intensity"] == 2.0
+        assert result["env_map"] == "/maps/studio.hdr"
+
 
 class TestViewSkills:
     def test_frame_view_headless(self) -> None:
@@ -2594,3 +2640,70 @@ class TestRenderExecution:
 
         assert result["success"] is True
         rop.render.assert_called_once_with(verbose=False, frame_range=(1.0, 1.0, 1.0))
+
+
+class _FakeOcioColorSpace:
+    def __init__(self, family: str) -> None:
+        self._family = family
+
+    def getFamily(self) -> str:
+        return self._family
+
+
+class _FakeOcioConfig:
+    def getColorSpaceNames(self) -> list[str]:
+        return ["ACEScg", "sRGB - Texture"]
+
+    def getColorSpace(self, name: str):
+        return _FakeOcioColorSpace("ACES") if name in self.getColorSpaceNames() else None
+
+    def getDisplays(self) -> list[str]:
+        return ["Rec.1886 Rec.709 - Display"]
+
+    def getViews(self, display: str) -> list[str]:
+        assert display == "Rec.1886 Rec.709 - Display"
+        return ["ACES 1.0 - SDR Video", "Raw"]
+
+
+def _fake_ocio_module() -> ModuleType:
+    module = ModuleType("PyOpenColorIO")
+    config = _FakeOcioConfig()
+
+    class Config:
+        @staticmethod
+        def CreateFromFile(_path: str) -> _FakeOcioConfig:
+            return config
+
+    module.Config = Config
+    module.GetCurrentConfig = lambda: config
+    return module
+
+
+def test_ocio_tools_validate_the_active_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "config.ocio"
+    config_path.write_text("ocio_profile_version: 2", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "PyOpenColorIO", _fake_ocio_module())
+    monkeypatch.setitem(sys.modules, "hou", ModuleType("hou"))
+    monkeypatch.setenv("OCIO", str(config_path))
+
+    list_module = _load_script("houdini-material-library", "list_color_spaces.py")
+    listed = list_module.list_color_spaces(filter="ACES")
+    assert listed["context"]["source"] == "PyOpenColorIO"
+    assert [entry["name"] for entry in listed["context"]["color_spaces"]] == ["ACEScg"]
+
+    set_module = _load_script("houdini-material-library", "set_color_management.py")
+    invalid = set_module.set_color_management(
+        ocio_config_path=str(config_path),
+        color_space="ACEScg",
+        view_transform="missing",
+    )
+    assert invalid["success"] is False
+
+    view_module = _load_script("houdini-light-rig", "set_render_view_transform.py")
+    valid = view_module.set_render_view_transform(
+        "ACES 1.0 - SDR Video",
+        display_device="Rec.1886 Rec.709 - Display",
+        color_space="ACEScg",
+    )
+    assert valid["success"] is True
+    assert valid["context"]["available_transforms"] == ["ACES 1.0 - SDR Video", "Raw"]

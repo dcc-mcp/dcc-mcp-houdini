@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -49,6 +51,24 @@ def test_server_options_preserve_explicit_zero(monkeypatch: pytest.MonkeyPatch) 
     from dcc_mcp_houdini.server import HoudiniServerOptions
 
     assert HoudiniServerOptions(port=0).to_core_options().port == 0
+
+
+def test_server_reads_extra_skill_paths_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from dcc_mcp_houdini.server import HoudiniMcpServer
+
+    skill_path = tmp_path / "lookdev-skill"
+    skill_path.mkdir()
+    monkeypatch.delenv("DCC_MCP_HOUDINI_SKILL_PATHS", raising=False)
+    monkeypatch.setenv("DCC_MCP_SKILL_PATHS", str(skill_path))
+
+    server = HoudiniMcpServer(port=0, gateway_port=0, enable_gateway_failover=False, job_storage_path="")
+    try:
+        assert server._extra_skill_paths == [str(skill_path)]
+    finally:
+        server.stop()
 
 
 def test_file_registry_registration_survives_disabled_failover(monkeypatch: pytest.MonkeyPatch) -> None:

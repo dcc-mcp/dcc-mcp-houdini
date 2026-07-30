@@ -32,15 +32,44 @@ def set_color_management(
 
     changes: dict = {}
     warnings: list = []
+    config = None
+    config_path = Path(ocio_config_path) if ocio_config_path else None
+
+    if config_path is not None and not config_path.is_file():
+        return skill_error(
+            "OCIO config not found: {}".format(ocio_config_path),
+            "Provide a valid path to a config.ocio file.",
+        )
+
+    try:
+        import PyOpenColorIO as ocio  # noqa: PLC0415
+
+        active_path = config_path or (Path(os.environ["OCIO"]) if os.environ.get("OCIO") else None)
+        config = ocio.Config.CreateFromFile(str(active_path)) if active_path else ocio.GetCurrentConfig()
+    except Exception as exc:  # noqa: BLE001
+        warnings.append("PyOpenColorIO validation unavailable: {}".format(exc))
+
+    if config is not None:
+        if color_space and config.getColorSpace(color_space) is None:
+            return skill_error(
+                "Color space '{}' not found in OCIO config".format(color_space),
+                "Choose one of the config's declared color spaces or roles.",
+                available_color_spaces=list(config.getColorSpaceNames()),
+            )
+        if view_transform:
+            displays = list(config.getDisplays())
+            matching_displays = [display for display in displays if view_transform in config.getViews(display)]
+            if not matching_displays:
+                available_views = sorted({view for display in displays for view in config.getViews(display)})
+                return skill_error(
+                    "View transform '{}' not found in OCIO config".format(view_transform),
+                    "Choose a view declared by the active config.",
+                    available_views=available_views,
+                )
+            changes["view_displays"] = matching_displays
 
     # --- Set OCIO config path ---
-    if ocio_config_path:
-        config_path = Path(ocio_config_path)
-        if not config_path.is_file():
-            return skill_error(
-                "OCIO config not found: {}".format(ocio_config_path),
-                "Provide a valid path to a config.ocio file.",
-            )
+    if config_path is not None:
         try:
             os.environ["OCIO"] = str(config_path)
             changes["ocio_config_path"] = str(config_path)

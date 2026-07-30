@@ -49,8 +49,8 @@ softboxes, rig grouping, and intensity controls.
 
 - **Karma / Solaris:** This skill operates at `/obj` level with `hlight::2.0`
   nodes.  For USD/Solaris lighting use `houdini-lookdev` and the LOP context.
-- **HDRI:** `create_hdri_world` creates an `environment` light with a texture
-  map (`envmap` parm).  Ensure the HDRI file path is accessible to the Houdini
+- **HDRI:** `create_hdri_world` creates a native environment light with a texture
+  map (`env_map`, or legacy `envmap`). Ensure the HDRI file path is accessible to the Houdini
   session.
 - **View transform:** `set_render_view_transform` configures OCIO-based color
   transforms.  Requires a valid OCIO configuration in the Houdini environment.
@@ -65,6 +65,6 @@ softboxes, rig grouping, and intensity controls.
 3. `aim_light_at_object(light_path="/obj/studio_rig/studio_rig_key", target_path="/obj/geo1")`
 4. `create_hdri_world(hdri_path="/path/to/studio.hdr", intensity=0.8)`
 5. `get_lighting_summary()` → review all lights
-6. `set_render_view_transform(view_transform="ACES 1.0 SDR-video")`
+6. `set_render_view_transform(view_transform="ACES 1.0 - SDR Video")`
 7. `set_light_rig_intensity(rig_group="/obj/studio_rig", intensity=1.5, multiply=true)`
 8. Hand off to `houdini-render` for viewport capture / ROP render

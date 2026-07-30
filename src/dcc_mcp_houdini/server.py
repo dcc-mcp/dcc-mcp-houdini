@@ -140,6 +140,9 @@ class HoudiniMcpServer(DccServerBase):
     ) -> None:
         from dcc_mcp_houdini import _env
 
+        if extra_skill_paths is None:
+            extra_skill_paths = _env.get_extra_skill_paths()
+
         if options is None:
             options = HoudiniServerOptions(
                 port=port,

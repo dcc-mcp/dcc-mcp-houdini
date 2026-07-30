@@ -313,12 +313,12 @@ tools:
         view_transform:
           type: string
           description: >-
-            OCIO view transform name, e.g. "ACES 1.0 SDR-video",
-            "sRGB", "Raw", "Un-tone-mapped".
+            OCIO view name, e.g. "ACES 1.0 - SDR Video", "Raw", or
+            "Un-tone-mapped".
         display_device:
           type: string
-          default: sRGB
-          description: OCIO display device name. Default "sRGB".
+          default: Rec.1886 Rec.709 - Display
+          description: OCIO display device name.
         color_space:
           type: string
           description: >-
