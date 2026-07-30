@@ -8,26 +8,12 @@ from typing import Optional
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
-def _get_available_transforms() -> list:
-    """Try to read available OCIO view transforms from the active config."""
-    try:
-        import PyOpenColorIO as OCIO  # noqa: PLC0415
+def _get_active_config():
+    """Load the config named by OCIO, falling back to OCIO's current config."""
+    import PyOpenColorIO as ocio  # noqa: PLC0415
 
-        config = OCIO.GetCurrentConfig()
-        return [str(vt.getName()) for vt in config.getViews()]
-    except Exception:  # noqa: BLE001
-        return []
-
-
-def _get_available_displays() -> list:
-    """Try to read available OCIO display devices."""
-    try:
-        import PyOpenColorIO as OCIO  # noqa: PLC0415
-
-        config = OCIO.GetCurrentConfig()
-        return [str(d.getName()) for d in config.getDisplays()]
-    except Exception:  # noqa: BLE001
-        return []
+    config_path = os.environ.get("OCIO")
+    return ocio.Config.CreateFromFile(config_path) if config_path else ocio.GetCurrentConfig()
 
 
 def _apply_houdini_color_settings(
@@ -90,7 +76,7 @@ def _set_ocio_env(view_transform: str, display_device: str, color_space: Optiona
 
 def set_render_view_transform(
     view_transform: str,
-    display_device: str = "sRGB",
+    display_device: str = "Rec.1886 Rec.709 - Display",
     color_space: Optional[str] = None,
 ) -> dict:
     """Configure the OCIO view transform for render view color management.
@@ -111,10 +97,29 @@ def set_render_view_transform(
         ToolResult with ``applied`` configuration and ``available_transforms``.
     """
     try:
-        available_transforms = _get_available_transforms()
-        available_displays = _get_available_displays()
+        try:
+            config = _get_active_config()
+            available_displays = list(config.getDisplays())
+            if display_device not in available_displays:
+                return skill_error(
+                    "Display device '{}' not found in OCIO config".format(display_device),
+                    "Choose one of the active config's displays.",
+                    available_displays=available_displays,
+                )
+            available_transforms = list(config.getViews(display_device))
+            if color_space and config.getColorSpace(color_space) is None:
+                return skill_error(
+                    "Color space '{}' not found in OCIO config".format(color_space),
+                    "Choose one of the active config's declared color spaces or roles.",
+                    available_color_spaces=list(config.getColorSpaceNames()),
+                )
+        except Exception as exc:  # noqa: BLE001
+            available_transforms = []
+            available_displays = []
+            config_warning = "PyOpenColorIO validation unavailable: {}".format(exc)
+        else:
+            config_warning = None
 
-        # Validate the view transform if we have a list
         if available_transforms and view_transform not in available_transforms:
             return skill_error(
                 "View transform '{}' not found in OCIO config".format(view_transform),
@@ -124,13 +129,16 @@ def set_render_view_transform(
             )
 
         result = _apply_houdini_color_settings(view_transform, display_device, color_space)
+        warnings = result.get("warnings") or []
+        if config_warning:
+            warnings.append(config_warning)
 
         return skill_success(
             "Set render view transform to '{}' ({})".format(view_transform, result["applied"].get("method", "unknown")),
             applied=result["applied"],
             available_transforms=available_transforms,
             available_displays=available_displays,
-            warnings=result.get("warnings"),
+            warnings=warnings or None,
             prompt="Use get_lighting_summary to review the scene's lighting, then capture_viewport (houdini-render) to verify the render look.",
         )
     except Exception as exc:

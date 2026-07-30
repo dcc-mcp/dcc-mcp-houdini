@@ -50,7 +50,8 @@ def eval_parm(node: Any, name: str) -> Optional[Any]:
     parm_tuple = node.parmTuple(name)
     if parm_tuple is not None:
         try:
-            return list(parm_tuple.eval())
+            values = list(parm_tuple.eval())
+            return values[0] if len(values) == 1 else values
         except Exception:  # noqa: BLE001
             return None
     parm = node.parm(name)
@@ -91,9 +92,10 @@ def apply_transform(
 
 def get_light_parms(light: Any) -> dict:
     """Read common hlight parameters and return a JSON-safe dict."""
+    node_type = light.type().name().lower()
     type_index = eval_parm(light, "light_type")
-    type_name = None
-    if type_index is not None:
+    type_name = "environment" if "envlight" in node_type else None
+    if type_name is None and type_index is not None:
         for name, idx in LIGHT_TYPES.items():
             if idx == int(type_index) and name != "sun":
                 type_name = name
@@ -116,18 +118,22 @@ def get_light_parms(light: Any) -> dict:
         parms["area_size"] = eval_parm(light, "areasize")
 
     if type_name == "environment":
-        parms["env_map"] = eval_parm(light, "envmap")
+        parms["env_map"] = eval_parm(light, "env_map") or eval_parm(light, "envmap")
 
-    parms["contrib_diffuse"] = eval_parm(light, "light_contribdiffuse")
-    parms["contrib_specular"] = eval_parm(light, "light_contribspecular")
+    parms["contrib_diffuse"] = eval_parm(light, "light_contribdiff")
+    if parms["contrib_diffuse"] is None:
+        parms["contrib_diffuse"] = eval_parm(light, "light_contribdiffuse")
+    parms["contrib_specular"] = eval_parm(light, "light_contribspec")
+    if parms["contrib_specular"] is None:
+        parms["contrib_specular"] = eval_parm(light, "light_contribspecular")
 
     return parms
 
 
 def is_light_node(node: Any) -> bool:
-    """Check if a node is a hlight (or hlight::2.0) node."""
+    """Check if a node is a native Houdini light."""
     type_name = node.type().name() if hasattr(node.type(), "name") else ""
-    return "hlight" in type_name.lower()
+    return any(name in type_name.lower() for name in ("hlight", "envlight"))
 
 
 def is_rig_null(node: Any) -> bool:

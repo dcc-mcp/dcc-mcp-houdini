@@ -60,32 +60,39 @@ def create_hdri_world(
         parent = get_node(hou, parent_path)
 
         try:
-            light = parent.createNode("hlight::2.0", node_name=name)
+            light = parent.createNode("envlight", node_name=name)
         except Exception:  # noqa: BLE001
-            light = parent.createNode("hlight", node_name=name)
+            try:
+                light = parent.createNode("hlight::2.0", node_name=name)
+            except Exception:  # noqa: BLE001
+                light = parent.createNode("hlight", node_name=name)
 
         applied = {}
 
-        # Set to environment light type
-        env_index = LIGHT_TYPES["environment"]
-        if set_parm_if_exists(light, "light_type", env_index):
+        # Legacy hlight nodes require the environment menu mode. Native
+        # envlight nodes expose the environment parameters directly.
+        if set_parm_if_exists(light, "light_type", LIGHT_TYPES["environment"]):
             applied["light_type"] = "environment"
 
         if set_parm_if_exists(light, "light_intensity", float(intensity)):
             applied["intensity"] = float(intensity)
 
-        # Set environment map texture
-        if set_parm_if_exists(light, "envmap", hdri_path):
-            applied["envmap"] = hdri_path
+        # Houdini 21 uses env_map on native envlight; older hlight nodes use envmap.
+        if set_parm_if_exists(light, "env_map", hdri_path) or set_parm_if_exists(light, "envmap", hdri_path):
+            applied["env_map"] = hdri_path
 
         # Apply Y-axis rotation for HDRI orientation
         apply_transform(light, [0, 0, 0], [0, float(rotation), 0])
         applied["rotation_y"] = float(rotation)
 
         # Diffuse/specular contribution
-        if set_parm_if_exists(light, "light_contribdiffuse", float(int(visible_in_diffuse))):
+        if set_parm_if_exists(light, "light_contribdiff", int(visible_in_diffuse)) or set_parm_if_exists(
+            light, "light_contribdiffuse", float(int(visible_in_diffuse))
+        ):
             applied["contrib_diffuse"] = visible_in_diffuse
-        if set_parm_if_exists(light, "light_contribspecular", float(int(visible_in_specular))):
+        if set_parm_if_exists(light, "light_contribspec", int(visible_in_specular)) or set_parm_if_exists(
+            light, "light_contribspecular", float(int(visible_in_specular))
+        ):
             applied["contrib_specular"] = visible_in_specular
 
         # Set the environment map color space hint (scene-linear for HDR)

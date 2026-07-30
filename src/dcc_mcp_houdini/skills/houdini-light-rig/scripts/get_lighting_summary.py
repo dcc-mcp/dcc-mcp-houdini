@@ -1,4 +1,4 @@
-"""Scan a network for all hlight nodes and report their state as a lighting summary."""
+"""Scan a network for all native light nodes and report their state."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_
 
 
 def get_lighting_summary(parent_path: str = "/obj") -> dict:
-    """Scan *parent_path* for all hlight nodes and report lighting state.
+    """Scan *parent_path* for all native light nodes and report lighting state.
 
-    Walks the network recursively and collects every ``hlight``/``hlight::2.0``
+    Walks the network and collects ``hlight`` and ``envlight`` nodes
     node.  For each light, reports type, intensity, color, exposure, position,
     and rig membership (if parented under a null rig).  Also reports rig groups
     and totals.
