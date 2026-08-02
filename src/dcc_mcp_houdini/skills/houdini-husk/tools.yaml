@@ -73,7 +73,7 @@ tools:
   - name: create_snapshot
     description: >-
       Export the current Solaris stage (/stage) or LOP network as a USD snapshot
-      for husk command-line rendering. Uses usdsave LOP internally.
+      for husk command-line rendering. Uses Houdini's USD ROP internally.
     source_file: scripts/create_snapshot.py
     execution: sync
     affinity: main
