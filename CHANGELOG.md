@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.30.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.29.0...v0.30.0) (2026-08-02)
+
+
+### Features
+
+* add ocio lookdev controls ([4db46fd](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4db46fd97406644284e6a6a8f04dda6356a58dad))
+
+
+### Bug Fixes
+
+* support Houdini 21 render APIs ([a116e8e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a116e8e5996649594b0737b4d401580c4de633aa))
+
 ## [0.29.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.28.0...v0.29.0) (2026-07-28)
 
 
