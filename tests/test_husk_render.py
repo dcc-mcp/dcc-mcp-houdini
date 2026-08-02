@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 SCRIPTS = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills" / "houdini-husk" / "scripts"
@@ -55,3 +57,126 @@ def test_render_with_husk_returns_failure_for_nonzero_exit(tmp_path: Path) -> No
     assert result["context"]["returncode"] == 1
     assert result["context"]["written_files"] == []
     assert "delegate failed" in result["error"]
+
+
+class _SnapshotParm:
+    def __init__(self, rop, name: str) -> None:
+        self.rop = rop
+        self.name = name
+
+    def set(self, value) -> None:
+        self.rop.values[self.name] = value
+
+    def pressButton(self) -> None:
+        self.rop.executed = True
+        if self.rop.write_output:
+            output = self.rop.expanded_output or Path(self.rop.values["lopoutput"])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text("#usda 1.0\n", encoding="utf-8")
+
+
+class _SnapshotRop:
+    def __init__(self, write_output: bool, expanded_output=None) -> None:
+        self.values = {}
+        self.write_output = write_output
+        self.expanded_output = expanded_output
+        self.executed = False
+        self.destroyed = False
+        self.input = None
+
+    def parm(self, name: str):
+        return _SnapshotParm(self, name)
+
+    def parmTuple(self, _name: str):
+        return None
+
+    def setInput(self, _index: int, source) -> None:
+        self.input = source
+
+    def destroy(self) -> None:
+        self.destroyed = True
+
+
+class _SnapshotParent:
+    def __init__(self, write_output: bool, expanded_output=None) -> None:
+        self.rop = _SnapshotRop(write_output, expanded_output)
+        self.created_type = None
+
+    def createNode(self, node_type: str, node_name: str):
+        self.created_type = (node_type, node_name)
+        return self.rop
+
+
+class _SnapshotSource:
+    def __init__(self, parent: _SnapshotParent) -> None:
+        self._parent = parent
+
+    def path(self) -> str:
+        return "/stage/OUT"
+
+    def parent(self) -> _SnapshotParent:
+        return self._parent
+
+
+class _SnapshotNetwork:
+    def __init__(self, source: _SnapshotSource) -> None:
+        self.source = source
+
+    def path(self) -> str:
+        return "/stage"
+
+    def displayNode(self) -> _SnapshotSource:
+        return self.source
+
+
+@pytest.mark.parametrize(
+    ("flatten", "save_style"),
+    [(False, "flattenimplicitlayers"), (True, "flattenstage")],
+)
+def test_create_snapshot_uses_houdini21_usd_rop(tmp_path: Path, flatten: bool, save_style: str) -> None:
+    snapshot = _load_script("create_snapshot.py")
+    output = tmp_path / "cache" / "scene.0046.usda"
+    raw_output = "$HIP/cache/scene.$F4.usda"
+    parent = _SnapshotParent(write_output=True, expanded_output=output)
+    source = _SnapshotSource(parent)
+    hou = SimpleNamespace(
+        node=lambda _path: _SnapshotNetwork(source),
+        frame=lambda: 1.0,
+        text=SimpleNamespace(
+            expandStringAtFrame=lambda path, frame: str(output) if path == raw_output and frame == 46 else path
+        ),
+    )
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = snapshot.create_snapshot(snapshot_path=raw_output, flatten=flatten, frame=46)
+
+    assert result["success"] is True
+    assert parent.created_type == ("usd_rop", "snapshot_export")
+    assert parent.rop.input is source
+    assert parent.rop.values["lopoutput"] == raw_output
+    assert parent.rop.values["savestyle"] == save_style
+    assert parent.rop.values["trange"] == 1
+    assert parent.rop.values["f1"] == parent.rop.values["f2"] == 46.0
+    assert parent.rop.executed is True
+    assert parent.rop.destroyed is True
+    assert output.is_file()
+    assert result["context"]["expanded_snapshot_path"] == str(output)
+
+
+def test_create_snapshot_fails_when_usd_rop_writes_nothing(tmp_path: Path) -> None:
+    snapshot = _load_script("create_snapshot.py")
+    parent = _SnapshotParent(write_output=False)
+    source = _SnapshotSource(parent)
+    output = tmp_path / "missing.usda"
+    hou = SimpleNamespace(
+        node=lambda _path: source,
+        frame=lambda: 1.0,
+        text=SimpleNamespace(expandStringAtFrame=lambda path, _frame: path),
+    )
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = snapshot.create_snapshot(source_path="/stage/locked_asset", snapshot_path=str(output))
+
+    assert result["success"] is False
+    assert parent.rop.input is source
+    assert parent.rop.destroyed is True

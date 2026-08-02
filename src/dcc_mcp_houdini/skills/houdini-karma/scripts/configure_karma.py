@@ -38,6 +38,14 @@ def configure_karma(
 
         # Device selection
         device_info = KARMA_DEVICES.get(device.lower(), KARMA_DEVICES["cpu"])
+        is_xpu = device_info["engine"] == "xpu"
+        if is_xpu and max_samples is not None and pixel_samples is not None and max_samples != pixel_samples:
+            return skill_error(
+                "Conflicting XPU samples",
+                "Houdini 21 uses one path-traced sample control; max_samples and pixel_samples must match",
+                max_samples=max_samples,
+                pixel_samples=pixel_samples,
+            )
         engine_set = set_first_parm(
             node,
             ("renderengine", "engine", "render_engine", "karma_renderengine"),
@@ -51,8 +59,16 @@ def configure_karma(
 
         # Sample settings — defensive multi-candidate names
         sample_map = [
-            (max_samples, ("maxsamples", "max_samples", "vm_samples", "vm_maxsamples")),
-            (pixel_samples, ("pixelsamples", "pixel_samples", "vm_pixelsamples")),
+            (
+                max_samples,
+                ("maxsamples", "max_samples", "vm_samples", "vm_maxsamples")
+                + (("pathtracedsamples",) if is_xpu else ("varianceaa_maxsamples",)),
+            ),
+            (
+                pixel_samples,
+                ("pixelsamples", "pixel_samples", "vm_pixelsamples")
+                + (("pathtracedsamples",) if is_xpu else ("samplesperpixel",)),
+            ),
             (diffuse_samples, ("diffusesamples", "diffuse_samples")),
             (specular_samples, ("specularsamples", "specular_samples")),
             (transmission_samples, ("transmissionsamples", "transmission_samples")),
@@ -67,18 +83,16 @@ def configure_karma(
         if noise_threshold is not None:
             used = set_first_parm(
                 node,
-                ("noisethreshold", "noise_threshold", "vm_noisethreshold"),
+                ("noisethreshold", "noise_threshold", "vm_noisethreshold", "varianceaa_thresh"),
                 float(noise_threshold),
             )
             applied["noise_threshold"] = float(noise_threshold) if used else "unsupported"
 
         # Denoise
         if denoise is not None:
-            used = set_first_parm(
-                node,
-                ("denoise", "enable_denoise", "vm_denoise"),
-                int(denoise),
-            )
+            used = set_first_parm(node, ("denoiser",), "oidn" if denoise else "off")
+            if not used:
+                used = set_first_parm(node, ("denoise", "enable_denoise", "vm_denoise"), int(denoise))
             applied["denoise"] = denoise if used else "unsupported"
 
         return skill_success(
