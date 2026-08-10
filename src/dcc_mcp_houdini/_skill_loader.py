@@ -55,6 +55,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
         "houdini-dev",
         "houdini-automation",
         "houdini-texture-bake",
+        "houdini-gsplat-relighting",
     ),
 }
 

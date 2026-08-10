@@ -171,8 +171,8 @@ def get_render_settings(rop_path: str) -> dict:
                 return skill_success("Read effective Solaris render settings", **_solaris_settings(hou, rop))
             except ValueError as exc:
                 solaris_error = str(exc)
-        res_x = eval_first_parm(rop, ("res_overridex", "resx", "vm_resx"))
-        res_y = eval_first_parm(rop, ("res_overridey", "resy", "vm_resy"))
+        res_x = eval_first_parm(rop, ("res_overridex", "resx", "vm_resx", "res1"))
+        res_y = eval_first_parm(rop, ("res_overridey", "resy", "vm_resy", "res2"))
         output_frame = float(hou.frame())
         output_parms = (
             tuple(name for name in PRIMARY_OUTPUT_PARMS if name != "lopoutput")

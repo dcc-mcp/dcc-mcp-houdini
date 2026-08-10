@@ -141,6 +141,25 @@ class TestSceneLifecycle:
             ignore_load_warnings=False,
         )
 
+    def test_open_scene_reports_nonfatal_houdini_load_warnings(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-scene-edit", "open_scene.py")
+        hip = tmp_path / "shot.hip"
+        hip.write_bytes(b"hip")
+
+        class LoadWarning(Exception):
+            pass
+
+        mock_hou = MagicMock()
+        mock_hou.LoadWarning = LoadWarning
+        mock_hou.hipFile.path.return_value = str(hip)
+        mock_hou.hipFile.load.side_effect = LoadWarning("Incomplete asset definition")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.open_scene(str(hip), force=True)
+
+        assert result["success"] is True
+        assert result["context"]["warnings"] == ["Incomplete asset definition"]
+
     def test_save_scene_requires_path_when_never_saved(self) -> None:
         mod = _load_script("houdini-scene-edit", "save_scene.py")
         mock_hou = MagicMock()

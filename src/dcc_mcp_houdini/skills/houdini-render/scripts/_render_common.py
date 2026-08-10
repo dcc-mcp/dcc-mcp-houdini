@@ -8,7 +8,15 @@ import re
 from typing import Any, Optional, Sequence
 
 MAX_DIMENSION = 4096
-PRIMARY_OUTPUT_PARMS = ("picture", "vm_picture", "outputimage", "lopoutput", "sopoutput", "filename")
+PRIMARY_OUTPUT_PARMS = (
+    "picture",
+    "vm_picture",
+    "outputimage",
+    "copoutput",
+    "lopoutput",
+    "sopoutput",
+    "filename",
+)
 
 
 def get_node(hou: Any, node_path: str) -> Any:

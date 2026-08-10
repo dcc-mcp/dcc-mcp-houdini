@@ -991,6 +991,35 @@ class TestRenderSettings:
         assert result["context"]["applied"]["camera"] == "/obj/cam1"
         assert "output_path" in result["context"]["unsupported"]
 
+    def test_set_render_settings_supports_houdini_22_copernicus_image_rop(self) -> None:
+        mod = _load_script("houdini-render", "set_render_settings.py")
+        parms = {
+            "setres": _scalar_parm(0),
+            "res1": _scalar_parm(1024),
+            "res2": _scalar_parm(1024),
+            "copoutput": _scalar_parm(""),
+        }
+        rop = _node("/img/copnet1/rop_image1", "rop_image1", "rop_image")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda name: parms.get(name)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_render_settings(
+                "/img/copnet1/rop_image1",
+                resolution=[960, 540],
+                output_path="/tmp/preview.png",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["applied"]["resolution"] == [960, 540]
+        assert result["context"]["applied"]["output_path"] == "/tmp/preview.png"
+        parms["setres"].set.assert_called_once_with(True)
+        parms["res1"].set.assert_called_once_with(960)
+        parms["res2"].set.assert_called_once_with(540)
+        parms["copoutput"].set.assert_called_once_with("/tmp/preview.png")
+
 
 class TestRenderPassAuthoring:
     def test_mantra_component_presets_use_complete_light_path_expressions(self) -> None:

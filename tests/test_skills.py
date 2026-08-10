@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, call, patch
@@ -171,6 +172,190 @@ def test_stage_loader_maps_bootstrap_and_scene() -> None:
     scene_tools = yaml.safe_load((_SKILLS_ROOT / "houdini-scene" / "tools.yaml").read_text(encoding="utf-8"))["tools"]
     inspect = next(tool for tool in scene_tools if tool["name"] == "inspect_selection")
     assert inspect["input_schema"]["additionalProperties"] is False
+
+
+class TestGsplatRelightingSkills:
+    def test_find_node_type_accepts_houdini_versioned_labs_name(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        parent = MagicMock()
+        parent.childTypeCategory.return_value.nodeTypes.return_value = {"labs::normals_from_gsplats::1.0": MagicMock()}
+
+        result = mod._find_node_type(parent, ("labs::normals_from_gsplats",))
+
+        assert result == "labs::normals_from_gsplats::1.0"
+
+    def test_find_node_type_accepts_houdini_22_copernicus_name(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        parent = MagicMock()
+        parent.childTypeCategory.return_value.nodeTypes.return_value = {"rasterizegsplats": MagicMock()}
+
+        result = mod._find_node_type(parent, ("rasterizegsplats", "rasterize_gsplats"))
+
+        assert result == "rasterizegsplats"
+
+    def test_menu_value_maps_label_to_houdini_token(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        parm = MagicMock()
+        parm.parmTemplate.return_value.menuItems.return_value = ["point", "UsdLuxDistantLight"]
+        parm.parmTemplate.return_value.menuLabels.return_value = ["Point", "Distant"]
+
+        assert mod._menu_value(parm, "Distant") == "UsdLuxDistantLight"
+
+    def test_inspect_reports_relighting_contract(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha", "GS_SPH_R", "GS_SPH_G", "GS_SPH_B"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 12
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(node_path="/obj/geo1/OUT")
+
+        assert result["success"] is True
+        assert result["context"]["ready_for_relighting"] is True
+        assert result["context"]["checks"]["spherical_harmonics"] is True
+
+    def test_prepare_rolls_back_when_labs_node_is_missing(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        source = MagicMock()
+        source.path.return_value = "/obj/geo1/OUT"
+        source.parent.return_value = MagicMock(childTypeCategory=lambda: MagicMock(nodeTypes=dict))
+        hou = MagicMock(node=lambda _path: source)
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.prepare_gsplat_sop_chain(node_path="/obj/geo1/OUT")
+
+        assert result["success"] is False
+        source.parent.return_value.createNode.assert_not_called()
+
+    def test_copernicus_raster_uses_houdini_22_external_sop_and_resolution_contract(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+
+        def node(path: str, name: str, type_name: str) -> MagicMock:
+            value = MagicMock()
+            value.path.return_value = path
+            value.name.return_value = name
+            value.type.return_value.name.return_value = type_name
+            return value
+
+        copnet = node("/img/copnet1", "copnet1", "copnet")
+        source = node("/obj/geo1/OUT", "OUT", "null")
+        sop_import = node("/img/copnet1/gsplat_sop_import", "gsplat_sop_import", "sopimport")
+        raster = node("/img/copnet1/gsplat_rasterize", "gsplat_rasterize", "rasterizegsplats")
+        premult = node("/img/copnet1/gsplat_premult", "gsplat_premult", "premult")
+        selected = []
+
+        def set_first(target, names, value):
+            selected.append((target, tuple(names), value))
+            return names[0]
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", side_effect=[copnet, source]))
+            stack.enter_context(patch.object(mod, "_create", side_effect=[sop_import, raster, premult]))
+            stack.enter_context(patch.object(mod, "_set_first", side_effect=set_first))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                resolution=[960, 540],
+            )
+
+        assert result["success"] is True
+        assert any(names[0] == "usesoppath" and value is True for _, names, value in selected)
+        assert any(names[0] == "setres" and value is True for _, names, value in selected)
+        assert any(names[0] == "res1" and value == 960 for _, names, value in selected)
+        assert any(names[0] == "res2" and value == 540 for _, names, value in selected)
+        raster.setInput.assert_called_once_with(1, sop_import)
+        premult.setInput.assert_called_once_with(0, raster)
+
+    def test_copernicus_raster_builds_official_refinement_order(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+
+        def node(path: str, name: str, type_name: str) -> MagicMock:
+            value = MagicMock()
+            value.path.return_value = path
+            value.name.return_value = name
+            value.type.return_value.name.return_value = type_name
+            return value
+
+        copnet = node("/img/copnet1", "copnet1", "copnet")
+        source = node("/obj/geo1/OUT", "OUT", "null")
+        sop_import = node("/img/copnet1/import", "import", "sopimport")
+        raster = node("/img/copnet1/raster", "raster", "rasterizegsplats")
+        sharpen = node("/img/copnet1/sharpen", "sharpen", "sharpen")
+        hsv = node("/img/copnet1/hsv", "hsv", "hsv")
+        gamma_node = node("/img/copnet1/gamma", "gamma", "gamma")
+        premult = node("/img/copnet1/premult", "premult", "premult")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", side_effect=[copnet, source]))
+            create = stack.enter_context(
+                patch.object(
+                    mod,
+                    "_create",
+                    side_effect=[sop_import, raster, sharpen, hsv, gamma_node, premult],
+                )
+            )
+            stack.enter_context(patch.object(mod, "_set_first", side_effect=lambda _node, names, _value: names[0]))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                sharpen_amount=0.1,
+                saturation_scale=1.1,
+                value_scale=1.2,
+                gamma=0.8,
+            )
+
+        assert result["success"] is True
+        assert [call.args[2] for call in create.call_args_list] == [
+            "gsplat_sop_import",
+            "gsplat_rasterize",
+            "gsplat_sharpen",
+            "gsplat_hsv",
+            "gsplat_gamma",
+            "gsplat_premult",
+        ]
+        sharpen.setInput.assert_called_once_with(0, raster)
+        hsv.setInput.assert_called_once_with(0, sharpen)
+        gamma_node.setInput.assert_called_once_with(0, hsv)
+        premult.setInput.assert_called_once_with(0, gamma_node)
+
+    def test_copernicus_raster_rejects_partial_resolution_contract(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        copnet = MagicMock()
+        source = MagicMock()
+        sop_import = MagicMock()
+        raster = MagicMock()
+
+        def set_first(_node, names, _value):
+            return None if names[0] == "res2" else names[0]
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", side_effect=[copnet, source]))
+            stack.enter_context(patch.object(mod, "_create", side_effect=[sop_import, raster]))
+            stack.enter_context(patch.object(mod, "_set_first", side_effect=set_first))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                resolution=[960, 540],
+            )
+
+        assert result["success"] is False
+        assert "resolution parameters" in result["error"]
+        raster.destroy.assert_called_once_with()
+        sop_import.destroy.assert_called_once_with()
 
 
 class TestGetSessionInfoSkill:
