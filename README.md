@@ -62,14 +62,14 @@ skills-first Houdini automation tools to agents.
 
 ## Houdini 22 GSplat relighting showcase
 
-![Original DCC-MCP honeybee rendered in Karma with green, violet, and orange studio lighting](docs/showcase/houdini-gsplat-honeybee.webp)
+![Reconstructed high-detail DCC-MCP honeybee rendered in Karma with green, violet, and orange studio lighting](docs/showcase/houdini-gsplat-honeybee-highpoly.webp)
 
-This is a real Karma render of an in-house procedural honeybee, not a sample
-asset or image-generation mockup. The validated scene contains a matching
-8,382-point GSplat source, a portable textured USD mesh, five material
-textures, four editable USD lights, a render camera, and a studio grid. The
-typed workflow inspects and prepares the splat with SideFX Labs, relights it in
-Solaris, then rasterizes and refines the camera result in Copernicus.
+This is a real Karma render of an in-house reconstructed honeybee, not a sample
+asset or image-generation mockup. Its high-detail USD scene includes 30,100
+geometry fur curves, 1,440 baked compound-eye lenses, veined wing membranes,
+segmented legs, five material textures, and four editable lights. A matching
+66,230-point GSplat source drives the typed SideFX Labs preparation, Solaris
+relighting, and Copernicus raster refinement workflow.
 
 ## Features
 
