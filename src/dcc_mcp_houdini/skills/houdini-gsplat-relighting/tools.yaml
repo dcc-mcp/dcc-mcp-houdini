@@ -1,0 +1,207 @@
+tools:
+  - name: inspect_gsplat_relighting_input
+    description: >-
+      Inspect a SOP GSplat output for the attributes needed by Labs normal
+      reconstruction, delighting, Solaris relighting, and Copernicus
+      rasterization. Read-only and bounded to attribute metadata and counts.
+    source_file: scripts/inspect_gsplat_relighting_input.py
+    execution: sync
+    affinity: main
+    group: gsplat-preflight
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [inspect gaussian splat, gsplat attributes, splat relighting preflight, gsplat albedo normals]
+    produces: [gsplat_relighting_report]
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Absolute Houdini SOP node path containing the GSplat points.
+        max_attributes:
+          type: integer
+          minimum: 1
+          maximum: 256
+          default: 128
+          description: Maximum point attributes to return.
+    next-tools:
+      on-success:
+        - houdini_gsplat_relighting__prepare_gsplat_sop_chain
+      on-failure:
+        - houdini_scene__get_node_info
+
+  - name: prepare_gsplat_sop_chain
+    description: >-
+      Append the installed Labs Normals from GSplats and/or Delight GSplats
+      SOPs to an existing GSplat output, preserving the source and returning
+      the actual node paths and output attributes. Rolls back newly created
+      nodes if the chain cannot be built.
+    source_file: scripts/prepare_gsplat_sop_chain.py
+    execution: sync
+    affinity: main
+    group: gsplat-prep
+    read_only: false
+    destructive: false
+    idempotent: false
+    risk: medium
+    search_aliases: [prepare gsplat, generate splat normals, extract splat albedo, delight gaussian splat]
+    produces: [gsplat_sop_chain]
+    input_schema:
+      type: object
+      required: [node_path]
+      properties:
+        node_path:
+          type: string
+          description: Absolute Houdini SOP node path containing the source GSplats.
+        create_normals:
+          type: boolean
+          default: true
+          description: Append Labs Normals from GSplats.
+        create_albedo:
+          type: boolean
+          default: true
+          description: Append Labs Delight GSplats, which writes the albedo attribute.
+        name_prefix:
+          type: string
+          default: gsplat_relight
+          description: Prefix for generated node names.
+        cook:
+          type: boolean
+          default: true
+          description: Cook the final generated SOP after wiring it.
+    next-tools:
+      on-success:
+        - houdini_gsplat_relighting__create_gsplat_relight_lop
+      on-failure:
+        - houdini_node_graph__get_connections
+
+  - name: create_gsplat_relight_lop
+    description: >-
+      Create and connect a Labs Relight GSplats LOP after a Solaris input,
+      optionally adding USD Light LOPs for a key, fill, dome, or other relight
+      lights. Applies only parameters that exist in the installed Houdini/Labs
+      build and reports unsupported version-specific names.
+    source_file: scripts/create_gsplat_relight_lop.py
+    execution: sync
+    affinity: main
+    group: gsplat-solaris
+    read_only: false
+    destructive: false
+    idempotent: false
+    risk: medium
+    search_aliases: [relight gsplat in solaris, labs relight gsplats, usd gsplat lights, gsplat shadow bias]
+    produces: [gsplat_relight_stage]
+    input_schema:
+      type: object
+      required: [lop_node_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute Solaris LOP node providing the GSplat stage.
+        camera_path:
+          type: string
+          description: Optional USD/Houdini camera path used for specular relighting.
+        collision_path:
+          type: string
+          description: Optional SOP/LOP collision geometry path for shadow rays.
+        enable_shadows:
+          type: boolean
+          default: true
+          description: Enable GSplat shadow tracing when supported.
+        shadow_bias:
+          type: number
+          minimum: 0
+          description: Optional manual shadow bias override.
+        lights:
+          type: array
+          description: Optional USD Light LOP specs; each item has name, type, intensity, color, exposure, prim_path, and environment_texture.
+          items:
+            type: object
+            required: [name, type]
+            properties:
+              name: {type: string}
+              type: {type: string, enum: [Dome, Distant, Sphere, Rectangle, Disk, Cylinder, Point]}
+              prim_path: {type: string}
+              intensity: {type: number}
+              exposure: {type: number}
+              color: {type: array, items: {type: number}, minItems: 3, maxItems: 3}
+              environment_texture: {type: string}
+        parameters:
+          type: object
+          description: Optional exact Labs parameter overrides for the installed build.
+    next-tools:
+      on-success:
+        - houdini_usd_lops__list_stage_prims
+        - houdini_parameters__get_parms
+      on-failure:
+        - houdini_scene__get_node_info
+
+  - name: create_gsplat_copernicus_raster
+    description: >-
+      Create a Copernicus SOP Import plus Rasterize GSplats chain, optionally
+      wiring a Camera Import COP and Sharpen, HSV, Gamma, and Premult image
+      refinement nodes. Enables H22 external-SOP mode, applies the native
+      Copernicus resolution contract, and reports every created output.
+    source_file: scripts/create_gsplat_copernicus_raster.py
+    execution: sync
+    affinity: main
+    group: gsplat-copernicus
+    read_only: false
+    destructive: false
+    idempotent: false
+    risk: medium
+    search_aliases: [rasterize gsplats, copernicus gsplat, camera rasterize splat, gsplat image refinement]
+    produces: [gsplat_copernicus_chain]
+    input_schema:
+      type: object
+      required: [copnet_path, sop_path]
+      properties:
+        copnet_path:
+          type: string
+          description: Absolute Copernicus COP network path, normally under /img.
+        sop_path:
+          type: string
+          description: Absolute SOP path of the prepared or relit GSplats.
+        camera_path:
+          type: string
+          description: Optional Houdini camera path for Camera Import COP.
+        attribute_name:
+          type: string
+          default: Cd
+          description: GSplat output attribute to rasterize.
+        resolution:
+          type: array
+          items: {type: integer, minimum: 1}
+          minItems: 2
+          maxItems: 2
+          description: Optional COP network resolution hint.
+        sharpen_amount:
+          type: number
+          minimum: 0
+          description: Optional Sharpen COP amplitude.
+        saturation_scale:
+          type: number
+          minimum: 0
+          description: Optional HSV saturation multiplier.
+        value_scale:
+          type: number
+          minimum: 0
+          description: Optional HSV value/brightness multiplier.
+        gamma:
+          type: number
+          exclusiveMinimum: 0
+          description: Optional Gamma COP value.
+        premultiply_alpha:
+          type: boolean
+          default: true
+          description: Append a Premult COP as the final display/render output.
+    next-tools:
+      on-success:
+        - houdini_parameters__set_parms
+        - houdini_render__capture_viewport
+      on-failure:
+        - houdini_scene__get_node_info

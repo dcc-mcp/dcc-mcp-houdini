@@ -26,8 +26,8 @@ def get_render_stats(
             info_sources.append(node.path())
 
             # Resolution
-            res_x = eval_first_parm(node, ("res_overridex", "resx", "vm_resx"))
-            res_y = eval_first_parm(node, ("res_overridey", "resy", "vm_resy"))
+            res_x = eval_first_parm(node, ("res_overridex", "resx", "vm_resx", "res1"))
+            res_y = eval_first_parm(node, ("res_overridey", "resy", "vm_resy", "res2"))
             if res_x and res_y:
                 stats["resolution"] = [int(res_x), int(res_y)]
 

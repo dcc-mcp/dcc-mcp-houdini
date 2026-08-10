@@ -60,17 +60,15 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Six-DCC production showcase
+## Houdini 22 GSplat relighting showcase
 
-![Procedural Houdini portal particles in the six-DCC showcase](docs/showcase/six-dcc-portal-particles.png)
+![Original honeybee GSplat workflow from capture through relighting to verified output](docs/images/houdini-gsplat-relighting-showcase.webp)
 
-This image is a real Blender render of a Houdini-authored animated effect.
-In the tested six-instance workflow, Maya supplied the animated IK/FK rig,
-3ds Max baked and re-exported the character, Houdini 21 generated 420
-procedural particle instances and a 48-frame Alembic cache, and a second
-Houdini GUI instance re-imported that cache before Blender assembled the final
-shot. The rock asset came from the no-token `dcc-asset-polyhaven` marketplace
-skill and is CC0-1.0.
+The original DCC-MCP honeybee illustrates the typed Houdini 22 workflow:
+inspect the captured splat, reconstruct normals and albedo with SideFX Labs,
+relight it with editable Solaris USD lights, then rasterize and refine the
+camera result in Copernicus. The visual is an in-house workflow illustration;
+tool acceptance is backed by live Houdini execution and rendered output.
 
 ## Features
 
@@ -226,7 +224,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (30 packages, 185 tools)
+## Bundled Skills (33 packages, 220 tools)
 
 Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
@@ -279,6 +277,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-pipeline` | `set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package` |
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
+| `houdini-gsplat-relighting` | `inspect_gsplat_relighting_input`, `prepare_gsplat_sop_chain`, `create_gsplat_relight_lop`, `create_gsplat_copernicus_raster` |
 
 ## CI and Houdini Docker
 

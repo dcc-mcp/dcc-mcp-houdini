@@ -80,6 +80,8 @@ jobs:
               "dcc_mcp_houdini/skills/houdini-scene/SKILL.md",
               "dcc_mcp_houdini/skills/houdini-nodes/SKILL.md",
               "dcc_mcp_houdini/skills/houdini-materials/SKILL.md",
+              "dcc_mcp_houdini/skills/houdini-gsplat-relighting/SKILL.md",
+              "dcc_mcp_houdini/skills/houdini-gsplat-relighting/tools.yaml",
           }
           missing = sorted(required - names)
           assert not missing, missing

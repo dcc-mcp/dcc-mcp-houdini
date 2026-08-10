@@ -39,8 +39,9 @@ def set_render_settings(
                 unsupported.append("camera")
         clamped = clamp_resolution(resolution)
         if clamped is not None:
-            x = set_first_parm(rop, ("res_overridex", "resx", "vm_resx"), clamped[0])
-            y = set_first_parm(rop, ("res_overridey", "resy", "vm_resy"), clamped[1])
+            set_first_parm(rop, ("setres", "set_resolution"), True)
+            x = set_first_parm(rop, ("res_overridex", "resx", "vm_resx", "res1"), clamped[0])
+            y = set_first_parm(rop, ("res_overridey", "resy", "vm_resy", "res2"), clamped[1])
             if x or y:
                 applied["resolution"] = clamped
             else:
@@ -50,7 +51,7 @@ def set_render_settings(
         if output_path is not None:
             used = set_first_parm(
                 rop,
-                ("picture", "vm_picture", "lopoutput", "sopoutput", "filename", "outputimage"),
+                ("picture", "vm_picture", "copoutput", "lopoutput", "sopoutput", "filename", "outputimage"),
                 output_path,
             )
             if used:

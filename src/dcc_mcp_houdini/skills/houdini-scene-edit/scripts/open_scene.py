@@ -39,11 +39,19 @@ def open_scene(file_path: str, force: bool = False) -> dict:
                     "Cannot safely load over the current scene when its dirty state is unknown; call with force=true to discard it",
                     possible_solutions=["Re-run open_scene with force=true to discard the current scene"],
                 )
-        hou.hipFile.load(file_path, suppress_save_prompt=True, ignore_load_warnings=False)
+        load_warnings = []
+        try:
+            hou.hipFile.load(file_path, suppress_save_prompt=True, ignore_load_warnings=False)
+        except hou.LoadWarning as exc:
+            # HOM raises LoadWarning *after* loading a usable scene. Treating it
+            # as a hard failure makes callers retry against a scene that has
+            # already changed underneath them.
+            load_warnings = [line.strip() for line in str(exc).splitlines() if line.strip()]
         return skill_success(
             "Opened hip file",
             file_path=hou.hipFile.path(),
             forced=bool(force),
+            warnings=load_warnings,
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to open hip file")
