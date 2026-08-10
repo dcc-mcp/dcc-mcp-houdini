@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.31.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.30.0...v0.31.0) (2026-08-10)
+
+
+### Features
+
+* add Houdini 22 GSplat relighting workflow ([#212](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/212)) ([84b9ae0](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/84b9ae02e00650753d7a3e886d0411ce68001db5))
+
 ## [0.30.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.29.0...v0.30.0) (2026-08-02)
 
 
