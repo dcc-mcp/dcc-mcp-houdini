@@ -60,16 +60,17 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Houdini 22 GSplat relighting showcase
+## Reconstructed high-poly honeybee showcase
 
-![Reconstructed high-detail DCC-MCP honeybee rendered in Karma with green, violet, and orange studio lighting](docs/showcase/houdini-gsplat-honeybee-highpoly.webp)
+![Original high-density DCC-MCP honeybee rendered in Houdini 22, Maya 2026, and Unreal Engine 5.8](docs/showcase/houdini-gsplat-honeybee-highpoly.webp)
 
-This is a real Karma render of an in-house reconstructed honeybee, not a sample
-asset or image-generation mockup. Its high-detail USD scene includes 30,100
-geometry fur curves, 1,440 baked compound-eye lenses, veined wing membranes,
-segmented legs, five material textures, and four editable lights. A matching
-66,230-point GSplat source drives the typed SideFX Labs preparation, Solaris
-relighting, and Copernicus raster refinement workflow.
+These are native renders of the same original DCC-MCP honeybee, not a sample
+asset or image-generation mockup. Houdini 22 reconstructs the high-detail scene
+and prepares its 66,230-point GSplat source for typed SideFX Labs, Solaris, and
+Copernicus relighting. A portable USD handoff bakes the dense fur and wing-vein
+curves to renderable mesh while retaining the compound-eye lenses, ten material
+assignments, five relative textures, and editable studio lighting for Arnold
+and Unreal Movie Render Queue output.
 
 ## Features
 
