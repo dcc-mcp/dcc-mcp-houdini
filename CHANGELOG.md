@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.31.5](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.4...v0.31.5) (2026-08-11)
+
+
+### Bug Fixes
+
+* keep Husk renders off the Houdini UI thread ([#226](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/226)) ([9b1faef](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9b1faef2e02de0e835486006ee2141d85bdac990))
+
 ## [0.31.4](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.3...v0.31.4) (2026-08-11)
 
 
