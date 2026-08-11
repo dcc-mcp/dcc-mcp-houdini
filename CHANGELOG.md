@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.31.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.1...v0.31.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* require abi3 core wheels in quickinstall ([#220](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/220)) ([890302c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/890302cc2f128e1a4ddba51d6de1ba44dbdfc4a0))
+
 ## [0.31.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.0...v0.31.1) (2026-08-11)
 
 
