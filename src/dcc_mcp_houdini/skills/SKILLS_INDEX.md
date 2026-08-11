@@ -59,6 +59,6 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | KineFX character rig | `load_skill("houdini-kinefx")` → `houdini_kinefx__create_rig` → `houdini_kinefx__set_rig_pose` → `houdini_kinefx__capture_joints` → `houdini_kinefx__apply_mocap` |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
 | Karma render setup | `load_skill("houdini-karma")` → `houdini_karma__configure_karma` → `houdini_karma__set_material_override` → `houdini_karma__configure_light_mixer` → `houdini_karma__set_image_output` |
-| Husk CLI render | `load_skill("houdini-husk")` → `houdini_husk__create_snapshot` → `houdini_husk__create_checkpoint` → `houdini_husk__set_husk_options` → `houdini_husk__render_with_husk` |
+| Husk CLI render | `load_skill("houdini-husk")` → `houdini_husk__create_snapshot` → `houdini_husk__render_with_husk` → poll `houdini_husk__get_husk_job` → optional `houdini_husk__cancel_husk_job` |
 | Render layers & AOVs | `load_skill("houdini-render")` → `houdini_render__create_render_layer` → `houdini_render__configure_aovs` → `houdini_render__get_render_stats` |
 | Takes management | `load_skill("houdini-render")` → `houdini_render__manage_takes(action="create")` → `houdini_render__manage_takes(action="switch")` → `houdini_render__manage_takes(action="list")` |

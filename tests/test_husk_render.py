@@ -5,12 +5,16 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import yaml
 from skill_loader import skill_script_import_context
+
+from dcc_mcp_houdini._status_io import read_status, write_status
 
 SCRIPTS = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills" / "houdini-husk" / "scripts"
 
@@ -72,67 +76,148 @@ def test_husk_environment_restores_houdini_default_paths() -> None:
     assert base == {"HOUDINI_PATH": "custom", "HOUDINI_SCRIPT_PATH": ""}
 
 
-def test_render_with_husk_returns_failure_for_nonzero_exit(tmp_path: Path) -> None:
+def test_render_with_husk_launches_isolated_job_without_waiting(tmp_path: Path) -> None:
     render = _load_script("render_with_husk.py")
-    process = SimpleNamespace(returncode=1, stdout="", stderr="delegate failed")
+    launched = {"job_id": "abc123", "state": "queued", "pid": 4321}
 
     with patch.object(render, "find_husk", return_value="husk"), patch.object(
-        render.subprocess, "run", return_value=process
-    ):
+        render, "launch_husk_job", return_value=launched
+    ) as launch:
         result = render.render_with_husk(str(tmp_path / "scene.usda"), str(tmp_path / "beauty.exr"))
 
-    assert result["success"] is False
-    assert result["context"]["returncode"] == 1
-    assert result["context"]["written_files"] == []
-    assert "delegate failed" in result["error"]
+    assert result["success"] is True
+    assert result["context"]["background"] is True
+    assert result["context"]["job_id"] == "abc123"
+    assert result["context"]["state"] == "queued"
+    launch.assert_called_once()
 
 
-def test_render_with_husk_creates_parent_and_reports_single_frame_pattern(tmp_path: Path) -> None:
+def test_expected_output_paths_reports_single_frame_pattern(tmp_path: Path) -> None:
     render = _load_script("render_with_husk.py")
     output_pattern = tmp_path / "new" / "review" / "beauty.$F4.exr"
     expected_output = tmp_path / "new" / "review" / "beauty.0007.exr"
-    process = SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    def run_husk(*_args, **_kwargs):
-        assert output_pattern.parent.is_dir()
-        expected_output.write_bytes(b"render")
-        return process
-
-    with patch.object(render, "find_husk", return_value="husk"), patch.object(
-        render.subprocess, "run", side_effect=run_husk
-    ):
-        result = render.render_with_husk(
-            str(tmp_path / "scene.usda"),
-            str(output_pattern),
-            frame=7,
-        )
-
-    assert result["success"] is True
-    assert result["context"]["written_files"] == [str(expected_output)]
+    assert render._expected_output_paths(str(output_pattern), 7, None) == [str(expected_output)]
 
 
-def test_render_with_husk_reports_frame_range_pattern(tmp_path: Path) -> None:
+def test_expected_output_paths_reports_frame_range_pattern(tmp_path: Path) -> None:
     render = _load_script("render_with_husk.py")
     output_pattern = tmp_path / "sequence" / "beauty.$F4.exr"
     expected_outputs = [output_pattern.parent / f"beauty.{frame:04d}.exr" for frame in (1, 3, 5)]
-    process = SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    def run_husk(*_args, **_kwargs):
-        for output in expected_outputs:
-            output.write_bytes(b"render")
-        return process
+    assert render._expected_output_paths(str(output_pattern), None, [1, 5, 2]) == [
+        str(output) for output in expected_outputs
+    ]
 
-    with patch.object(render, "find_husk", return_value="husk"), patch.object(
-        render.subprocess, "run", side_effect=run_husk
+
+def test_husk_tools_use_nonblocking_any_affinity_contract() -> None:
+    tools_path = SCRIPTS.parent / "tools.yaml"
+    tools = yaml.safe_load(tools_path.read_text(encoding="utf-8"))["tools"]
+    by_name = {tool["name"]: tool for tool in tools}
+
+    assert by_name["render_with_husk"]["execution"] == "sync"
+    assert by_name["render_with_husk"]["affinity"] == "any"
+    assert by_name["get_husk_job"]["affinity"] == "any"
+    assert by_name["cancel_husk_job"]["affinity"] == "any"
+
+
+def test_husk_worker_records_nonzero_exit_without_touching_host(tmp_path: Path) -> None:
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    write_status(
+        status_path,
+        {
+            "job_id": "abc123",
+            "job_kind": "husk_render",
+            "expected_outputs": [],
+            "output_glob": "",
+            "timeout_secs": 30,
+        },
+    )
+
+    with patch.object(sys, "argv", ["_husk_worker.py", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess,
+        "run",
+        return_value=SimpleNamespace(returncode=7),
     ):
-        result = render.render_with_husk(
-            str(tmp_path / "scene.usda"),
-            str(output_pattern),
-            frame_range=[1, 5, 2],
-        )
+        worker.main()
 
-    assert result["success"] is True
-    assert result["context"]["written_files"] == [str(output) for output in expected_outputs]
+    status = read_status(status_path)
+    assert status["state"] == "failed"
+    assert status["returncode"] == 7
+    assert status["error"] == "husk exited with code 7"
+
+
+def test_husk_worker_verifies_written_output(tmp_path: Path) -> None:
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    output = tmp_path / "beauty.0001.exr"
+    write_status(
+        status_path,
+        {
+            "job_id": "def456",
+            "job_kind": "husk_render",
+            "expected_outputs": [str(output)],
+            "output_glob": str(tmp_path / "beauty.*.exr"),
+            "timeout_secs": 30,
+        },
+    )
+
+    def render(*_args, **_kwargs):
+        output.write_bytes(b"render")
+        return SimpleNamespace(returncode=0)
+
+    with patch.object(sys, "argv", ["_husk_worker.py", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess,
+        "run",
+        side_effect=render,
+    ):
+        worker.main()
+
+    status = read_status(status_path)
+    assert status["state"] == "completed"
+    assert status["written_files"] == [str(output)]
+    assert status["output_verification"]["state"] == "verified"
+
+
+def test_husk_job_launch_is_nonblocking_and_pollable(tmp_path: Path) -> None:
+    jobs = _load_script("_husk_jobs.py")
+    output = tmp_path / "beauty.exr"
+    source_root = SCRIPTS.parents[3]
+    environment = dict(os.environ)
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [str(source_root)] + ([existing_pythonpath] if existing_pythonpath else [])
+    )
+    command = [
+        sys.executable,
+        "-c",
+        "import time; from pathlib import Path; time.sleep(1.2); Path({!r}).write_bytes(b'render')".format(str(output)),
+    ]
+
+    started = time.monotonic()
+    with patch.object(jobs, "find_hython", return_value=sys.executable):
+        launched = jobs.launch_husk_job(
+            command=command,
+            output_path=str(output),
+            expected_outputs=[str(output)],
+            output_glob=str(output),
+            environment=environment,
+            timeout_secs=30,
+        )
+    launch_elapsed = time.monotonic() - started
+
+    assert launch_elapsed < 1.0
+    assert launched["state"] == "queued"
+    deadline = time.monotonic() + 10.0
+    status = jobs.read_husk_job(launched["job_id"])
+    while status["state"] not in {"completed", "failed", "cancelled", "interrupted"}:
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+        status = jobs.read_husk_job(launched["job_id"])
+
+    assert status["state"] == "completed"
+    assert status["written_files"] == [str(output)]
 
 
 class _SnapshotParm:
