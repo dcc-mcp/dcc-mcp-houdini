@@ -42,8 +42,28 @@ def ui_action(action: str, value: Optional[str] = None) -> dict:
             target = next((d for d in hou.ui.desktops() if d.name() == value), None)
             if target is None:
                 return skill_error("Desktop not found", "No desktop named {!r}".format(value))
+            # Switching layouts destroys and recreates pane widgets.  Doing so
+            # inside the adapter's event-loop dispatch callback can invalidate
+            # the callback stack and terminate Houdini.  Defer the mutation to
+            # the next UI event, after the MCP call has returned.
+            post_event_callback = getattr(hou.ui, "postEventCallback", None)
+            if callable(post_event_callback):
+                post_event_callback(target.setAsCurrent)
+                return skill_success(
+                    "Scheduled desktop switch",
+                    supported=True,
+                    action=action,
+                    desktop=value,
+                    deferred=True,
+                )
             target.setAsCurrent()
-            return skill_success("Switched desktop", supported=True, action=action, desktop=value)
+            return skill_success(
+                "Switched desktop",
+                supported=True,
+                action=action,
+                desktop=value,
+                deferred=False,
+            )
 
         if action == "display_message":
             hou.ui.displayMessage(value or "")

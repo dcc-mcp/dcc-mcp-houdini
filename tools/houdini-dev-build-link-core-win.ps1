@@ -49,10 +49,12 @@ if (-not (Test-Path $HoudiniBase)) {
 }
 
 # Find hython executable (Python version may vary)
-$HythonCandidates = @(
-    "$HoudiniBase\bin\hython.exe",
-    Get-ChildItem "$HoudiniBase\python*\python.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-)
+$HythonCandidates = @("$HoudiniBase\bin\hython.exe")
+$BundledPython = Get-ChildItem "$HoudiniBase\python*\python.exe" -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($BundledPython) {
+    $HythonCandidates += $BundledPython.FullName
+}
 
 $Hython = $null
 foreach ($candidate in $HythonCandidates) {

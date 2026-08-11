@@ -173,3 +173,23 @@ class TestDevUi:
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.ui_action("delete_everything")
         assert result["success"] is False
+
+    def test_ui_action_defers_desktop_switch_until_next_event(self) -> None:
+        mod = _load_script("ui_action.py")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        target = MagicMock()
+        target.name.return_value = "TechnicalWide"
+        mock_hou.ui.desktops.return_value = [target]
+        callbacks = []
+        mock_hou.ui.postEventCallback.side_effect = callbacks.append
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.ui_action("set_desktop", value="TechnicalWide")
+
+        assert result["success"] is True
+        assert result["context"]["deferred"] is True
+        target.setAsCurrent.assert_not_called()
+        assert callbacks == [target.setAsCurrent]
+        callbacks[0]()
+        target.setAsCurrent.assert_called_once_with()
