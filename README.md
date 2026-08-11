@@ -1,5 +1,7 @@
 # dcc-mcp-houdini
 
+[![MCP Toplist](https://mcptoplist.com/badge/pulsemcp%2Fdcc-houdini.svg)](https://mcptoplist.com/server/pulsemcp%2Fdcc-houdini)
+
 <p align="center">
   <img src="docs/assets/dcc-mcp-houdini.svg" alt="DCC-MCP · HOUDINI" width="600">
 </p>
