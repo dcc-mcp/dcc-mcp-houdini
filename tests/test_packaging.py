@@ -195,6 +195,20 @@ def test_verify_quickinstall_zip_rejects_bundled_core_drift(tmp_path: Path) -> N
         pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.70")
 
 
+def test_verify_quickinstall_zip_rejects_python_specific_core_only(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+
+    zip_path = tmp_path / "dcc_mcp_houdini_quickinstall_win64_v0.10.1.zip"
+    _write_quickinstall_zip(
+        zip_path,
+        "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.19.92-cp37-cp37m-win_amd64.whl",
+    )
+
+    with pytest.raises(RuntimeError, match="require an abi3 build"):
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.19.92")
+
+
 def test_verify_quickinstall_zip_requires_scene_load_hook(tmp_path: Path) -> None:
     pkg = _load_packaging_script()
 
@@ -455,3 +469,24 @@ def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
         "dcc_mcp_core-0.18.2-cp311-cp311-win_amd64.whl",
         "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl",
     ]
+
+
+def test_resolve_core_version_skips_release_without_cross_platform_abi3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pkg = _load_packaging_script()
+    releases = {
+        "0.19.91": [
+            {"filename": "dcc_mcp_core-0.19.91-cp38-abi3-win_amd64.whl"},
+            {"filename": "dcc_mcp_core-0.19.91-cp38-abi3-manylinux_2_17_x86_64.whl"},
+            {"filename": "dcc_mcp_core-0.19.91-cp38-abi3-macosx_11_0_universal2.whl"},
+        ],
+        "0.19.92": [
+            {"filename": "dcc_mcp_core-0.19.92-cp37-cp37m-win_amd64.whl"},
+            {"filename": "dcc_mcp_core-0.19.92-cp38-abi3-manylinux_2_17_x86_64.whl"},
+            {"filename": "dcc_mcp_core-0.19.92-cp38-abi3-macosx_11_0_universal2.whl"},
+        ],
+    }
+    monkeypatch.setattr(pkg, "_fetch_json", lambda _url: {"releases": releases})
+
+    assert pkg.resolve_core_version() == "0.19.91"

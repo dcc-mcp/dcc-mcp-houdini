@@ -79,9 +79,28 @@ def assert_versions_aligned() -> None:
 def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
     data = _fetch_json(PYPI_URL.format(package=CORE_PACKAGE))
     available = [Version(v) for v in data["releases"].keys() if not Version(v).is_prerelease]
-    compatible = [v for v in available if v >= Version(min_version) and v < Version("1.0.0")]
+    compatible = [
+        v
+        for v in available
+        if v >= Version(min_version)
+        and v < Version("1.0.0")
+        and all(
+            any(
+                "abi3" in str(item.get("filename", ""))
+                and _wheel_matches_platform(str(item.get("filename", "")), platform)
+                for item in data["releases"][str(v)]
+            )
+            for platform in PLATFORMS
+        )
+    ]
     if not compatible:
-        raise RuntimeError("No compatible {} release found >= {}".format(CORE_PACKAGE, min_version))
+        raise RuntimeError(
+            "No compatible {} release found >= {} with abi3 wheels for {}".format(
+                CORE_PACKAGE,
+                min_version,
+                ", ".join(PLATFORMS),
+            )
+        )
     return str(sorted(compatible)[-1])
 
 
@@ -544,7 +563,10 @@ def _readme(version: str, core_version: str, platform: str, explicit_core_versio
     if explicit_core_version:
         core_policy = "explicit validated dcc-mcp-core {}.".format(core_version)
     else:
-        core_policy = "latest non-prerelease dcc-mcp-core >= {},<1.0.0 at assembly time.".format(MIN_CORE_VERSION)
+        core_policy = (
+            "latest non-prerelease dcc-mcp-core >= {},<1.0.0 with abi3 wheels "
+            "for every release platform at assembly time."
+        ).format(MIN_CORE_VERSION)
     return """dcc-mcp-houdini quick install package
 ======================================
 
@@ -634,6 +656,13 @@ def verify_quickinstall_zip(
     wrong_platform = [name for name in core_wheels if not _wheel_matches_platform(name, platform)]
     if wrong_platform:
         raise RuntimeError("Core wheels do not match platform {}: {}".format(platform, ", ".join(wrong_platform)))
+    if not any("abi3" in name for name in core_wheels):
+        raise RuntimeError(
+            "Core wheels for {} require an abi3 build for supported Houdini Python versions: {}".format(
+                platform,
+                ", ".join(core_wheels),
+            )
+        )
 
     return {
         "platform": platform,
