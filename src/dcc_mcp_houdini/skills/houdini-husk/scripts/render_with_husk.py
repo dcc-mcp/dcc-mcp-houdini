@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from typing import List, Optional
@@ -15,6 +16,42 @@ from _husk_common import (  # noqa: E402
     resolve_husk_renderer,
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+
+_FRAME_TOKEN = re.compile(r"\$F(\d*)")
+
+
+def _expand_frame_token(output_path: str, frame: float) -> str:
+    """Expand Houdini's $F/$F4-style token for artifact verification."""
+    if not float(frame).is_integer():
+        return output_path
+    frame_number = int(frame)
+
+    def replace(match: re.Match[str]) -> str:
+        width = int(match.group(1) or 0)
+        return str(frame_number).zfill(width) if width else str(frame_number)
+
+    return _FRAME_TOKEN.sub(replace, output_path)
+
+
+def _expected_output_paths(
+    output_path: str,
+    frame: Optional[int],
+    frame_range: Optional[List[float]],
+) -> list[str]:
+    if frame is not None:
+        return [_expand_frame_token(output_path, frame)]
+    if frame_range:
+        start, end = float(frame_range[0]), float(frame_range[1])
+        increment = float(frame_range[2]) if len(frame_range) > 2 else 1.0
+        if increment <= 0:
+            return []
+        frame_values = []
+        current = start
+        while current <= end + 1.0e-9:
+            frame_values.append(current)
+            current += increment
+        return [_expand_frame_token(output_path, value) for value in frame_values]
+    return [output_path]
 
 
 def render_with_husk(
@@ -79,6 +116,10 @@ def render_with_husk(
         )
 
     try:
+        output_directory = os.path.dirname(os.path.abspath(output_path))
+        if output_directory:
+            os.makedirs(output_directory, exist_ok=True)
+
         resolved_renderer = resolve_husk_renderer(renderer)
         cmd = build_husk_command(
             usd_file=usd_file,
@@ -101,15 +142,13 @@ def render_with_husk(
         )
         elapsed = round(time.time() - start, 3)
 
-        written_files: list = []
-        if os.path.isfile(output_path):
-            written_files.append(output_path)
-        # Check for frame-padded files
-        if frame_range and not written_files:
+        written_files = [
+            path for path in _expected_output_paths(output_path, frame, frame_range) if os.path.isfile(path)
+        ]
+        if not written_files and _FRAME_TOKEN.search(output_path):
             import glob
 
-            base, ext = os.path.splitext(output_path)
-            written_files = sorted(glob.glob("{}.*{}".format(base, ext)))
+            written_files = sorted(glob.glob(_FRAME_TOKEN.sub("*", output_path)))
 
         context = {
             "usd_file": usd_file,
