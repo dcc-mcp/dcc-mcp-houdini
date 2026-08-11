@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 from typing import Any, Optional, Sequence
@@ -120,9 +121,29 @@ def build_husk_command(
         cmd.extend(["--res", str(int(resolution[0])), str(int(resolution[1]))])
 
     if frame_range and len(frame_range) >= 2:
-        cmd.extend(["--frame", str(float(frame_range[0])), str(float(frame_range[1]))])
+        start = float(frame_range[0])
+        end = float(frame_range[1])
+        increment = float(frame_range[2]) if len(frame_range) >= 3 else 1.0
+        if increment <= 0:
+            raise ValueError("frame range increment must be greater than zero")
+        if end < start:
+            raise ValueError("frame range end must not be less than start")
+        frame_count = int(math.floor((end - start) / increment)) + 1
+        cmd.extend(
+            [
+                "--frame",
+                str(start),
+                "--frame-count",
+                str(frame_count),
+                "--frame-inc",
+                str(increment),
+            ]
+        )
     elif frame is not None:
-        cmd.extend(["--frame", str(int(frame))])
+        # Husk derives frame count from USD stage metadata unless it is
+        # explicitly overridden.  A single-frame request must therefore
+        # clamp the count even when the stage advertises an animation range.
+        cmd.extend(["--frame", str(int(frame)), "--frame-count", "1"])
 
     if output_path:
         cmd.extend(["--output", output_path])

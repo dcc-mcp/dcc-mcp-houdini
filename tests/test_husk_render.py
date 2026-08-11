@@ -33,6 +33,34 @@ def test_build_husk_command_resolves_karma_alias() -> None:
     assert command[:3] == ["husk", "--renderer", "BRAY_HdKarma"]
 
 
+def test_build_husk_command_clamps_single_frame() -> None:
+    common = _load_script("_husk_common.py")
+
+    command = common.build_husk_command("scene.usda", "beauty.exr", frame=8)
+
+    assert command[command.index("--frame") : command.index("--frame") + 4] == [
+        "--frame",
+        "8",
+        "--frame-count",
+        "1",
+    ]
+
+
+def test_build_husk_command_converts_frame_range_to_husk_contract() -> None:
+    common = _load_script("_husk_common.py")
+
+    command = common.build_husk_command("scene.usda", "beauty.$F4.exr", frame_range=[1, 12, 2])
+
+    assert command[command.index("--frame") : command.index("--frame") + 6] == [
+        "--frame",
+        "1.0",
+        "--frame-count",
+        "6",
+        "--frame-inc",
+        "2.0",
+    ]
+
+
 def test_husk_environment_restores_houdini_default_paths() -> None:
     common = _load_script("_husk_common.py")
     base = {"HOUDINI_PATH": "custom", "HOUDINI_SCRIPT_PATH": ""}
