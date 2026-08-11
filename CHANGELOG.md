@@ -16,6 +16,21 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.31.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.0...v0.31.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* honor husk frame selection ([#218](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/218)) ([e13774d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e13774d0c0f88f2939788b44532cd37cb648d659))
+
+
+### Documentation
+
+* add cross-DCC honeybee showcase ([#217](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/217)) ([b211a82](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b211a82a70df55f301313df209fe35b46c6b9626))
+* add honeybee lookdev showcase ([#219](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/219)) ([a31be6a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/a31be6a68d1dcf335918c52bf2a673b87f09af8e))
+* replace honeybee showcase with high-poly render ([#216](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/216)) ([f8d7c59](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f8d7c5957719fc462fbcf099081316f46d147aba))
+* replace showcase with real honeybee render ([#214](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/214)) ([09f7920](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/09f79201f89defae66bf29b80b9d2a1f1021affc))
+
 ## [0.31.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.30.0...v0.31.0) (2026-08-10)
 
 
