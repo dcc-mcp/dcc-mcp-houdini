@@ -60,17 +60,22 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Reconstructed high-poly honeybee showcase
+## High-poly honeybee LookDev and KineFX showcase
+
+![Houdini 22 honeybee LookDev turntable showing topology, MaterialX PBR, Solaris lighting, calibration references, and KineFX animation](docs/showcase/houdini-honeybee-lookdev-turntable.gif)
+
+This native Houdini 22 capture follows the `lookdev-turntable` contract and
+uses one original reconstructed honeybee throughout. The sequence exposes
+178,716 topology edges across 64 anatomical meshes, MaterialX PBR fur, chitin,
+eyes and wings, Solaris HDRI lighting, a fixed camera-space ColorChecker and
+reference spheres, then a 37-joint KineFX animation rendered with Karma. Fixed
+exposure and color management keep the calibration references stable while the
+subject and lighting phases rotate independently.
+
+The same portable high-density asset was also rendered natively in Houdini 22,
+Maya 2026, and Unreal Engine 5.8:
 
 ![Original high-density DCC-MCP honeybee rendered in Houdini 22, Maya 2026, and Unreal Engine 5.8](docs/showcase/houdini-gsplat-honeybee-highpoly.webp)
-
-These are native renders of the same original DCC-MCP honeybee, not a sample
-asset or image-generation mockup. Houdini 22 reconstructs the high-detail scene
-and prepares its 66,230-point GSplat source for typed SideFX Labs, Solaris, and
-Copernicus relighting. A portable USD handoff bakes the dense fur and wing-vein
-curves to renderable mesh while retaining the compound-eye lenses, ten material
-assignments, five relative textures, and editable studio lighting for Arnold
-and Unreal Movie Render Queue output.
 
 ## Features
 
