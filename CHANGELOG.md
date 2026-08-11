@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.31.3](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.2...v0.31.3) (2026-08-11)
+
+
+### Bug Fixes
+
+* track husk frame outputs ([#222](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/222)) ([3fd03f7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3fd03f7ae0a36c916e6f764bbb41afaf939fb5d3))
+
 ## [0.31.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.1...v0.31.2) (2026-08-11)
 
 
