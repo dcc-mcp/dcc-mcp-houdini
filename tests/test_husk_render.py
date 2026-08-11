@@ -87,6 +87,54 @@ def test_render_with_husk_returns_failure_for_nonzero_exit(tmp_path: Path) -> No
     assert "delegate failed" in result["error"]
 
 
+def test_render_with_husk_creates_parent_and_reports_single_frame_pattern(tmp_path: Path) -> None:
+    render = _load_script("render_with_husk.py")
+    output_pattern = tmp_path / "new" / "review" / "beauty.$F4.exr"
+    expected_output = tmp_path / "new" / "review" / "beauty.0007.exr"
+    process = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def run_husk(*_args, **_kwargs):
+        assert output_pattern.parent.is_dir()
+        expected_output.write_bytes(b"render")
+        return process
+
+    with patch.object(render, "find_husk", return_value="husk"), patch.object(
+        render.subprocess, "run", side_effect=run_husk
+    ):
+        result = render.render_with_husk(
+            str(tmp_path / "scene.usda"),
+            str(output_pattern),
+            frame=7,
+        )
+
+    assert result["success"] is True
+    assert result["context"]["written_files"] == [str(expected_output)]
+
+
+def test_render_with_husk_reports_frame_range_pattern(tmp_path: Path) -> None:
+    render = _load_script("render_with_husk.py")
+    output_pattern = tmp_path / "sequence" / "beauty.$F4.exr"
+    expected_outputs = [output_pattern.parent / f"beauty.{frame:04d}.exr" for frame in (1, 3, 5)]
+    process = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def run_husk(*_args, **_kwargs):
+        for output in expected_outputs:
+            output.write_bytes(b"render")
+        return process
+
+    with patch.object(render, "find_husk", return_value="husk"), patch.object(
+        render.subprocess, "run", side_effect=run_husk
+    ):
+        result = render.render_with_husk(
+            str(tmp_path / "scene.usda"),
+            str(output_pattern),
+            frame_range=[1, 5, 2],
+        )
+
+    assert result["success"] is True
+    assert result["context"]["written_files"] == [str(output) for output in expected_outputs]
+
+
 class _SnapshotParm:
     def __init__(self, rop, name: str) -> None:
         self.rop = rop
