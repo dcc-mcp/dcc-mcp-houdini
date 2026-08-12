@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -42,6 +43,36 @@ def test_resolve_minimal_mode_default() -> None:
 
     with patch.dict("os.environ", {}, clear=True):
         assert resolve_minimal_mode_enabled() is True
+
+
+def test_sync_monolithic_tools_delegate_affinity_to_houdini_bridge() -> None:
+    from dcc_mcp_core import scan_and_load
+
+    skills_root = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
+    skills, _skipped = scan_and_load(dcc_name="houdini", extra_paths=[str(skills_root)])
+    declarations = {
+        (skill.name, tool.name): tool
+        for skill in skills
+        for tool in skill.tools
+        if (skill.name, tool.name)
+        in {
+            ("houdini-nodes", "create_node"),
+            ("houdini-automation", "run_python_file"),
+            ("houdini-geometry", "create_curve_guides"),
+        }
+    }
+
+    assert set(declarations) == {
+        ("houdini-nodes", "create_node"),
+        ("houdini-automation", "run_python_file"),
+        ("houdini-geometry", "create_curve_guides"),
+    }
+    for declaration in declarations.values():
+        assert declaration.execution == "sync"
+        assert declaration.job_strategy == "monolithic"
+        assert declaration.timeout_hint_secs == 0
+        assert declaration.requires_in_process is True
+        assert declaration.enforce_thread_affinity is False
 
 
 def test_houdini_server_options_port() -> None:

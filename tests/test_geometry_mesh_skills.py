@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import math
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -54,6 +56,230 @@ class TestGeometrySkills:
         with patch.dict(sys.modules, {"hou": MagicMock()}):
             result = mod.create_primitive("/obj/geo1", "torus")
         assert result["success"] is False
+
+    def test_create_curve_guides_builds_bounded_root_to_tip_geometry(self) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+
+        class FakePoint:
+            def __init__(self) -> None:
+                self.position = None
+                self.attributes = {}
+
+            def setPosition(self, value) -> None:
+                self.position = tuple(value)
+
+            def setAttribValue(self, name, value) -> None:
+                self.attributes[name] = value
+
+        class FakePrimitive:
+            def __init__(self) -> None:
+                self.vertices = []
+                self.attributes = {}
+
+            def setIsClosed(self, value) -> None:
+                assert value is False
+
+            def addVertex(self, point) -> None:
+                self.vertices.append(point)
+
+            def setAttribValue(self, name, value) -> None:
+                self.attributes[name] = value
+
+        class FakeBounds:
+            def minvec(self):
+                return (0.0, 0.0, 0.0)
+
+            def maxvec(self):
+                return (2.0, 1.0, 0.0)
+
+            def sizevec(self):
+                return (2.0, 1.0, 0.0)
+
+        class FakeGeometry:
+            def __init__(self) -> None:
+                self.points = []
+                self.primitives = []
+                self.attributes = []
+
+            def addAttrib(self, owner, name, default):
+                self.attributes.append((owner, name, default))
+                return name
+
+            def createPoint(self):
+                point = FakePoint()
+                self.points.append(point)
+                return point
+
+            def createPolygon(self, is_closed=True):
+                assert is_closed is False
+                primitive = FakePrimitive()
+                self.primitives.append(primitive)
+                return primitive
+
+            def boundingBox(self):
+                return FakeBounds()
+
+        geometry = FakeGeometry()
+        stash = _node("/obj/groom/guides", "guides", "stash")
+        parent = _node("/obj/groom", "groom")
+        parent.createNode.return_value = stash
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+        mock_hou.Geometry.return_value = geometry
+        mock_hou.attribType.Point = "point"
+        mock_hou.attribType.Prim = "primitive"
+        guides = [
+            {
+                "guide_id": 7,
+                "cluster_id": 3,
+                "cluster_name": "crown",
+                "cvs": [[0, 0, 0], [1, 0.5, 0], [2, 1, 0]],
+                "widths": [0.03, 0.02, 0.01],
+                "colors": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            }
+        ]
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_curve_guides("/obj/groom", guides=guides, node_name="guides")
+
+        assert result["success"] is True
+        context = result["context"]
+        assert context["node_path"] == "/obj/groom/guides"
+        assert context["metrics"]["curve_count"] == 1
+        assert context["metrics"]["cv_count"] == 3
+        assert context["metrics"]["root_to_tip_valid"] is True
+        assert context["attribute_schema"]["point"] == ["u", "root_flag", "Cd", "width"]
+        assert context["attribute_schema"]["primitive"] == ["guide_id", "cluster_id", "cluster_name"]
+        assert geometry.points[0].attributes["root_flag"] == 1
+        assert geometry.points[-1].attributes["u"] == 1.0
+        assert geometry.primitives[0].attributes == {
+            "guide_id": 7,
+            "cluster_id": 3,
+            "cluster_name": "crown",
+        }
+        stash.parm.return_value.set.assert_called_once_with(geometry)
+
+    def test_create_curve_guides_supports_typed_nurbs_topology(self) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+        points = [MagicMock() for _ in range(4)]
+        vertices = []
+        for point in points:
+            vertex = MagicMock()
+            vertex.point.return_value = point
+            vertices.append(vertex)
+        primitive = MagicMock()
+        primitive.vertices.return_value = vertices
+        geometry = MagicMock()
+        geometry.createNURBSCurve.return_value = primitive
+        geometry.boundingBox.return_value.minvec.return_value = (0, 0, 0)
+        geometry.boundingBox.return_value.maxvec.return_value = (3, 1, 0)
+        geometry.boundingBox.return_value.sizevec.return_value = (3, 1, 0)
+        parent = _node("/obj/groom", "groom")
+        parent.createNode.return_value = _node("/obj/groom/nurbs_guides", "nurbs_guides", "stash")
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+        mock_hou.Geometry.return_value = geometry
+        mock_hou.attribType.Point = "point"
+        mock_hou.attribType.Prim = "primitive"
+        guides = [
+            {
+                "guide_id": 1,
+                "cluster_id": 1,
+                "curve_type": "nurbs",
+                "order": 4,
+                "cvs": [[0, 0, 0], [1, 1, 0], [2, 1, 0], [3, 0, 0]],
+            }
+        ]
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_curve_guides("/obj/groom", guides=guides)
+
+        assert result["success"] is True
+        assert result["context"]["topology"] == ["nurbs"]
+        geometry.createNURBSCurve.assert_called_once_with(4, False, 4)
+        geometry.createPolygon.assert_not_called()
+
+    def test_create_curve_guides_rolls_back_node_when_stash_write_fails(self) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+        geometry = MagicMock()
+        geometry.boundingBox.return_value.minvec.return_value = (0, 0, 0)
+        geometry.boundingBox.return_value.maxvec.return_value = (0, 1, 0)
+        geometry.boundingBox.return_value.sizevec.return_value = (0, 1, 0)
+        node = _node("/obj/groom/guides", "guides", "stash")
+        node.parm.return_value = None
+        parent = _node("/obj/groom", "groom")
+        parent.createNode.return_value = node
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+        mock_hou.Geometry.return_value = geometry
+        mock_hou.attribType.Point = "point"
+        mock_hou.attribType.Prim = "primitive"
+        guides = [{"guide_id": 1, "cluster_id": 1, "cvs": [[0, 0, 0], [0, 1, 0]]}]
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_curve_guides("/obj/groom", guides=guides)
+
+        assert result["success"] is False
+        node.destroy.assert_called_once_with()
+
+    def test_create_curve_guides_reads_bounded_json_file_and_reports_digest(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+        payload = {
+            "guides": [
+                {
+                    "guide_id": 1,
+                    "cluster_id": 2,
+                    "cvs": [[0, 0, 0], [0, 1, 0]],
+                }
+            ]
+        }
+        source = tmp_path / "guides.json"
+        source.write_text(json.dumps(payload), encoding="utf-8")
+        parent = _node("/obj/groom", "groom")
+        stash = _node("/obj/groom/guides", "guides", "stash")
+        parent.createNode.return_value = stash
+        geometry = MagicMock()
+        point_a = MagicMock()
+        point_b = MagicMock()
+        geometry.createPoint.side_effect = [point_a, point_b]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+        mock_hou.Geometry.return_value = geometry
+        mock_hou.attribType.Point = "point"
+        mock_hou.attribType.Prim = "primitive"
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_curve_guides("/obj/groom", input_file=str(source))
+
+        assert result["success"] is True
+        assert result["context"]["source"]["kind"] == "json_file"
+        assert len(result["context"]["source"]["sha256"]) == 64
+        assert result["context"]["source"]["size_bytes"] == source.stat().st_size
+
+    def test_create_curve_guides_rejects_ambiguous_or_non_finite_input_before_mutation(self) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+        guide = {"guide_id": 1, "cluster_id": 1, "cvs": [[0, 0, 0], [math.nan, 1, 0]]}
+        mock_hou = MagicMock()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            ambiguous = mod.create_curve_guides("/obj/groom", guides=[guide], input_file="guides.json")
+            invalid = mod.create_curve_guides("/obj/groom", guides=[guide])
+
+        assert ambiguous["success"] is False
+        assert invalid["success"] is False
+        assert invalid["context"]["rejected_guides"][0]["guide_id"] == 1
+        mock_hou.node.assert_not_called()
+
+    def test_create_curve_guides_enforces_total_cv_limit(self) -> None:
+        mod = _load_script("houdini-geometry", "create_curve_guides.py")
+        oversized = [
+            {"guide_id": index, "cluster_id": 1, "cvs": [[0, 0, 0], [0, 1, 0]]} for index in range(mod.MAX_GUIDES + 1)
+        ]
+
+        result = mod.create_curve_guides("/obj/groom", guides=oversized)
+
+        assert result["success"] is False
+        assert "limit" in result["message"].lower()
 
     def test_get_geometry_info_counts_and_bounds(self) -> None:
         mod = _load_script("houdini-geometry", "get_geometry_info.py")
