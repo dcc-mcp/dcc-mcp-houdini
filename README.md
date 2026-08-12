@@ -70,7 +70,11 @@ uses one original reconstructed honeybee throughout. The sequence exposes
 eyes and wings, Solaris HDRI lighting, a fixed camera-space ColorChecker and
 reference spheres, then a 37-joint KineFX animation rendered with Karma. Fixed
 exposure and color management keep the calibration references stable while the
-subject and lighting phases rotate independently.
+subject and lighting phases rotate independently. The final segment is a real
+Houdini 22 UI capture of the typed retarget graph and Motion Mixer catalog: two
+named clips pass through Rig Match Pose, Map Points, Full Body IK, MotionClip,
+APEX character packing, Motion Mixer, and Motion Mixer Fetch without cook
+errors.
 
 The same portable high-density asset was also rendered natively in Houdini 22,
 Maya 2026, and Unreal Engine 5.8:
