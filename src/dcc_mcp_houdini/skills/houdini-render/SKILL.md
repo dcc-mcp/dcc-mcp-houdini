@@ -27,6 +27,9 @@ use `affinity: main`; background job polling and cancellation use `affinity: any
 Viewport tools are **UI-aware**: in a headless `hython` session they return a
 structured `warnings` payload with `captured: false` instead of failing, so an
 agent can detect and skip cleanly when rendering is unavailable.
+OpenGL ROP rendering is likewise rejected in headless Houdini because the
+native viewport/Vulkan path may terminate the process; use interactive Houdini
+or Karma/Husk for batch rendering.
 
 ## Tool groups
 

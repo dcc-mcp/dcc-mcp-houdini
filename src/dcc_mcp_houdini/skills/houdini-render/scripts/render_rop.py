@@ -48,7 +48,17 @@ def render_rop(
 
     try:
         rop = get_node(hou, rop_path)
-        is_solaris = rop.type().name().split("::", 1)[0] == "usdrender_rop"
+        rop_type = rop.type().name().split("::", 1)[0]
+        is_solaris = rop_type == "usdrender_rop"
+        if rop_type == "opengl" and not bool(hou.isUIAvailable()):
+            return skill_error(
+                "OpenGL ROP requires interactive Houdini",
+                "Headless OpenGL ROP rendering can crash in the native Vulkan compositor. "
+                "Run this ROP in the Houdini UI, use capture_viewport there, or use Karma/Husk "
+                "for headless rendering.",
+                node_path=rop.path(),
+                rop_type=rop_type,
+            )
         if (is_solaris and rop.parm("execute") is None) or (
             not is_solaris and not callable(getattr(rop, "render", None))
         ):
