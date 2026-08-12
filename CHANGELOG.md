@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.32.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.6...v0.32.0) (2026-08-12)
+
+
+### Features
+
+* add Houdini 22 retarget Motion Mixer workflow ([#239](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/239)) ([606e85d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/606e85d3212ad8df21f72ee0619bc1f381a37e64))
+
+
+### Bug Fixes
+
+* declare flipbook poll transition ([#234](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/234)) ([ec7dd34](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ec7dd347f9feb4dffe00ff016c9d62726683f2ca))
+
 ## [0.31.6](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.5...v0.31.6) (2026-08-12)
 
 
