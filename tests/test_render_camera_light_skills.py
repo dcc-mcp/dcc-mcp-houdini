@@ -2564,6 +2564,41 @@ class TestRenderExecution:
         launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 720, 1], str(tmp_path / "beauty.$F4.exr"))
         rop.render.assert_not_called()
 
+    def test_render_rop_rejects_headless_opengl_before_background_launch(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "viewport.$F4.png"))
+        rop = _node("/out/opengl1", "opengl1", "opengl")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "launch_background_render") as launch:
+            result = mod.render_rop("/out/opengl1", frame_range=[1, 36, 1])
+
+        assert result["success"] is False
+        assert result["message"] == "OpenGL ROP requires interactive Houdini"
+        assert "Karma" in result["error"]
+        launch.assert_not_called()
+        rop.render.assert_not_called()
+
+    def test_render_rop_rejects_headless_opengl_foreground(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        picture = _scalar_parm(str(tmp_path / "viewport.png"))
+        rop = _node("/out/opengl1", "opengl1", "opengl")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: picture if n == "picture" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.render_rop("/out/opengl1", background=False)
+
+        assert result["success"] is False
+        rop.render.assert_not_called()
+
     def test_expand_outputs_accepts_single_value_parm_tuple(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.0001.exr"
