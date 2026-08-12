@@ -28,6 +28,24 @@ tools:
           maximum: 256
           default: 128
           description: Maximum point attributes to return.
+        provenance_type:
+          type: string
+          enum: [captured, synthetic, unknown]
+          default: unknown
+          description: Origin of the splats; synthetic includes points sampled from procedural geometry.
+        source_view_count:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Number of source views from the same captured subject.
+        camera_poses_solved:
+          type: boolean
+          default: false
+          description: Whether source camera poses were reconstructed and retained.
+        public_showcase:
+          type: boolean
+          default: false
+          description: Enforce captured-GSplat provenance before allowing public showcase use.
     next-tools:
       on-success:
         - houdini_gsplat_relighting__prepare_gsplat_sop_chain

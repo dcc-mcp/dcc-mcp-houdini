@@ -65,7 +65,7 @@ skills-first Houdini automation tools to agents.
 ![Houdini 22 honeybee LookDev turntable showing topology, MaterialX PBR, Solaris lighting, calibration references, and KineFX animation](docs/showcase/houdini-honeybee-lookdev-turntable.gif)
 
 This native Houdini 22 capture follows the `lookdev-turntable` contract and
-uses one original reconstructed honeybee throughout. The sequence exposes
+uses one original procedural honeybee prototype throughout. The sequence exposes
 178,716 topology edges across 64 anatomical meshes, MaterialX PBR fur, chitin,
 eyes and wings, Solaris HDRI lighting, a fixed camera-space ColorChecker and
 reference spheres, then a 37-joint KineFX animation rendered with Karma. Fixed
@@ -75,6 +75,28 @@ Houdini 22 UI capture of the typed retarget graph and Motion Mixer catalog: two
 named clips pass through Rig Match Pose, Map Points, Full Body IK, MotionClip,
 APEX character packing, Motion Mixer, and Motion Mixer Fetch without cook
 errors.
+
+### Procedural flight and secondary motion
+
+![Procedural honeybee takeoff, flight, and landing rendered in Houdini 22](docs/showcase/houdini-honeybee-procedural-flight.gif)
+
+The 96-frame Houdini 22 prototype demonstrates articulated motion across all
+six legs, including tarsal roll, pad compression, and dual-claw release/grip,
+plus wing beats, antenna lag, predictive head attention, and phase-delayed
+thorax/abdomen compliance. Karma XPU uses a single CC0 Poly Haven outdoor HDRI
+for PBR lighting and a matching exposure-controlled garden background. Whole
+leg bounding boxes were checked on every frame against the contact plane; no
+geometry fell below the -0.003 tolerance. Body motion blur is disabled to keep
+takeoff and landing silhouettes unambiguous.
+
+![Real Houdini 22 KineFX and Vellum validation graph](docs/showcase/houdini-honeybee-kinefx-vellum-ui.png)
+
+![Takeoff, flight, approach, and grounded contact review](docs/showcase/houdini-honeybee-flight-contact-sheet.png)
+
+This asset was modeled procedurally and can exercise animation, grooming, and
+relighting tools, but it is not a captured or trained Gaussian Splat. The
+GSplat relighting preflight now records provenance and rejects synthetic or
+unknown point clouds when `public_showcase` validation is requested.
 
 The same portable high-density asset was also rendered natively in Houdini 22,
 Maya 2026, and Unreal Engine 5.8:

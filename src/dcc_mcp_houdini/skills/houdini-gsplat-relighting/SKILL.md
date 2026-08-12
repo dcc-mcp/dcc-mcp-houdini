@@ -24,7 +24,9 @@ metadata:
 
 Use the typed tools in this package for the cross-context handoff:
 
-1. Inspect the SOP output and confirm point attributes before changing it.
+1. Inspect the SOP output and confirm point attributes and provenance before
+   changing it. A public reconstruction showcase requires splats trained from
+   at least three views of the same subject with solved camera poses.
 2. Prepare it with Labs `Normals from GSplats` and/or `Delight GSplats`.
 3. In Solaris, use `Relight GSplats` with USD lights, a render camera, shadows,
    shadow bias, and optional dome/HDRI lighting. Use `houdini-parameters` for
@@ -38,3 +40,7 @@ The expected handoff attributes are `P`, `Cd` or `albedo`, `N`, `orient`,
 `scale`/`pscale`, opacity, and optional `GS_SPH_R/G/B` plus `ao`. The setup
 tools resolve Labs node type aliases at runtime because Labs asset namespaces
 vary between Houdini 22 builds.
+
+Procedural meshes sampled into points are synthetic point clouds, not captured
+Gaussian Splat reconstructions. They may test relighting mechanics, but must not
+be presented as reconstruction evidence or public GSplat showcase input.

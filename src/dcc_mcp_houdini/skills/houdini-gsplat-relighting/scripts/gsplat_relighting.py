@@ -145,7 +145,14 @@ def _resolve_parm(node: Any, keys: Sequence[str], value: Any) -> Optional[str]:
 
 
 @skill_entry
-def inspect_gsplat_relighting_input(node_path: str, max_attributes: int = 128) -> dict:
+def inspect_gsplat_relighting_input(
+    node_path: str,
+    max_attributes: int = 128,
+    provenance_type: str = "unknown",
+    source_view_count: int = 0,
+    camera_poses_solved: bool = False,
+    public_showcase: bool = False,
+) -> dict:
     """Report the point attributes used by the Labs GSplat workflow."""
     try:
         import hou  # noqa: PLC0415
@@ -158,6 +165,18 @@ def inspect_gsplat_relighting_input(node_path: str, max_attributes: int = 128) -
         geometry = source.geometry()
         attributes = _attributes(geometry, int(max_attributes))
         names = _names(attributes)
+        provenance_type = str(provenance_type or "unknown").lower()
+        allowed_provenance = {"captured", "synthetic", "unknown"}
+        if provenance_type not in allowed_provenance:
+            raise ValueError("provenance_type must be captured, synthetic, or unknown")
+        if isinstance(source_view_count, bool) or int(source_view_count) < 0:
+            raise ValueError("source_view_count must be a non-negative integer")
+        captured_provenance = (
+            provenance_type == "captured"
+            and int(source_view_count) >= 3
+            and bool(camera_poses_solved)
+        )
+        showcase_provenance_pass = captured_provenance or not bool(public_showcase)
         checks = {
             "position": "P" in names,
             "color_or_albedo": bool({"Cd", "albedo"} & names),
@@ -176,12 +195,20 @@ def inspect_gsplat_relighting_input(node_path: str, max_attributes: int = 128) -
             primitive_count=int(geometry.primCount()),
             point_attributes=attributes,
             checks=checks,
-            ready_for_relighting=not missing,
-            blocking_missing=missing,
+            ready_for_relighting=not missing and showcase_provenance_pass,
+            blocking_missing=missing + ([] if showcase_provenance_pass else ["captured_gsplat_provenance"]),
+            provenance={
+                "type": provenance_type,
+                "source_view_count": int(source_view_count),
+                "camera_poses_solved": bool(camera_poses_solved),
+                "captured_gsplat": captured_provenance,
+                "public_showcase_pass": showcase_provenance_pass,
+            },
             recommendations=[
                 "Run Labs Normals from GSplats when N is absent.",
                 "Run Labs Delight GSplats when albedo is absent or captured lighting must be removed.",
                 "Preserve GS_SPH_R/G/B when view-dependent captured appearance matters.",
+                "Do not label procedural point sampling as captured GSplat reconstruction.",
             ],
         )
     except Exception as exc:
