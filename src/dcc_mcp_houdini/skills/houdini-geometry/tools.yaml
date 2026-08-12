@@ -35,6 +35,104 @@ tools:
     next-tools:
       on-success:
         - houdini_geometry__get_geometry_info
+  - name: create_curve_guides
+    description: >-
+      Create bounded open polyline or NURBS guide curves from inline structured
+      JSON or one UTF-8 .json file. CVs are authored root-to-tip with deterministic u,
+      root_flag, Cd, width, guide, and cluster metadata. Validates the complete
+      payload before mutating the scene and returns counts, bounds, schema,
+      rejected-guide diagnostics, source digest, and enforced limits.
+    source_file: scripts/create_curve_guides.py
+    execution: sync
+    affinity: main
+    requires_in_process: true
+    enforce_thread_affinity: false
+    timeout_hint_secs: 0
+    group: geometry-create
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [parent_path]
+      oneOf:
+        - required: [guides]
+          not: {required: [input_file]}
+        - required: [input_file]
+          not: {required: [guides]}
+      properties:
+        parent_path:
+          type: string
+          minLength: 1
+          description: Existing SOP network that will own the Stash SOP.
+        guides:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          description: Inline bounded guide array. Each cvs array is ordered root-to-tip.
+          items:
+            type: object
+            additionalProperties: false
+            required: [guide_id, cluster_id, cvs]
+            properties:
+              guide_id: {type: integer, description: Unique guide identifier.}
+              cluster_id: {type: integer, description: Stable cluster identifier.}
+              cluster_name: {type: string, maxLength: 256, description: Optional human-readable cluster label.}
+              curve_type:
+                type: string
+                enum: [polyline, nurbs]
+                default: polyline
+                description: Open curve topology for this guide.
+              order:
+                type: integer
+                minimum: 2
+                maximum: 10
+                default: 4
+                description: NURBS order; ignored for polylines and cannot exceed the CV count.
+              cvs:
+                type: array
+                minItems: 2
+                maxItems: 4096
+                description: Finite [x,y,z] CV positions ordered root-to-tip.
+                items:
+                  type: array
+                  minItems: 3
+                  maxItems: 3
+                  items: {type: number}
+              widths:
+                type: array
+                description: Optional non-negative width per CV; length must equal cvs.
+                items: {type: number, minimum: 0}
+              colors:
+                type: array
+                description: Optional RGB Cd per CV; length must equal cvs.
+                items:
+                  type: array
+                  minItems: 3
+                  maxItems: 3
+                  items: {type: number}
+        input_file:
+          type: string
+          minLength: 1
+          description: UTF-8 .json file containing the guide array or {guides:[...]}; capped at 32 MiB.
+        node_name:
+          type: string
+          description: Optional Stash SOP name.
+        set_display:
+          type: boolean
+          default: true
+          description: Set the created Stash SOP display flag.
+    next-tools:
+      on-success:
+        - houdini_geometry__get_geometry_info
+        - houdini_geometry__list_attributes
+      on-failure:
+        - houdini_scene__get_node_info
   - name: get_geometry_info
     description: >-
       Cook and summarise point/primitive/vertex counts and bounds for a SOP

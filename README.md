@@ -253,7 +253,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-object-ops` | `rename_node`, `duplicate_node`, `parent_node`, `set_node_flags`, `set_node_lock`, `get_transform`, `set_transform` |
 | `houdini-parameters` | `list_parms`, `get_parms`, `get_parm_templates`, `get_expression`, `set_parms`, `add_spare_parm`, `remove_spare_parm`, `set_expression`, `clear_expression` |
 | `houdini-node-graph` | `get_connections`, `connect_input`, `disconnect_input` |
-| `houdini-geometry` | `create_primitive`, `get_geometry_info`, `list_attributes`, `list_groups`, `get_cook_status` |
+| `houdini-geometry` | `create_primitive`, `create_curve_guides`, `get_geometry_info`, `list_attributes`, `list_groups`, `get_cook_status` |
 | `houdini-mesh-ops` | `transform_geometry`, `merge_geometry`, `blast_geometry`, `group_geometry`, `add_normals`, `triangulate_geometry`, `convert_geometry` |
 | `houdini-camera-light` | `list_cameras`, `create_camera`, `update_camera`, `frame_view`, `get_view_state`, `create_light`, `update_light` |
 | `houdini-materials` | `create_material`, `assign_material`, `build_materialx_pbr`, `validate_materialx_pbr` |

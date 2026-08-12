@@ -37,7 +37,9 @@ tools:
     idempotent: false
     execution: sync
     affinity: main
-    timeout_hint_secs: 30
+    requires_in_process: true
+    enforce_thread_affinity: false
+    timeout_hint_secs: 0
     source_file: scripts/create_node.py
     tool_role: action
     risk: medium
