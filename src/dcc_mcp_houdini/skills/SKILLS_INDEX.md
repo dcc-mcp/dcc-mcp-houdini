@@ -56,7 +56,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Motion FX & CHOPs | `load_skill("houdini-chops")` → `houdini_chops__create_chop_network` → `houdini_chops__create_motionclip` → `houdini_chops__apply_filter` → `houdini_chops__get_channel_info` → `houdini_chops__export_to_keyframes` |
 | Audio-driven animation | `load_skill("houdini-chops")` → `houdini_chops__create_chop_network` → `houdini_chops__create_audio_driven` |
 | Constrain transforms | `load_skill("houdini-constraints")` → `houdini_constraints__create_parent_constraint` / `create_blend_constraint` / `create_position_constraint` / `create_orient_constraint` → `houdini_constraints__list_constraints` → `houdini_constraints__delete_constraint` |
-| KineFX character rig | `load_skill("houdini-kinefx")` → `houdini_kinefx__create_rig` → `houdini_kinefx__set_rig_pose` → `houdini_kinefx__capture_joints` → `houdini_kinefx__apply_mocap` |
+| KineFX character rig | `load_skill("houdini-kinefx")` → `houdini_kinefx__create_rig` → `houdini_kinefx__set_rig_pose` → `houdini_kinefx__capture_joints` → optional `houdini_kinefx__deform_gsplat_with_rig` → `houdini_kinefx__apply_mocap` |
+| Short fur / insect groom | `load_skill("houdini-groom")` → `houdini_groom__build_short_fur_groom` → inspect Hair Generate / Guide Deform output |
 | Escape hatch | `load_skill("houdini-scripting")` → `houdini_scripting__execute_python` (last resort) |
 | Karma render setup | `load_skill("houdini-karma")` → `houdini_karma__configure_karma` → `houdini_karma__set_material_override` → `houdini_karma__configure_light_mixer` → `houdini_karma__set_image_output` |
 | Husk CLI render | `load_skill("houdini-husk")` → `houdini_husk__create_snapshot` → `houdini_husk__render_with_husk` → poll `houdini_husk__get_husk_job` → optional `houdini_husk__cancel_husk_job` |

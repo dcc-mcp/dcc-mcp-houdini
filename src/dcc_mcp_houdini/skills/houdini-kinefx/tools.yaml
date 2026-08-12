@@ -142,6 +142,41 @@ tools:
         output_name:
           type: string
           description: Name for the capture SOP node (auto-generated if omitted).
+  - name: deform_gsplat_with_rig
+    description: >-
+      Deform captured Gaussian Splat points with rest and animated KineFX
+      skeletons while rotating quaternion orient and preserving anisotropic
+      scale. Validates GSplat and boneCapture attributes first.
+    source_file: scripts/deform_gsplat_with_rig.py
+    execution: sync
+    affinity: main
+    group: capture
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path, captured_splats, rest_rig, animated_rig]
+      properties:
+        geo_path: {type: string, description: Path to the Geometry SOP container.}
+        captured_splats: {type: string, description: Captured GSplat SOP name with boneCapture.}
+        rest_rig: {type: string, description: Rest-pose KineFX skeleton SOP name.}
+        animated_rig: {type: string, description: Animated KineFX skeleton SOP name.}
+        output_name: {type: string, default: deformed_gsplats, description: Joint Deform SOP name.}
+        skinning_method:
+          type: string
+          enum: [linear, dual_quaternion, blend]
+          default: dual_quaternion
+          description: Joint Deform skinning method.
+        deform_normals: {type: boolean, default: true, description: Deform N when present.}
+        preserve_capture_attributes:
+          type: boolean
+          default: true
+          description: Keep boneCapture for inspection and downstream validation.
   - name: apply_mocap
     description: >-
       Apply motion capture data (FBX, BVH, or KineFX .bclip/.clip) onto a
