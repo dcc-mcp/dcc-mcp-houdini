@@ -46,6 +46,9 @@ tools:
       read_only_hint: false
       destructive_hint: false
       idempotent_hint: false
+    next-tools:
+      on-success:
+        - houdini_render__get_flipbook_job
     input_schema:
       type: object
       required: [output_path, frame_range]

@@ -76,6 +76,35 @@ def test_flipbook_job_tools_have_dedicated_entrypoints() -> None:
     assert sources["cancel_flipbook_job"] == "scripts/cancel_flipbook_job.py"
 
 
+def test_flipbook_poll_transition_survives_loader_and_discovery() -> None:
+    import dcc_mcp_core
+
+    skill_dir = _SKILLS_ROOT / "houdini-render"
+    manifest_tools = yaml.safe_load((skill_dir / "tools.yaml").read_text(encoding="utf-8"))["tools"]
+    manifest_flipbook = next(tool for tool in manifest_tools if tool["name"] == "flipbook")
+    expected = ["houdini_render__get_flipbook_job"]
+    assert manifest_flipbook["next-tools"]["on-success"] == expected
+
+    parsed = dcc_mcp_core.parse_skill_md(str(skill_dir))
+    assert parsed is not None
+    parsed_flipbook = next(tool for tool in parsed.tools if tool.name == "flipbook")
+    assert parsed_flipbook.next_tools == {"on_success": expected, "on_failure": []}
+
+    registry = dcc_mcp_core.ToolRegistry()
+    catalog = dcc_mcp_core.SkillCatalog(registry)
+    catalog.set_in_process_executor(lambda _script_path, _params, **_metadata: {"success": True})
+    assert catalog.discover(extra_paths=[str(_SKILLS_ROOT)], dcc_name="houdini") >= 1
+    assert any(skill.name == "houdini-render" for skill in catalog.search_skills(query="flipbook"))
+    registered = catalog.load_skill("houdini-render")
+    assert "houdini_render__flipbook" in registered
+    assert "houdini_render__get_flipbook_job" in registered
+
+    discovered = catalog.get_skill("houdini-render")
+    assert discovered is not None
+    discovered_flipbook = next(tool for tool in discovered.tools if tool.name == "flipbook")
+    assert discovered_flipbook.next_tools == {"on_success": expected, "on_failure": []}
+
+
 @pytest.mark.parametrize(
     ("skill_name", "tool_name"),
     (
