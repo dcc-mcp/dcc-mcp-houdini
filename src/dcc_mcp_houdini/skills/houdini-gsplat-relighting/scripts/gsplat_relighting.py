@@ -171,11 +171,9 @@ def inspect_gsplat_relighting_input(
             raise ValueError("provenance_type must be captured, synthetic, or unknown")
         if isinstance(source_view_count, bool) or int(source_view_count) < 0:
             raise ValueError("source_view_count must be a non-negative integer")
-        captured_provenance = (
-            provenance_type == "captured"
-            and int(source_view_count) >= 3
-            and bool(camera_poses_solved)
-        )
+        has_capture_type = provenance_type == "captured"
+        has_enough_views = int(source_view_count) >= 3
+        captured_provenance = has_capture_type and has_enough_views and bool(camera_poses_solved)
         showcase_provenance_pass = captured_provenance or not bool(public_showcase)
         checks = {
             "position": "P" in names,

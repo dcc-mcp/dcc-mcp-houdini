@@ -1,6 +1,6 @@
 # Houdini GSplat relighting
 
-![Original honeybee GSplat workflow from capture through relighting to verified output](../../../../docs/images/houdini-gsplat-relighting-showcase.webp)
+![Concept illustration of a honeybee GSplat relighting workflow](../../../../docs/images/houdini-gsplat-relighting-showcase.webp)
 
 Prepare an existing Gaussian Splat for interactive relighting, build its USD
 lighting stage, and produce a refined Copernicus image without falling back to
@@ -22,5 +22,8 @@ camera-matched COP output suitable for near-real-time look development.
 
 Requires Houdini 22 and current SideFX Labs GSplat assets. See
 [SKILL.md](SKILL.md) for attribute and execution contracts; `tools.yaml`
-contains the callable schemas. The illustration uses an original DCC-MCP
-honeybee asset.
+contains the callable schemas.
+
+The header image is a workflow illustration, not capture or reconstruction
+evidence. A public GSplat showcase must separately provide captured multi-view
+provenance, solved camera poses, and live Houdini validation output.
