@@ -127,7 +127,9 @@ def build_retarget_motion_mixer(
 
         scene = pack
         for index, (solve, clip_name) in enumerate(zip(solve_nodes, names), start=1):
-            add_clip = _create(container, "apex::animationfromskeleton", "{}_apex_clip_{:02d}".format(node_prefix, index))
+            add_clip = _create(
+                container, "apex::animationfromskeleton", "{}_apex_clip_{:02d}".format(node_prefix, index)
+            )
             add_clip.setInput(0, scene)
             add_clip.setInput(1, solve)
             _set_if_present(add_clip, "rigpath", "/{}.char/Base.rig".format(character_name))
