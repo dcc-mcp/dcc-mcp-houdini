@@ -12,9 +12,9 @@ metadata:
     dcc: houdini
     layer: domain
     stage: pipeline
-    version: "1.0.0"
-    tags: [houdini, kinefx, rig, skeleton, capture, mocap, character, animation, pipeline]
-    search-hint: "kinefx rig skeleton pose joint capture mocap character skinning bone deform"
+    version: "1.1.0"
+    tags: [houdini, kinefx, rig, skeleton, capture, mocap, retarget, motionclip, motion-mixer, apex, character, animation, pipeline]
+    search-hint: "kinefx rig retarget motion mixer motionclip APEX skeleton pose joint capture mocap character skinning"
     tools: tools.yaml
 ---
 
@@ -35,6 +35,10 @@ attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
   a target mesh using proximity or bone-capture SOP nodes.
 - **`mocap`:** `apply_mocap` — apply motion capture data (FBX, BVH, or
   KineFX clip) onto a rig skeleton.
+- **`retarget/mixer`:** `build_retarget_motion_mixer` — build the Houdini 22
+  Rig Match Pose → Map Points → Full Body IK contract, sample multiple
+  MotionClips, pack an APEX character, add named clips, and create a real
+  Motion Mixer + Fetch pair with node-level cook validation.
 
 ## Tracer-bullet flow
 

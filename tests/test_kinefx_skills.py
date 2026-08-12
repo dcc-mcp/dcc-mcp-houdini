@@ -381,3 +381,71 @@ class TestApplyMocap:
         geo.createNode.assert_any_call("motionclip", node_name="mocap1")
         bone_deform.setInput.assert_any_call(0, import_node, 0)
         bone_deform.setInput.assert_any_call(1, rig, 0)
+
+
+class TestBuildRetargetMotionMixer:
+    def test_builds_and_validates_houdini22_chain(self) -> None:
+        mod = _load_script("build_retarget_motion_mixer.py")
+        container = MagicMock()
+        container.path.return_value = "/obj/anim"
+        target = MagicMock()
+        target.path.return_value = "/obj/anim/target"
+        source_a = MagicMock()
+        source_a.path.return_value = "/obj/anim/source_a"
+        source_b = MagicMock()
+        source_b.path.return_value = "/obj/anim/source_b"
+        created = []
+
+        def create_node(type_name: str, node_name: str) -> MagicMock:
+            node = MagicMock()
+            node.path.return_value = "/obj/anim/{}".format(node_name)
+            node.errors.return_value = ()
+            node.warnings.return_value = ()
+            node.parm.return_value = MagicMock()
+            node.type_name = type_name
+            created.append(node)
+            return node
+
+        container.createNode.side_effect = create_node
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/obj/anim": container,
+            "/obj/anim/target": target,
+            "/obj/anim/source_a": source_a,
+            "/obj/anim/source_b": source_b,
+        }.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.build_retarget_motion_mixer(
+                geo_path="/obj/anim",
+                target_skeleton="/obj/anim/target",
+                source_skeletons=["/obj/anim/source_a", "/obj/anim/source_b"],
+                clip_names=["flight", "landing"],
+                character_name="honeybee",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["validated"] is True
+        assert result["context"]["clip_names"] == ["flight", "landing"]
+        assert len(result["context"]["clip_nodes"]) == 2
+        assert result["context"]["motion_mixer"].endswith("_motion_mixer")
+        assert {node.type_name for node in created} >= {
+            "kinefx::rigmatchpose",
+            "kinefx::mappoints",
+            "kinefx::fullbodyik",
+            "kinefx::motionclip",
+            "apex::packcharacter",
+            "apex::animationfromskeleton",
+            "kinefx::motionmixer",
+            "kinefx::motionmixerfetch",
+        }
+        assert all(node.cook.called for node in created)
+
+    def test_requires_multiple_source_skeletons(self) -> None:
+        mod = _load_script("build_retarget_motion_mixer.py")
+        result = mod.build_retarget_motion_mixer(
+            geo_path="/obj/anim",
+            target_skeleton="/obj/anim/target",
+            source_skeletons=["/obj/anim/source_a"],
+        )
+        assert result["success"] is False
