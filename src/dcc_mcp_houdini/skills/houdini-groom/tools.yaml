@@ -1,0 +1,41 @@
+tools:
+  - name: build_short_fur_groom
+    description: >-
+      Build a Houdini 22 Hair Generate 2.0 network for short fur and optionally
+      append Guide Deform so roots follow animated skin. Returns all node paths
+      and the parameter names available in the installed Houdini build.
+    source_file: scripts/build_short_fur_groom.py
+    execution: sync
+    affinity: main
+    group: fur-authoring
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path, rest_skin]
+      properties:
+        geo_path: {type: string, description: Geometry SOP container path.}
+        rest_skin: {type: string, description: Rest skin SOP name in geo_path.}
+        animated_skin: {type: string, description: Optional animated skin SOP name.}
+        guides: {type: string, description: Optional guide curve SOP name.}
+        skin_group: {type: string, default: "", description: Primitive group that grows fur.}
+        density: {type: number, minimum: 0.001, maximum: 10000000, default: 120000, description: Hair density.}
+        length: {type: number, exclusiveMinimum: 0, maximum: 10, default: 0.025, description: Fur length in scene units.}
+        segments: {type: integer, minimum: 2, maximum: 64, default: 5, description: Segments per unguided hair.}
+        clump_strength: {type: number, minimum: 0, maximum: 1, default: 0.15, description: Optional Hair Clump strength.}
+        deform_method:
+          type: string
+          enum: [surface, guide_shape, point]
+          default: surface
+          description: Guide Deform method; surface is recommended for short insect fur.
+        name_prefix: {type: string, default: insect_fur, description: Prefix for created SOP names.}
+    next-tools:
+      on-success:
+        - houdini_geometry__get_cook_status
+      on-failure:
+        - houdini_scene__get_node_info

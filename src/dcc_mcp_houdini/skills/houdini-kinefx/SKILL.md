@@ -31,8 +31,9 @@ attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
   and optional rig pose/attachments.
 - **`pose`:** `set_rig_pose` — set the transform of a specific joint or the
   entire rig pose.
-- **`capture`:** `capture_joints` — capture skinning weights from joints to
-  a target mesh using proximity or bone-capture SOP nodes.
+- **`capture`:** `capture_joints` captures skinning weights; then
+  `deform_gsplat_with_rig` deforms GSplat centers and quaternion orientation
+  while preserving anisotropic scale.
 - **`mocap`:** `apply_mocap` — apply motion capture data (FBX, BVH, or
   KineFX clip) onto a rig skeleton.
 - **`retarget/mixer`:** `build_retarget_motion_mixer` — build the Houdini 22

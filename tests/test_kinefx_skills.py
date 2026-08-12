@@ -350,6 +350,76 @@ class TestCaptureJoints:
         geo.createNode.assert_called_once_with("bonecapture", node_name="capture_rig1")
 
 
+class TestDeformGsplatWithRig:
+    @staticmethod
+    def _attrib(name: str) -> MagicMock:
+        attrib = MagicMock()
+        attrib.name.return_value = name
+        return attrib
+
+    def test_creates_joint_deform_and_preserves_scale(self) -> None:
+        mod = _load_script("deform_gsplat_with_rig.py")
+        geo = MagicMock()
+        geo.path.return_value = "/obj/bee"
+        splats = MagicMock()
+        splats.path.return_value = "/obj/bee/captured"
+        splats.geometry.return_value.pointAttribs.return_value = [
+            self._attrib(name) for name in ("P", "boneCapture", "orient", "scale", "N")
+        ]
+        rest = MagicMock()
+        rest.path.return_value = "/obj/bee/rest_rig"
+        animated = MagicMock()
+        animated.path.return_value = "/obj/bee/animated_rig"
+        deform = MagicMock()
+        deform.path.return_value = "/obj/bee/deformed_gsplats"
+        parms = {name: MagicMock() for name in ("method", "otherattribs", "donormal", "deletecaptureattrib")}
+        deform.parm.side_effect = parms.get
+        geo.createNode.return_value = deform
+
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = {
+            "/obj/bee": geo,
+            "/obj/bee/captured": splats,
+            "/obj/bee/rest_rig": rest,
+            "/obj/bee/animated_rig": animated,
+        }.get
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.deform_gsplat_with_rig("/obj/bee", "captured", "rest_rig", "animated_rig")
+
+        assert result["success"] is True
+        geo.createNode.assert_called_once_with("kinefx::jointdeform", node_name="deformed_gsplats")
+        deform.setInput.assert_any_call(0, splats, 0)
+        deform.setInput.assert_any_call(1, rest, 0)
+        deform.setInput.assert_any_call(2, animated, 0)
+        parms["method"].set.assert_called_once_with("dualquat")
+        parms["otherattribs"].set.assert_called_once_with("orient")
+        assert result["context"]["preserved_attributes"] == ["scale"]
+
+    def test_rejects_missing_orient(self) -> None:
+        mod = _load_script("deform_gsplat_with_rig.py")
+        geo = MagicMock()
+        geo.path.return_value = "/obj/bee"
+        splats = MagicMock()
+        splats.geometry.return_value.pointAttribs.return_value = [
+            self._attrib(name) for name in ("P", "boneCapture", "scale")
+        ]
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = {
+            "/obj/bee": geo,
+            "/obj/bee/captured": splats,
+            "/obj/bee/rest_rig": MagicMock(),
+            "/obj/bee/animated_rig": MagicMock(),
+        }.get
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.deform_gsplat_with_rig("/obj/bee", "captured", "rest_rig", "animated_rig")
+
+        assert result["success"] is False
+        assert "orient" in result["message"] or "orient" in str(result)
+        geo.createNode.assert_not_called()
+
+
 class TestApplyMocap:
     def test_apply_mocap_bclip(self) -> None:
         mod = _load_script("apply_mocap.py")
