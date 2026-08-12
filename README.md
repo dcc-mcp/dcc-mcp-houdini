@@ -60,48 +60,42 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## High-poly honeybee LookDev and KineFX showcase
+## Houdini 22 honeybee LookDev and KineFX showcase
 
-![Houdini 22 honeybee LookDev turntable showing topology, MaterialX PBR, Solaris lighting, calibration references, and KineFX animation](docs/showcase/houdini-honeybee-lookdev-turntable.gif)
+![Public-domain honeybee reference, real Houdini UI, procedural wireframe, and Karma flight render](docs/showcase/houdini-honeybee-workflow.gif)
 
-This native Houdini 22 capture follows the `lookdev-turntable` contract and
-uses one original procedural honeybee prototype throughout. The sequence exposes
-178,716 topology edges across 64 anatomical meshes, MaterialX PBR fur, chitin,
-eyes and wings, Solaris HDRI lighting, a fixed camera-space ColorChecker and
-reference spheres, then a 37-joint KineFX animation rendered with Karma. Fixed
-exposure and color management keep the calibration references stable while the
-subject and lighting phases rotate independently. The final segment is a real
-Houdini 22 UI capture of the typed retarget graph and Motion Mixer catalog: two
-named clips pass through Rig Match Pose, Map Points, Full Body IK, MotionClip,
-APEX character packing, Motion Mixer, and Motion Mixer Fetch without cook
-errors.
+This showcase uses an original DCC-MCP procedural honeybee prototype, not the
+SideFX sample. It is also **not a captured or trained Gaussian Splat**. The
+opening reference photograph is included to make the remaining anatomical gap
+visible instead of presenting polygon density as reconstruction accuracy.
 
-### Procedural flight and secondary motion
+The real Houdini 22 workflow demonstrates MaterialX/Solaris LookDev, a KineFX
+flight loop, wing beats, predictive head attention, antenna lag, all-six-leg
+tarsal and claw motion, and phase-delayed thorax/abdomen compliance. Karma uses
+one CC0 Poly Haven Residential Garden HDRI, ACES display conversion, neutral
+calibration spheres, and no duplicate sun or stylized green rim light.
 
-![Procedural honeybee takeoff, flight, and landing rendered in Houdini 22](docs/showcase/houdini-honeybee-procedural-flight.gif)
-
-The 96-frame Houdini 22 prototype demonstrates articulated motion across all
-six legs, including tarsal roll, pad compression, and dual-claw release/grip,
-plus wing beats, antenna lag, predictive head attention, and phase-delayed
-thorax/abdomen compliance. Karma XPU uses a single CC0 Poly Haven outdoor HDRI
-for PBR lighting and a matching exposure-controlled garden background. Whole
-leg bounding boxes were checked on every frame against the contact plane; no
-geometry fell below the -0.003 tolerance. Body motion blur is disabled to keep
-takeoff and landing silhouettes unambiguous.
-
-![Real Houdini 22 KineFX and Vellum validation graph](docs/showcase/houdini-honeybee-kinefx-vellum-ui.png)
+[Watch the 1280×720, 24 fps MP4](docs/showcase/houdini-honeybee-procedural-flight-v13.mp4)
 
 ![Takeoff, flight, approach, and grounded contact review](docs/showcase/houdini-honeybee-flight-contact-sheet.png)
 
-This asset was modeled procedurally and can exercise animation, grooming, and
-relighting tools, but it is not a captured or trained Gaussian Splat. The
-GSplat relighting preflight now records provenance and rejects synthetic or
-unknown point clouds when `public_showcase` validation is requested.
+The 96 rendered frames contain one animated bee: body motion blur is disabled,
+so takeoff silhouettes do not become a second model. Every leg hierarchy was
+checked against the floor on every frame; no geometry falls below the -0.003
+contact tolerance. The low and airborne poses remain intentionally distinct.
 
-The same portable high-density asset was also rendered natively in Houdini 22,
-Maya 2026, and Unreal Engine 5.8:
+![Real Houdini 22 KineFX validation workspace](docs/showcase/houdini-honeybee-ui-kinefx.png)
 
-![Original high-density DCC-MCP honeybee rendered in Houdini 22, Maya 2026, and Unreal Engine 5.8](docs/showcase/houdini-gsplat-honeybee-highpoly.webp)
+![Procedural honeybee topology and shared LookDev calibration references](docs/showcase/houdini-honeybee-wireframe.png)
+
+The older calibration turntable remains useful for inspecting materials and
+topology, but should not be read as scan evidence:
+
+![Houdini 22 procedural honeybee LookDev turntable](docs/showcase/houdini-honeybee-lookdev-turntable.gif)
+
+Reference provenance, license terms, technical evidence, and known limitations
+are recorded in
+[`docs/showcase/honeybee-reference-license.md`](docs/showcase/honeybee-reference-license.md).
 
 ## Features
 
