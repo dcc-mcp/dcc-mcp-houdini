@@ -96,10 +96,7 @@ def create_wrangle(hou: Any, spec: WrangleNodeSpec) -> Dict[str, Any]:
 
     # ── Bindings ───────────────────────────────────────────────────────
     if spec.snippet is not None and spec.snippet.bindings:
-        bindings_str = _encode_bindings(spec.snippet.bindings)
-        bind_parm = node.parm("bindings")
-        if bind_parm is not None:
-            bind_parm.set(bindings_str)
+        _apply_bindings(node, spec.snippet.bindings)
 
     # ── Display / Render flags ─────────────────────────────────────────
     if spec.set_display and hasattr(node, "setDisplayFlag"):
@@ -167,9 +164,7 @@ def update_vex_snippet(
 
     # Apply bindings.
     if snippet.bindings:
-        bind_parm = node.parm("bindings")
-        if bind_parm is not None:
-            bind_parm.set(_encode_bindings(snippet.bindings))
+        _apply_bindings(node, snippet.bindings)
 
     # Apply parameter values.
     for parm_name, value in snippet.parameter_values.items():
@@ -531,6 +526,26 @@ def _encode_bindings(bindings: Dict[str, str]) -> str:
     # Houdini expects bindings as "name=attribute type" separated by spaces.
     parts = [f"{name}={attr_type}" for name, attr_type in sorted(bindings.items())]
     return " ".join(parts)
+
+
+def _apply_bindings(node: Any, bindings: Dict[str, str]) -> None:
+    """Apply bindings only to legacy string-valued Wrangle parameters.
+
+    Houdini 22 exposes ``bindings`` as an integer multiparm count.  Attribute
+    type hints from the typed VEX contract do not map to that multiparm's
+    ``bindname#``/``bindparm#`` channel-binding rows, so writing the encoded
+    string raises ``TypeError`` and leaves a partially-created node.  Older
+    hosts may expose the legacy string parameter, which remains supported.
+    """
+    bind_parm = node.parm("bindings")
+    if bind_parm is None:
+        return
+    try:
+        current_value = bind_parm.eval()
+    except Exception:
+        return
+    if isinstance(current_value, str):
+        bind_parm.set(_encode_bindings(bindings))
 
 
 def _fail(message: str, **extra: Any) -> Dict[str, Any]:

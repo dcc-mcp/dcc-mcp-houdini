@@ -78,6 +78,7 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
 
     def on_started(server) -> None:
         observations["url"] = server.mcp_url
+        observations["instance_type"] = server._config.instance_metadata["dcc_mcp_instance_type"]
 
         def client() -> None:
             try:
@@ -134,6 +135,7 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
     assert client_errors == []
     assert client_threads[0].is_alive() is False
     assert observations["listed"]
+    assert observations["instance_type"] == "standalone"
     assert observations["loaded"]["result"]["isError"] is False
     called = observations["called"]
     assert called["result"]["isError"] is False

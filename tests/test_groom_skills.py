@@ -38,6 +38,11 @@ def test_build_short_fur_groom_with_animated_skin() -> None:
     rest.path.return_value = "/obj/bee/rest_skin"
     animated.path.return_value = "/obj/bee/animated_skin"
     guides.path.return_value = "/obj/bee/guides"
+    for skin in (rest, animated):
+        skin.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+            "pointcount": 100,
+            "primitivecount": 50,
+        }[name]
     hair, clump, deform = MagicMock(), MagicMock(), MagicMock()
     hair.path.return_value = "/obj/bee/bee_fur_generate"
     clump.path.return_value = "/obj/bee/bee_fur_clump"
@@ -45,6 +50,11 @@ def test_build_short_fur_groom_with_animated_skin() -> None:
     geo.createNode.side_effect = [hair, clump, deform]
     for node in (hair, clump, deform):
         node.parm.side_effect = lambda _name: MagicMock()
+    deform.errors.return_value = ()
+    deform.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+        "pointcount": 600,
+        "primitivecount": 100,
+    }[name]
 
     mock_hou = MagicMock()
     mock_hou.node.side_effect = {
@@ -68,6 +78,36 @@ def test_build_short_fur_groom_with_animated_skin() -> None:
     deform.setInput.assert_any_call(2, animated, 0)
     deform.setDisplayFlag.assert_called_once_with(True)
     deform.setRenderFlag.assert_called_once_with(True)
+    deform.cook.assert_called_once_with(force=True)
+    assert result["context"]["output_primitive_count"] == 100
+
+
+def test_build_short_fur_groom_rejects_surface_topology_mismatch() -> None:
+    mod = _load_script()
+    geo, rest, animated = MagicMock(), MagicMock(), MagicMock()
+    geo.path.return_value = "/obj/bee"
+    rest.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+        "pointcount": 100,
+        "primitivecount": 50,
+    }[name]
+    animated.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+        "pointcount": 101,
+        "primitivecount": 50,
+    }[name]
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = {
+        "/obj/bee": geo,
+        "/obj/bee/rest_skin": rest,
+        "/obj/bee/animated_skin": animated,
+    }.get
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.build_short_fur_groom(
+            "/obj/bee", "rest_skin", animated_skin="animated_skin", deform_method="surface"
+        )
+
+    assert result["success"] is False
+    assert "matching rest/deformed skin topology" in result["error"]
+    geo.createNode.assert_not_called()
 
 
 def test_build_short_fur_groom_rolls_back_on_missing_node_type() -> None:

@@ -71,6 +71,7 @@ class HoudiniServerOptions:
     snapshot_provider: Optional[Any] = None
     dispatcher: Optional[Any] = None
     execution_bridge: Optional[Any] = None
+    instance_type: Optional[str] = None
 
     def to_core_options(self) -> DccServerOptions:
         """Convert to core DccServerOptions using from_env()."""
@@ -114,6 +115,7 @@ class HoudiniServerOptions:
             snapshot_provider=self.snapshot_provider,
             dispatcher=dispatcher,
             execution_bridge=execution_bridge,
+            instance_type=self.instance_type,
         )
 
 
@@ -136,6 +138,7 @@ class HoudiniMcpServer(DccServerBase):
         enable_workflows: Optional[bool] = None,
         dispatcher: Optional[Any] = None,
         execution_bridge: Optional[Any] = None,
+        instance_type: Optional[str] = None,
         options: Optional[HoudiniServerOptions] = None,
     ) -> None:
         from dcc_mcp_houdini import _env
@@ -159,6 +162,7 @@ class HoudiniMcpServer(DccServerBase):
                 enable_workflows=enable_workflows,
                 dispatcher=dispatcher,
                 execution_bridge=execution_bridge,
+                instance_type=instance_type,
             )
 
         super().__init__(options=options.to_core_options())
@@ -607,6 +611,7 @@ def _start_server_with_stack(
     enable_workflows: Optional[bool] = None,
     wait_ready: bool = True,
     readiness_timeout_secs: Optional[int] = None,
+    instance_type: str = "gui",
 ) -> HoudiniMcpServer:
     """Start the process singleton using an already-selected host stack."""
     global _server_instance, _host_instance  # noqa: PLW0603
@@ -628,6 +633,7 @@ def _start_server_with_stack(
             job_storage_path=job_storage_path,
             enable_workflows=enable_workflows,
             dispatcher=dispatcher,
+            instance_type=instance_type,
         )
         if host is not None:
             _server_instance.attach_host(host)
@@ -711,6 +717,7 @@ def start_server(
         enable_workflows=enable_workflows,
         wait_ready=wait_ready,
         readiness_timeout_secs=readiness_timeout_secs,
+        instance_type="gui",
     )
 
 
@@ -759,6 +766,7 @@ def serve_headless(
         job_storage_path=job_storage_path,
         enable_workflows=enable_workflows,
         wait_ready=False,
+        instance_type="standalone",
     )
     try:
         if on_started is not None:
