@@ -545,6 +545,67 @@ class TestViewSkills:
         assert result["context"]["active_camera"] == "/obj/shotcam"
         assert events == ["select", "frame", "camera"]
 
+    def test_frame_view_refuses_heavy_geometry_by_default(self) -> None:
+        mod = _load_script("houdini-camera-light", "frame_view.py")
+        geo = _node("/obj/highpoly", "highpoly")
+        display = MagicMock()
+        geometry = MagicMock()
+        geometry.intrinsicValue.side_effect = lambda name: {
+            "pointcount": 805_545,
+            "primitivecount": 1_606_745,
+        }[name]
+        display.geometry.return_value = geometry
+        geo.displayNode.return_value = display
+        viewport = MagicMock()
+        viewer = MagicMock()
+        viewer.curViewport.return_value = viewport
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        mock_hou.node.return_value = geo
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.frame_view(node_path="/obj/highpoly")
+
+        assert result["success"] is True
+        assert result["context"]["framed"] is False
+        assert result["context"]["heavy_geometry_refused"] is True
+        assert result["context"]["geometry_counts"] == {
+            "points": 805_545,
+            "primitives": 1_606_745,
+        }
+        geo.setSelected.assert_not_called()
+        viewport.frameSelected.assert_not_called()
+
+    def test_frame_view_allows_explicit_heavy_geometry_override(self) -> None:
+        mod = _load_script("houdini-camera-light", "frame_view.py")
+        geo = _node("/obj/highpoly", "highpoly")
+        display = MagicMock()
+        geometry = MagicMock()
+        geometry.intrinsicValue.side_effect = lambda name: {
+            "pointcount": 805_545,
+            "primitivecount": 1_606_745,
+        }[name]
+        display.geometry.return_value = geometry
+        geo.displayNode.return_value = display
+        viewport = MagicMock()
+        viewer = MagicMock()
+        viewer.curViewport.return_value = viewport
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        mock_hou.node.return_value = geo
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.frame_view(
+                node_path="/obj/highpoly", allow_heavy_geometry=True
+            )
+
+        assert result["success"] is True
+        assert result["context"]["framed"] is True
+        assert result["context"]["heavy_geometry_refused"] is False
+        viewport.frameSelected.assert_called_once_with()
+
 
 class TestViewportCapture:
     def test_capture_viewport_headless_skips(self, tmp_path: Path) -> None:
