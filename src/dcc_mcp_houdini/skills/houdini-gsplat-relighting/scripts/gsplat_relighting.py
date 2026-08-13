@@ -48,8 +48,7 @@ def _names(attributes: Iterable[dict]) -> set:
 def _has_expanded_attribute(names: set, base: str, count: int) -> bool:
     """Accept the expanded PLY spellings emitted by common 3DGS exporters."""
     return any(
-        all("{}{}{}".format(base, separator, index) in names for index in range(count))
-        for separator in ("", "_")
+        all("{}{}{}".format(base, separator, index) in names for index in range(count)) for separator in ("", "_")
     )
 
 
@@ -73,9 +72,7 @@ def _gsplat_schema(names: set) -> dict:
         "spherical_harmonics": "f_rest" in names or _has_expanded_attribute(names, "f_rest", 45),
     }
     raw_core = all(raw_checks[key] for key in ("position", "color", "orientation", "scale", "opacity"))
-    native_core = all(
-        native_checks[key] for key in ("position", "color_or_albedo", "orientation", "scale", "opacity")
-    )
+    native_core = all(native_checks[key] for key in ("position", "color_or_albedo", "orientation", "scale", "opacity"))
     if native_core:
         source_schema = "houdini_gsplat"
     elif raw_core:
@@ -294,9 +291,7 @@ def prepare_gsplat_sop_chain(
         convert_spherical_harmonics = False
         if schema["normalization_required"]:
             if not normalize_input:
-                raise ValueError(
-                    "Standard 3DGS PLY attributes require Houdini Bake GSplats before Labs processing"
-                )
+                raise ValueError("Standard 3DGS PLY attributes require Houdini Bake GSplats before Labs processing")
             bake = _create(parent, ("bakegsplat",), "{}_bake".format(name_prefix))
             created.append(bake)
             bake.setInput(0, current)
