@@ -8,6 +8,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -616,3 +617,115 @@ class TestBuildRetargetMotionMixer:
             source_skeletons=["/obj/anim/source_a"],
         )
         assert result["success"] is False
+
+
+class TestCreateInsectRig:
+    def test_honeybee_topology_is_complete_and_grounded(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        chain, contacts, shape_controls, _ = mod._honeybee_chain(scale=2.0, ground_z=0.25)
+        names = {joint["name"] for joint in chain}
+
+        assert len(chain) == 75
+        assert len(contacts) == 6
+        assert len(shape_controls) == 14
+        assert all(name in names for name in contacts)
+        assert all(next(j["translate"][2] for j in chain if j["name"] == name) == 0.25 for name in contacts)
+        assert {"forewing_L_root", "forewing_R_root", "hindwing_L_root", "hindwing_R_root"} <= names
+        assert {"compound_eye_L", "compound_eye_R", "abdomen_05"} <= names
+        assert {"head_width_L", "head_width_R", "thorax_width_L", "thorax_width_R"} <= names
+        assert {"abdomen_01_width_L", "abdomen_05_width_R"} <= names
+        for leg in ("front", "middle", "rear"):
+            for side in ("L", "R"):
+                assert all(f"{leg}_{side}_{segment}" in names for segment in mod._LEG_SEGMENTS)
+
+    def test_invalid_scale_does_not_create_a_rig(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        with patch.object(mod, "create_rig") as create:
+            result = mod.create_insect_rig("/obj/bee", scale=0.0)
+        assert result["success"] is False
+        create.assert_not_called()
+
+    def test_measured_anatomy_scales_body_wings_and_legs_independently(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        measurements = {
+            "body_length": 11.16,
+            "body_width": 3.8,
+            "head_width": 3.67,
+            "abdomen_width": 4.07,
+            "standing_height": 4.0,
+            "wing_span": 20.0,
+            "leg_span": 15.0,
+        }
+        chain, contacts, shape_controls, effective = mod._honeybee_chain(
+            scale=1.0,
+            ground_z=0.25,
+            anatomy_measurements=measurements,
+        )
+        joints = {joint["name"]: joint["translate"] for joint in chain}
+
+        assert effective == measurements
+        assert len(shape_controls) == 14
+        assert joints["abdomen_05"][0] - joints["antenna_L_scape"][0] == pytest.approx(-11.16)
+        assert joints["head_width_L"][1] - joints["head_width_R"][1] == pytest.approx(3.67)
+        assert joints["thorax_width_L"][1] - joints["thorax_width_R"][1] == pytest.approx(3.8)
+        assert joints["abdomen_02_width_L"][1] - joints["abdomen_02_width_R"][1] == pytest.approx(4.07)
+        assert joints["forewing_L_tip"][1] - joints["forewing_R_tip"][1] == pytest.approx(20.0)
+        assert joints["rear_L_claw"][1] - joints["rear_R_claw"][1] == pytest.approx(15.0)
+        assert joints["forewing_L_root"][1] - joints["forewing_R_root"][1] == pytest.approx(3.8)
+        assert all(joints[name][2] == pytest.approx(0.25) for name in contacts)
+
+    @pytest.mark.parametrize(
+        "measurements",
+        [
+            {"body_length": 0.0},
+            {"body_width": -1.0},
+            {"unknown_dimension": 1.0},
+            {"body_width": 5.0, "wing_span": 4.0, "leg_span": 4.0},
+        ],
+    )
+    def test_invalid_anatomy_measurements_do_not_create_a_rig(self, measurements: dict) -> None:
+        mod = _load_script("create_insect_rig.py")
+        with patch.object(mod, "create_rig") as create:
+            result = mod.create_insect_rig("/obj/bee", anatomy_measurements=measurements)
+        assert result["success"] is False
+        create.assert_not_called()
+
+    def test_body_width_drives_omitted_lateral_measurements(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        effective = mod._effective_measurements(1.0, {"body_width": 3.8})
+
+        assert effective["body_width"] == 3.8
+        assert effective["head_width"] == pytest.approx(3.8 * 0.76 / 0.84)
+        assert effective["abdomen_width"] == pytest.approx(3.8 * 0.90 / 0.84)
+        assert effective["wing_span"] == pytest.approx(3.8 * 4.30 / 0.84)
+        assert effective["leg_span"] == pytest.approx(3.8 * 3.44 / 0.84)
+
+    def test_reports_anatomy_contract_after_creation(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        with patch.object(
+            mod,
+            "create_rig",
+            return_value={"success": True, "context": {"rig_path": "/obj/bee/rig"}},
+        ):
+            result = mod.create_insect_rig("/obj/bee", ground_z=0.1)
+        context = result["context"]
+        assert context["leg_count"] == 6
+        assert context["wing_count"] == 4
+        assert len(context["shape_control_joint_names"]) == 14
+        assert context["effective_anatomy_measurements"] == {
+            "body_length": 4.3,
+            "body_width": 0.84,
+            "head_width": 0.76,
+            "abdomen_width": 0.9,
+            "standing_height": 1.9,
+            "wing_span": 4.3,
+            "leg_span": 3.44,
+        }
+        assert context["support_joint_names"] == [
+            "front_L_claw",
+            "front_R_claw",
+            "middle_L_claw",
+            "middle_R_claw",
+            "rear_L_claw",
+            "rear_R_claw",
+        ]

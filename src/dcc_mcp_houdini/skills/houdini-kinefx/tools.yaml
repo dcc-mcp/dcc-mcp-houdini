@@ -1,4 +1,54 @@
 tools:
+  - name: create_insect_rig
+    description: >-
+      Create an anatomy-aware worker-honeybee KineFX skeleton with compound
+      eyes, segmented antennae, a flexible abdomen, four wings, and six fully
+      segmented legs ending in grounded claw joints.
+    source_file: scripts/create_insect_rig.py
+    execution: sync
+    affinity: main
+    group: rig
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [geo_path]
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        rig_name: {type: string, default: honeybee_anatomy_rig}
+        scale: {type: number, minimum: 0.001, maximum: 1000, default: 1.0}
+        ground_z: {type: number, default: 0.0, description: Sole permitted ground height.}
+        anatomy_measurements:
+          type: object
+          additionalProperties: false
+          description: >-
+            Optional measured world-space worker-honeybee dimensions. Each
+            supplied dimension overrides the legacy uniform scale for its
+            anatomical axis. A supplied body_width proportionally derives
+            omitted head/abdomen widths, wing span, and leg span.
+          properties:
+            body_length:
+              {type: number, minimum: 0.001, maximum: 100000, description: Head scape base to abdomen tip.}
+            body_width:
+              {type: number, minimum: 0.001, maximum: 100000, description: Thorax width at the forewing roots.}
+            head_width:
+              {type: number, minimum: 0.001, maximum: 100000, description: Widest left-to-right head span.}
+            abdomen_width:
+              {type: number, minimum: 0.001, maximum: 100000, description: Widest left-to-right abdomen span.}
+            standing_height:
+              {type: number, minimum: 0.001, maximum: 100000, description: Ground plane to forewing root height.}
+            wing_span:
+              {type: number, minimum: 0.001, maximum: 100000, description: Left-to-right forewing tip span.}
+            leg_span:
+              {type: number, minimum: 0.001, maximum: 100000, description: Left-to-right rear claw span.}
+        auto_capture: {type: boolean, default: false}
+        capture_mesh: {type: string, description: Optional mesh SOP name for auto-capture.}
   - name: create_rig
     description: >-
       Create a KineFX skeleton rig with a joint chain and optional

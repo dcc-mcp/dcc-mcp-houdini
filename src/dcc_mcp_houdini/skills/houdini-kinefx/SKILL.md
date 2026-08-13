@@ -12,7 +12,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: pipeline
-    version: "1.2.0"
+    version: "1.3.0"
     tags: [houdini, kinefx, rig, skeleton, capture, mocap, retarget, motionclip, motion-mixer, apex, character, animation, pipeline]
     search-hint: "kinefx rig retarget motion mixer motionclip APEX skeleton pose joint capture mocap character skinning"
     tools: tools.yaml
@@ -27,8 +27,13 @@ attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
 
 ## Tool groups
 
-- **`rig`:** `create_rig` — build a KineFX skeleton rig with a joint chain
-  and optional rig pose/attachments.
+- **`rig`:** `create_insect_rig` — build an anatomy-aware worker-honeybee rig
+  with six complete leg chains, four wings, flexible abdomen, eyes, antennae,
+  six grounded claw joints, and fourteen head/thorax/abdomen width controls.
+  Optional measured body length, head/thorax/abdomen width, standing height,
+  wing span, and leg span calibrate independent anatomical axes while
+  preserving the legacy uniform `scale`; `create_rig` remains the generic
+  joint-chain API and optional rig pose/attachments.
 - **`pose`:** `set_rig_pose` sets joint transforms;
   `validate_ground_contacts` verifies named support joints against one ground
   surface with numeric clearance and penetration evidence.
