@@ -29,6 +29,9 @@ Use the typed tools in this package for the cross-context handoff:
    3DGS PLY exports (`f_dc*`, `rot*`, `scale*`, `opacity`, and `f_rest*`). A
    public reconstruction showcase requires splats trained from at least three
    views of the same subject with solved camera poses. It also requires
+   a typed camera-pose source and validation state when the capture uses a
+   calibrated or estimated turntable. Estimated turntable poses remain blocked
+   from public showcase use until optimizer or reprojection validation passes.
    complete subject coverage and held-out evaluation over at least eight views
    with PSNR >= 25, SSIM >= 0.8, and LPIPS <= 0.2. These are publication gates,
    not guarantees that anatomy or identity is correct.

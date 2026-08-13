@@ -44,6 +44,16 @@ tools:
           type: boolean
           default: false
           description: Whether source camera poses were reconstructed and retained.
+        camera_pose_source:
+          type: string
+          enum: [sfm, calibrated_turntable, estimated_turntable, legacy, unknown]
+          default: legacy
+          description: Typed origin of the retained camera poses; estimated turntable poses require validation before showcase use.
+        camera_pose_validation:
+          type: string
+          enum: [validated, pending, failed, legacy, unknown]
+          default: legacy
+          description: Independent validation state for source poses, such as held-out reprojection or calibrated turntable checks.
         capture_coverage:
           type: string
           enum: [complete, partial, unknown]

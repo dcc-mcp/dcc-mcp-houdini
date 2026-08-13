@@ -194,6 +194,8 @@ def inspect_gsplat_relighting_input(
     provenance_type: str = "unknown",
     source_view_count: int = 0,
     camera_poses_solved: bool = False,
+    camera_pose_source: str = "legacy",
+    camera_pose_validation: str = "legacy",
     capture_coverage: str = "unknown",
     evaluation_view_count: int = 0,
     heldout_psnr: Optional[float] = None,
@@ -219,6 +221,23 @@ def inspect_gsplat_relighting_input(
             raise ValueError("provenance_type must be captured, synthetic, or unknown")
         if isinstance(source_view_count, bool) or int(source_view_count) < 0:
             raise ValueError("source_view_count must be a non-negative integer")
+        camera_pose_source = str(camera_pose_source or "unknown").lower()
+        if camera_pose_source not in {
+            "sfm",
+            "calibrated_turntable",
+            "estimated_turntable",
+            "legacy",
+            "unknown",
+        }:
+            raise ValueError(
+                "camera_pose_source must be sfm, calibrated_turntable, "
+                "estimated_turntable, legacy, or unknown"
+            )
+        camera_pose_validation = str(camera_pose_validation or "unknown").lower()
+        if camera_pose_validation not in {"validated", "pending", "failed", "legacy", "unknown"}:
+            raise ValueError(
+                "camera_pose_validation must be validated, pending, failed, legacy, or unknown"
+            )
         capture_coverage = str(capture_coverage or "unknown").lower()
         if capture_coverage not in {"complete", "partial", "unknown"}:
             raise ValueError("capture_coverage must be complete, partial, or unknown")
@@ -235,6 +254,8 @@ def inspect_gsplat_relighting_input(
         captured_provenance = has_capture_type and has_enough_views and bool(camera_poses_solved)
         showcase_provenance_pass = captured_provenance or not bool(public_showcase)
         quality_checks = {
+            "camera_pose_source": camera_pose_source in {"sfm", "calibrated_turntable", "legacy"},
+            "camera_pose_validation": camera_pose_validation in {"validated", "legacy"},
             "complete_capture_coverage": capture_coverage == "complete",
             "evaluation_views": int(evaluation_view_count) >= 8,
             "heldout_psnr": heldout_psnr is not None and float(heldout_psnr) >= 25.0,
@@ -269,6 +290,8 @@ def inspect_gsplat_relighting_input(
                 "type": provenance_type,
                 "source_view_count": int(source_view_count),
                 "camera_poses_solved": bool(camera_poses_solved),
+                "camera_pose_source": camera_pose_source,
+                "camera_pose_validation": camera_pose_validation,
                 "captured_gsplat": captured_provenance,
                 "public_showcase_pass": showcase_provenance_pass,
             },
