@@ -44,10 +44,34 @@ tools:
           type: boolean
           default: false
           description: Whether source camera poses were reconstructed and retained.
+        capture_coverage:
+          type: string
+          enum: [complete, partial, unknown]
+          default: unknown
+          description: Whether the captured views cover the complete subject without known missing regions.
+        evaluation_view_count:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Number of held-out views used for reconstruction quality evaluation.
+        heldout_psnr:
+          type: number
+          minimum: 0
+          description: Mean PSNR measured on held-out source views.
+        heldout_ssim:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean SSIM measured on held-out source views.
+        heldout_lpips:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean LPIPS measured on held-out source views.
         public_showcase:
           type: boolean
           default: false
-          description: Enforce captured-GSplat provenance before allowing public showcase use.
+          description: Enforce captured provenance, complete coverage, and held-out quality thresholds before public showcase use.
     next-tools:
       on-success:
         - houdini_gsplat_relighting__prepare_gsplat_sop_chain

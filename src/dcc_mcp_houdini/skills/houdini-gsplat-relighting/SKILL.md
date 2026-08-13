@@ -28,7 +28,10 @@ Use the typed tools in this package for the cross-context handoff:
    changing it. The preflight recognizes Houdini-native GSplats and standard
    3DGS PLY exports (`f_dc*`, `rot*`, `scale*`, `opacity`, and `f_rest*`). A
    public reconstruction showcase requires splats trained from at least three
-   views of the same subject with solved camera poses.
+   views of the same subject with solved camera poses. It also requires
+   complete subject coverage and held-out evaluation over at least eight views
+   with PSNR >= 25, SSIM >= 0.8, and LPIPS <= 0.2. These are publication gates,
+   not guarantees that anatomy or identity is correct.
 2. Prepare it with Houdini `Bake GSplats` when normalization is required, then
    Labs `Normals from GSplats` and/or `Delight GSplats`. Keep spherical
    harmonics enabled when the source provides `f_rest*` coefficients.

@@ -194,6 +194,11 @@ def inspect_gsplat_relighting_input(
     provenance_type: str = "unknown",
     source_view_count: int = 0,
     camera_poses_solved: bool = False,
+    capture_coverage: str = "unknown",
+    evaluation_view_count: int = 0,
+    heldout_psnr: Optional[float] = None,
+    heldout_ssim: Optional[float] = None,
+    heldout_lpips: Optional[float] = None,
     public_showcase: bool = False,
 ) -> dict:
     """Report the point attributes used by the Labs GSplat workflow."""
@@ -214,10 +219,29 @@ def inspect_gsplat_relighting_input(
             raise ValueError("provenance_type must be captured, synthetic, or unknown")
         if isinstance(source_view_count, bool) or int(source_view_count) < 0:
             raise ValueError("source_view_count must be a non-negative integer")
+        capture_coverage = str(capture_coverage or "unknown").lower()
+        if capture_coverage not in {"complete", "partial", "unknown"}:
+            raise ValueError("capture_coverage must be complete, partial, or unknown")
+        if isinstance(evaluation_view_count, bool) or int(evaluation_view_count) < 0:
+            raise ValueError("evaluation_view_count must be a non-negative integer")
+        if heldout_psnr is not None and float(heldout_psnr) < 0:
+            raise ValueError("heldout_psnr must be non-negative")
+        if heldout_ssim is not None and not 0 <= float(heldout_ssim) <= 1:
+            raise ValueError("heldout_ssim must be between 0 and 1")
+        if heldout_lpips is not None and not 0 <= float(heldout_lpips) <= 1:
+            raise ValueError("heldout_lpips must be between 0 and 1")
         has_capture_type = provenance_type == "captured"
         has_enough_views = int(source_view_count) >= 3
         captured_provenance = has_capture_type and has_enough_views and bool(camera_poses_solved)
         showcase_provenance_pass = captured_provenance or not bool(public_showcase)
+        quality_checks = {
+            "complete_capture_coverage": capture_coverage == "complete",
+            "evaluation_views": int(evaluation_view_count) >= 8,
+            "heldout_psnr": heldout_psnr is not None and float(heldout_psnr) >= 25.0,
+            "heldout_ssim": heldout_ssim is not None and float(heldout_ssim) >= 0.8,
+            "heldout_lpips": heldout_lpips is not None and float(heldout_lpips) <= 0.2,
+        }
+        showcase_quality_pass = all(quality_checks.values()) or not bool(public_showcase)
         schema = _gsplat_schema(names)
         checks = schema["native_checks"]
         missing = [key for key, present in checks.items() if not present and key in ("position", "color_or_albedo")]
@@ -235,8 +259,12 @@ def inspect_gsplat_relighting_input(
             normalization_available=schema["normalization_available"],
             recommended_normalizer="bakegsplat" if schema["normalization_required"] else None,
             ready_for_preparation=ready_for_preparation,
-            ready_for_relighting=not missing and showcase_provenance_pass,
-            blocking_missing=missing + ([] if showcase_provenance_pass else ["captured_gsplat_provenance"]),
+            ready_for_relighting=not missing and showcase_provenance_pass and showcase_quality_pass,
+            blocking_missing=(
+                missing
+                + ([] if showcase_provenance_pass else ["captured_gsplat_provenance"])
+                + ([] if showcase_quality_pass else [name for name, passed in quality_checks.items() if not passed])
+            ),
             provenance={
                 "type": provenance_type,
                 "source_view_count": int(source_view_count),
@@ -244,12 +272,28 @@ def inspect_gsplat_relighting_input(
                 "captured_gsplat": captured_provenance,
                 "public_showcase_pass": showcase_provenance_pass,
             },
+            quality={
+                "capture_coverage": capture_coverage,
+                "evaluation_view_count": int(evaluation_view_count),
+                "heldout_psnr": None if heldout_psnr is None else float(heldout_psnr),
+                "heldout_ssim": None if heldout_ssim is None else float(heldout_ssim),
+                "heldout_lpips": None if heldout_lpips is None else float(heldout_lpips),
+                "checks": quality_checks,
+                "public_showcase_pass": showcase_quality_pass,
+                "thresholds": {
+                    "minimum_evaluation_views": 8,
+                    "minimum_psnr": 25.0,
+                    "minimum_ssim": 0.8,
+                    "maximum_lpips": 0.2,
+                },
+            },
             recommendations=[
                 "Run Labs Normals from GSplats when N is absent.",
                 "Run Labs Delight GSplats when albedo is absent or captured lighting must be removed.",
                 "Preserve GS_SPH_R/G/B when view-dependent captured appearance matters.",
                 "Run Houdini Bake GSplats before Labs when source_schema is standard_3dgs_ply.",
                 "Do not label procedural point sampling as captured GSplat reconstruction.",
+                "Use held-out views and complete subject coverage before publishing a GSplat showcase.",
             ],
         )
     except Exception as exc:

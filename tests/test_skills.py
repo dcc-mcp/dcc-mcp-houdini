@@ -367,6 +367,94 @@ class TestGsplatRelightingSkills:
         assert result["context"]["provenance"]["public_showcase_pass"] is False
         assert "captured_gsplat_provenance" in result["context"]["blocking_missing"]
 
+    @pytest.mark.parametrize(
+        ("capture_coverage", "psnr", "ssim", "lpips", "expected_blocker"),
+        [
+            ("partial", 27.0, 0.86, 0.12, "complete_capture_coverage"),
+            ("complete", 24.11, 0.86, 0.12, "heldout_psnr"),
+            ("complete", 27.0, 0.725, 0.12, "heldout_ssim"),
+            ("complete", 27.0, 0.86, 0.24, "heldout_lpips"),
+        ],
+    )
+    def test_public_showcase_rejects_incomplete_or_low_quality_capture(
+        self,
+        capture_coverage: str,
+        psnr: float,
+        ssim: float,
+        lpips: float,
+        expected_blocker: str,
+    ) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                provenance_type="captured",
+                source_view_count=31,
+                camera_poses_solved=True,
+                capture_coverage=capture_coverage,
+                evaluation_view_count=18,
+                heldout_psnr=psnr,
+                heldout_ssim=ssim,
+                heldout_lpips=lpips,
+                public_showcase=True,
+            )
+
+        assert result["context"]["ready_for_relighting"] is False
+        assert result["context"]["provenance"]["public_showcase_pass"] is True
+        assert result["context"]["quality"]["public_showcase_pass"] is False
+        assert expected_blocker in result["context"]["blocking_missing"]
+
+    def test_public_showcase_accepts_measured_complete_capture(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                provenance_type="captured",
+                source_view_count=96,
+                camera_poses_solved=True,
+                capture_coverage="complete",
+                evaluation_view_count=12,
+                heldout_psnr=27.5,
+                heldout_ssim=0.86,
+                heldout_lpips=0.12,
+                public_showcase=True,
+            )
+
+        assert result["context"]["ready_for_relighting"] is True
+        assert result["context"]["blocking_missing"] == []
+
     def test_prepare_rolls_back_when_labs_node_is_missing(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
         source = MagicMock()
