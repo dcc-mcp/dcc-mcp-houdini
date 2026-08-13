@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from typing import Optional, Sequence
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+
+_REGION_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+_REGION_KEYS = {"name", "skin_group", "guides", "density", "length", "segments", "clump_strength"}
 
 
 def _node(hou, path: str):
@@ -50,6 +55,76 @@ def _validate_surface_pair(rest, animated) -> None:
         )
 
 
+def _validate_fur_values(density: float, length: float, segments: int, clump_strength: float) -> None:
+    if not 0.001 <= float(density) <= 10000000:
+        raise ValueError("density must be between 0.001 and 10000000")
+    if not 0 < float(length) <= 10:
+        raise ValueError("length must be greater than 0 and at most 10")
+    if isinstance(segments, bool) or not 2 <= int(segments) <= 64:
+        raise ValueError("segments must be between 2 and 64")
+    if not 0 <= float(clump_strength) <= 1:
+        raise ValueError("clump_strength must be between 0 and 1")
+
+
+def _normalize_regions(
+    region_profiles,
+    *,
+    skin_group: str,
+    guides: Optional[str],
+    density: float,
+    length: float,
+    segments: int,
+    clump_strength: float,
+) -> list[dict]:
+    if region_profiles is None:
+        _validate_fur_values(density, length, segments, clump_strength)
+        return [
+            {
+                "name": None,
+                "skin_group": str(skin_group),
+                "guides": guides,
+                "density": float(density),
+                "length": float(length),
+                "segments": int(segments),
+                "clump_strength": float(clump_strength),
+            }
+        ]
+    if not isinstance(region_profiles, (list, tuple)) or not 1 <= len(region_profiles) <= 16:
+        raise ValueError("region_profiles must contain between 1 and 16 region objects")
+
+    normalized = []
+    names = set()
+    for index, profile in enumerate(region_profiles):
+        if not isinstance(profile, Mapping):
+            raise ValueError("region profile {} must be an object".format(index))
+        unknown = sorted(set(profile) - _REGION_KEYS)
+        if unknown:
+            raise ValueError("region profile {} contains unsupported keys: {}".format(index, ", ".join(unknown)))
+        name = profile.get("name")
+        group = profile.get("skin_group")
+        if not isinstance(name, str) or _REGION_NAME_RE.fullmatch(name) is None:
+            raise ValueError("region name must start with a letter and contain only letters, numbers, or underscores")
+        if name in names:
+            raise ValueError("region names must be unique: {}".format(name))
+        if not isinstance(group, str) or not group.strip():
+            raise ValueError("region skin_group must be a non-empty string")
+        names.add(name)
+        region = {
+            "name": name,
+            "skin_group": group,
+            "guides": profile.get("guides", guides),
+            "density": float(profile.get("density", density)),
+            "length": float(profile.get("length", length)),
+            "segments": int(profile.get("segments", segments)),
+            "clump_strength": float(profile.get("clump_strength", clump_strength)),
+        }
+        if region["guides"] is not None and not isinstance(region["guides"], str):
+            raise ValueError("region guides must be a SOP node name")
+        _validate_fur_values(region["density"], region["length"], region["segments"], region["clump_strength"])
+        normalized.append(region)
+    return normalized
+
+
 def build_short_fur_groom(
     geo_path: str,
     rest_skin: str,
@@ -60,6 +135,7 @@ def build_short_fur_groom(
     length: float = 0.025,
     segments: int = 5,
     clump_strength: float = 0.15,
+    region_profiles=None,
     deform_method: str = "surface",
     name_prefix: str = "insect_fur",
 ) -> dict:
@@ -71,50 +147,80 @@ def build_short_fur_groom(
 
     created = []
     try:
-        if not 0.001 <= float(density) <= 10000000:
-            raise ValueError("density must be between 0.001 and 10000000")
-        if not 0 < float(length) <= 10:
-            raise ValueError("length must be greater than 0 and at most 10")
-        if isinstance(segments, bool) or not 2 <= int(segments) <= 64:
-            raise ValueError("segments must be between 2 and 64")
-        if not 0 <= float(clump_strength) <= 1:
-            raise ValueError("clump_strength must be between 0 and 1")
         if deform_method not in {"surface", "guide_shape", "point"}:
             raise ValueError("deform_method must be surface, guide_shape, or point")
+        regions = _normalize_regions(
+            region_profiles,
+            skin_group=skin_group,
+            guides=guides,
+            density=density,
+            length=length,
+            segments=segments,
+            clump_strength=clump_strength,
+        )
 
         geo = _node(hou, geo_path)
         rest = _node(hou, "{}/{}".format(geo.path(), rest_skin))
         animated = _node(hou, "{}/{}".format(geo.path(), animated_skin)) if animated_skin else None
-        guide_node = _node(hou, "{}/{}".format(geo.path(), guides)) if guides else None
+        guide_nodes = {
+            region["name"]: _node(hou, "{}/{}".format(geo.path(), region["guides"])) if region["guides"] else None
+            for region in regions
+        }
         if animated is not None and deform_method == "surface":
             _validate_surface_pair(rest, animated)
 
         hair_type = _find_type(geo, ("hairgen::2.0", "hairgen"))
-        hair = geo.createNode(hair_type, node_name="{}_generate".format(name_prefix))
-        created.append(hair)
-        hair.setInput(0, rest, 0)
-        if guide_node is not None:
-            hair.setInput(1, guide_node, 0)
-        configured = {
-            "density": _set_first(hair, ("density", "hairdensity"), float(density)),
-            "length": _set_first(hair, ("unguidedlength", "length", "hairlength"), float(length)),
-            "segments": _set_first(hair, ("unguidedsegments", "segments", "hairsegments"), int(segments)),
-            "group": _set_first(hair, ("group",), str(skin_group)),
-        }
+        region_outputs = []
+        region_context = []
+        for region in regions:
+            suffix = "_{}".format(region["name"]) if region["name"] else ""
+            hair = geo.createNode(hair_type, node_name="{}{}_generate".format(name_prefix, suffix))
+            created.append(hair)
+            hair.setInput(0, rest, 0)
+            guide_node = guide_nodes[region["name"]]
+            if guide_node is not None:
+                hair.setInput(1, guide_node, 0)
+            configured = {
+                "density": _set_first(hair, ("density", "hairdensity"), region["density"]),
+                "length": _set_first(hair, ("unguidedlength", "length", "hairlength"), region["length"]),
+                "segments": _set_first(hair, ("unguidedsegments", "segments", "hairsegments"), region["segments"]),
+                "group": _set_first(hair, ("group",), region["skin_group"]),
+            }
 
-        current = hair
-        clump_path = None
-        if clump_strength > 0:
-            clump_type = _find_type(geo, ("hairclump::2.0", "hairclump"))
-            clump = geo.createNode(clump_type, node_name="{}_clump".format(name_prefix))
-            created.append(clump)
-            clump.setFirstInput(current)
-            clump.setInput(1, rest, 0)
-            configured["clump_strength"] = _set_first(
-                clump, ("blend", "strength", "clumpstrength"), float(clump_strength)
+            current = hair
+            clump_path = None
+            if region["clump_strength"] > 0:
+                clump_type = _find_type(geo, ("hairclump::2.0", "hairclump"))
+                clump = geo.createNode(clump_type, node_name="{}{}_clump".format(name_prefix, suffix))
+                created.append(clump)
+                clump.setFirstInput(current)
+                clump.setInput(1, rest, 0)
+                configured["clump_strength"] = _set_first(
+                    clump, ("blend", "strength", "clumpstrength"), region["clump_strength"]
+                )
+                current = clump
+                clump_path = clump.path()
+            region_outputs.append(current)
+            region_context.append(
+                {
+                    **region,
+                    "guides": guide_node.path() if guide_node is not None else None,
+                    "hair_generate_path": hair.path(),
+                    "hair_clump_path": clump_path,
+                    "configured_parameters": configured,
+                }
             )
-            current = clump
-            clump_path = clump.path()
+
+        merge_path = None
+        if len(region_outputs) > 1:
+            merge = geo.createNode("merge", node_name="{}_merge".format(name_prefix))
+            created.append(merge)
+            for index, output in enumerate(region_outputs):
+                merge.setInput(index, output, 0)
+            current = merge
+            merge_path = merge.path()
+        else:
+            current = region_outputs[0]
 
         deform_path = None
         if animated is not None:
@@ -146,14 +252,17 @@ def build_short_fur_groom(
         return skill_success(
             "Built short-fur groom",
             output_node_path=current.path(),
-            hair_generate_path=hair.path(),
-            hair_clump_path=clump_path,
+            hair_generate_path=region_context[0]["hair_generate_path"],
+            hair_clump_path=region_context[0]["hair_clump_path"],
+            merge_path=merge_path,
             guide_deform_path=deform_path,
             rest_skin=rest.path(),
             animated_skin=animated.path() if animated is not None else None,
-            guides=guide_node.path() if guide_node is not None else None,
+            guides=region_context[0]["guides"] if len(region_context) == 1 else None,
+            region_count=len(region_context),
+            regions=region_context,
             deform_method=deform_method if animated is not None else None,
-            configured_parameters=configured,
+            configured_parameters=region_context[0]["configured_parameters"],
             output_point_count=output_counts[0],
             output_primitive_count=output_counts[1],
         )

@@ -82,6 +82,107 @@ def test_build_short_fur_groom_with_animated_skin() -> None:
     assert result["context"]["output_primitive_count"] == 100
 
 
+def test_build_short_fur_groom_builds_anatomy_regions() -> None:
+    mod = _load_script()
+    geo = MagicMock()
+    geo.path.return_value = "/obj/bee"
+    geo.childTypeCategory.return_value.nodeTypes.return_value = {
+        "hairgen::2.0": MagicMock(),
+        "hairclump::2.0": MagicMock(),
+        "guidedeform::2.0": MagicMock(),
+    }
+    rest, animated, body_guides, abdomen_guides = (MagicMock() for _ in range(4))
+    rest.path.return_value = "/obj/bee/rest_skin"
+    animated.path.return_value = "/obj/bee/animated_skin"
+    body_guides.path.return_value = "/obj/bee/body_guides"
+    abdomen_guides.path.return_value = "/obj/bee/abdomen_guides"
+    for skin in (rest, animated):
+        skin.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+            "pointcount": 100,
+            "primitivecount": 50,
+        }[name]
+
+    head_hair, abdomen_hair, abdomen_clump, merge, deform = (MagicMock() for _ in range(5))
+    head_hair.path.return_value = "/obj/bee/bee_fur_head_generate"
+    abdomen_hair.path.return_value = "/obj/bee/bee_fur_abdomen_generate"
+    abdomen_clump.path.return_value = "/obj/bee/bee_fur_abdomen_clump"
+    merge.path.return_value = "/obj/bee/bee_fur_merge"
+    deform.path.return_value = "/obj/bee/bee_fur_deform"
+    geo.createNode.side_effect = [head_hair, abdomen_hair, abdomen_clump, merge, deform]
+    for node in (head_hair, abdomen_hair, abdomen_clump, merge, deform):
+        node.parm.side_effect = lambda _name: MagicMock()
+    deform.errors.return_value = ()
+    deform.geometry.return_value.intrinsicValue.side_effect = lambda name: {
+        "pointcount": 900,
+        "primitivecount": 150,
+    }[name]
+
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = {
+        "/obj/bee": geo,
+        "/obj/bee/rest_skin": rest,
+        "/obj/bee/animated_skin": animated,
+        "/obj/bee/body_guides": body_guides,
+        "/obj/bee/abdomen_guides": abdomen_guides,
+    }.get
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.build_short_fur_groom(
+            "/obj/bee",
+            "rest_skin",
+            animated_skin="animated_skin",
+            guides="body_guides",
+            name_prefix="bee_fur",
+            region_profiles=[
+                {
+                    "name": "head",
+                    "skin_group": "head_fur",
+                    "density": 80000,
+                    "length": 0.018,
+                    "segments": 4,
+                    "clump_strength": 0.0,
+                },
+                {
+                    "name": "abdomen",
+                    "skin_group": "abdomen_fur",
+                    "guides": "abdomen_guides",
+                    "density": 150000,
+                    "length": 0.035,
+                    "segments": 6,
+                    "clump_strength": 0.25,
+                },
+            ],
+        )
+
+    assert result["success"] is True
+    head_hair.setInput.assert_any_call(0, rest, 0)
+    head_hair.setInput.assert_any_call(1, body_guides, 0)
+    abdomen_hair.setInput.assert_any_call(1, abdomen_guides, 0)
+    abdomen_clump.setFirstInput.assert_called_once_with(abdomen_hair)
+    merge.setInput.assert_any_call(0, head_hair, 0)
+    merge.setInput.assert_any_call(1, abdomen_clump, 0)
+    deform.setInput.assert_any_call(0, merge, 0)
+    assert result["context"]["region_count"] == 2
+    assert result["context"]["merge_path"] == "/obj/bee/bee_fur_merge"
+    assert [region["name"] for region in result["context"]["regions"]] == ["head", "abdomen"]
+
+
+def test_build_short_fur_groom_rejects_invalid_region_before_mutation() -> None:
+    mod = _load_script()
+    geo = MagicMock()
+    geo.path.return_value = "/obj/bee"
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = {"/obj/bee": geo, "/obj/bee/rest_skin": MagicMock()}.get
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.build_short_fur_groom(
+            "/obj/bee",
+            "rest_skin",
+            region_profiles=[{"name": "../bad", "skin_group": "head_fur"}],
+        )
+
+    assert result["success"] is False
+    geo.createNode.assert_not_called()
+
+
 def test_build_short_fur_groom_rejects_surface_topology_mismatch() -> None:
     mod = _load_script()
     geo, rest, animated = MagicMock(), MagicMock(), MagicMock()
