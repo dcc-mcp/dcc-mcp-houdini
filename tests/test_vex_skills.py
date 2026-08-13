@@ -164,6 +164,7 @@ class TestCreateWrangle:
         new = _node("/obj/geo1/attribwrangle1", "attribwrangle1", "attribwrangle")
         snip_parm = MagicMock()
         bind_parm = MagicMock()
+        bind_parm.eval.return_value = ""
         class_parm = MagicMock()
 
         def _parm_side_effect(name):
@@ -193,6 +194,33 @@ class TestCreateWrangle:
 
         assert result["success"] is True
         bind_parm.set.assert_called_once()
+
+    def test_create_wrangle_skips_houdini_22_binding_multiparm(self) -> None:
+        mod = _load_script("houdini-vex", "create_wrangle.py")
+        new = _node("/obj/geo1/attribwrangle1", "attribwrangle1", "attribwrangle")
+        snip_parm = MagicMock()
+        bind_parm = MagicMock()
+        bind_parm.eval.return_value = 0
+        class_parm = MagicMock()
+
+        def _parm_side_effect(name):
+            return {"snippet": snip_parm, "class": class_parm, "bindings": bind_parm}.get(name)
+
+        new.parm.side_effect = _parm_side_effect
+        parent = _node("/obj/geo1", "geo1")
+        parent.createNode.return_value = new
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_wrangle(
+                parent_path="/obj/geo1",
+                vex_code="@pos = @P;",
+                bindings={"pos": "vector"},
+            )
+
+        assert result["success"] is True
+        bind_parm.set.assert_not_called()
 
     def test_create_different_wrangle_types(self) -> None:
         for wt in ["volumewrangle", "geometrywrangle", "vertexwrangle", "detailwrangle"]:
