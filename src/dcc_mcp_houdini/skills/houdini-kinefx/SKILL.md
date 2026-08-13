@@ -27,7 +27,9 @@ attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
 
 ## Tool groups
 
-- **`rig`:** `create_rig` — build a KineFX skeleton rig with a joint chain
+- **`rig`:** `create_insect_rig` — build an anatomy-aware worker-honeybee rig
+  with six complete leg chains, four wings, flexible abdomen, eyes, antennae,
+  and six grounded claw joints; `create_rig` remains the generic joint-chain API
   and optional rig pose/attachments.
 - **`pose`:** `set_rig_pose` sets joint transforms;
   `validate_ground_contacts` verifies named support joints against one ground

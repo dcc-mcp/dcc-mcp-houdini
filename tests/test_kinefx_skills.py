@@ -144,6 +144,7 @@ class TestCreateRig:
         assert result["success"] is False
         geo.createNode.assert_not_called()
 
+
     def test_create_rig_validates_joint_name_before_creating_nodes(self) -> None:
         mod = _load_script("create_rig.py")
         geo = MagicMock()
@@ -616,3 +617,47 @@ class TestBuildRetargetMotionMixer:
             source_skeletons=["/obj/anim/source_a"],
         )
         assert result["success"] is False
+
+
+class TestCreateInsectRig:
+    def test_honeybee_topology_is_complete_and_grounded(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        chain, contacts = mod._honeybee_chain(scale=2.0, ground_z=0.25)
+        names = {joint["name"] for joint in chain}
+
+        assert len(chain) == 61
+        assert len(contacts) == 6
+        assert all(name in names for name in contacts)
+        assert all(next(j["translate"][2] for j in chain if j["name"] == name) == 0.25 for name in contacts)
+        assert {"forewing_L_root", "forewing_R_root", "hindwing_L_root", "hindwing_R_root"} <= names
+        assert {"compound_eye_L", "compound_eye_R", "abdomen_05"} <= names
+        for leg in ("front", "middle", "rear"):
+            for side in ("L", "R"):
+                assert all(f"{leg}_{side}_{segment}" in names for segment in mod._LEG_SEGMENTS)
+
+    def test_invalid_scale_does_not_create_a_rig(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        with patch.object(mod, "create_rig") as create:
+            result = mod.create_insect_rig("/obj/bee", scale=0.0)
+        assert result["success"] is False
+        create.assert_not_called()
+
+    def test_reports_anatomy_contract_after_creation(self) -> None:
+        mod = _load_script("create_insect_rig.py")
+        with patch.object(
+            mod,
+            "create_rig",
+            return_value={"success": True, "context": {"rig_path": "/obj/bee/rig"}},
+        ):
+            result = mod.create_insect_rig("/obj/bee", ground_z=0.1)
+        context = result["context"]
+        assert context["leg_count"] == 6
+        assert context["wing_count"] == 4
+        assert context["support_joint_names"] == [
+            "front_L_claw",
+            "front_R_claw",
+            "middle_L_claw",
+            "middle_R_claw",
+            "rear_L_claw",
+            "rear_R_claw",
+        ]
