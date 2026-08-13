@@ -98,6 +98,39 @@ tools:
           minItems: 3
           maxItems: 3
           description: Scale [sx, sy, sz] factors.
+  - name: validate_ground_contacts
+    description: >-
+      Read named KineFX joint positions against the top of one cooked ground
+      surface and report contact, lifted, penetrating, and missing joints.
+      Passes only when no requested joint penetrates and the minimum stable
+      support count is met.
+    source_file: scripts/validate_ground_contacts.py
+    execution: sync
+    affinity: main
+    group: pose
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rig_node, ground_node, joint_names]
+      properties:
+        rig_node: {type: string, description: Cooked KineFX skeleton SOP path.}
+        ground_node: {type: string, description: Cooked SOP path defining the only ground surface.}
+        joint_names:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string}
+          description: Named support or lifted joints to validate.
+        axis: {type: string, enum: [x, y, z], default: z}
+        tolerance: {type: number, minimum: 0, default: 0.001, description: World-space contact tolerance.}
+        min_support_contacts: {type: integer, minimum: 1, default: 3}
   - name: capture_joints
     description: >-
       Capture skinning weights from a KineFX skeleton onto a target mesh
