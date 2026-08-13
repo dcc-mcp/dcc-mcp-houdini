@@ -31,3 +31,9 @@ are documented in
 [the showcase provenance](../../../../docs/showcase/honeybee-reference-license.md)
 and
 [`honeybee-gsplat-validation.json`](../../../../docs/showcase/honeybee-gsplat-validation.json).
+
+For trained-checkpoint ingestion, subject cleanup, dark-anatomy retention, and
+animation attribute requirements, see the dedicated contract section in
+[SKILL.md](SKILL.md). In particular, public validation must not remove black
+eyes or legs with a global brightness mask, and checkpoint-specific image
+metrics must remain pending until they are freshly measured.

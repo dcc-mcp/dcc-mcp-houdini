@@ -48,3 +48,38 @@ vary between Houdini 22 builds.
 Procedural meshes sampled into points are synthetic point clouds, not captured
 Gaussian Splat reconstructions. They may test relighting mechanics, but must not
 be presented as reconstruction evidence or public GSplat showcase input.
+
+## Trained checkpoint and subject-cleanup contract
+
+When the source is a trained Nerfstudio `splatfacto` checkpoint, preserve the
+actual Gaussian tensors: `means`, `scales`, `quats`, `opacities`,
+`features_dc`, and `features_rest`. Export SH-rest coefficients in the Inria
+PLY order (channel-major after transposing coefficient/channel axes), and keep
+the training step plus checkpoint digest in the reconstruction manifest. A
+dense or high-polygon proxy is not equivalent evidence.
+
+Specimen and turntable captures commonly fit black-background Gaussians around
+the subject. Cleanup must be deterministic and disclosed. Prefer this bounded
+sequence:
+
+1. fit and remove known capture fixtures such as a specimen pin;
+2. derive a robust subject support volume from non-background Gaussians;
+3. retain dark anatomy only when it is spatially supported by nearby subject
+   Gaussians;
+4. reject oversized dark splats outside the expected anatomical scale;
+5. record source/kept/removed counts and cleanup thresholds.
+
+Do not use a global luminance threshold as a downstream `bee_mask` or subject
+mask. It removes black compound eyes, dark thorax regions, antennae, and legs,
+and produces a bright hollow silhouette even when the trained splat is valid.
+Validate dark-anatomy retention and background rejection separately.
+
+The published reconstruction bundle must keep camera provenance, finite-array
+checks, bounds, Gaussian counts, hashes, and fresh holdout metrics. Never reuse
+PSNR/SSIM/LPIPS from a different checkpoint; mark those metrics pending until
+the matching checkpoint is rendered and evaluated.
+
+For animated splats, verify that deformation preserves `orient`, anisotropic
+`scale`, opacity, and SH attributes in addition to `P`. A point-position-only
+deformation can appear plausible in a point preview while producing incorrect
+ellipsoid orientation in a real GSplat rasterizer.
