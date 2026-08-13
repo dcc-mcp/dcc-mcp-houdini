@@ -7,6 +7,8 @@ from typing import List, Optional
 from _camlight_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+DEFAULT_MAX_VIEWPORT_PRIMITIVES = 1_000_000
+
 
 def _scene_viewer(hou):
     try:
@@ -15,9 +17,25 @@ def _scene_viewer(hou):
         return None
 
 
+def _geometry_counts(node) -> Optional[dict]:
+    """Return bounded geometry metadata without asking the viewport to draw it."""
+    try:
+        geometry_node = node.displayNode() if hasattr(node, "displayNode") else None
+        geometry_node = geometry_node or node
+        geometry = geometry_node.geometry()
+        return {
+            "points": int(geometry.intrinsicValue("pointcount")),
+            "primitives": int(geometry.intrinsicValue("primitivecount")),
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def frame_view(
     node_path: Optional[str] = None,
     camera_path: Optional[str] = None,
+    max_primitive_count: int = DEFAULT_MAX_VIEWPORT_PRIMITIVES,
+    allow_heavy_geometry: bool = False,
 ) -> dict:
     """Look through *camera_path* (optional) and frame *node_path* (optional)."""
     try:
@@ -42,14 +60,31 @@ def frame_view(
             )
         viewport = viewer.curViewport()
         framed = False
+        geometry_counts = None
+        heavy_geometry_refused = False
         if node_path:
             node = get_node(hou, node_path)
-            try:
-                node.setSelected(True, clear_all_selected=True)
-                viewport.frameSelected()
-                framed = True
-            except Exception as frame_exc:  # noqa: BLE001
-                warnings.append("Could not frame node: {}".format(frame_exc))
+            geometry_counts = _geometry_counts(node)
+            if (
+                geometry_counts is not None
+                and geometry_counts["primitives"] > max_primitive_count
+                and not allow_heavy_geometry
+            ):
+                heavy_geometry_refused = True
+                warnings.append(
+                    "Refused to frame heavy geometry with {:,} primitives; "
+                    "create a viewport proxy or explicitly set "
+                    "allow_heavy_geometry=true.".format(
+                        geometry_counts["primitives"]
+                    )
+                )
+            else:
+                try:
+                    node.setSelected(True, clear_all_selected=True)
+                    viewport.frameSelected()
+                    framed = True
+                except Exception as frame_exc:  # noqa: BLE001
+                    warnings.append("Could not frame node: {}".format(frame_exc))
         elif not camera_path:
             try:
                 viewport.frameAll()
@@ -81,6 +116,10 @@ def frame_view(
             camera_path=camera_path,
             active_camera=active_camera,
             node_path=node_path,
+            geometry_counts=geometry_counts,
+            max_primitive_count=max_primitive_count,
+            allow_heavy_geometry=allow_heavy_geometry,
+            heavy_geometry_refused=heavy_geometry_refused,
             warnings=warnings,
         )
     except Exception as exc:

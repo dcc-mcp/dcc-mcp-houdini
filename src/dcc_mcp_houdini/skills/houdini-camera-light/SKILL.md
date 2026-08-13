@@ -26,6 +26,10 @@ View tools (`frame_view`, `get_view_state`) are UI-aware: in a headless
 `framed: false` / `ui_available: false` instead of failing.
 When both a node and camera are supplied, `frame_view` frames the node first
 and activates the camera last so the returned `active_camera` is authoritative.
+To protect the Houdini UI from driver-level crashes, `frame_view` refuses to
+draw geometry above one million primitives by default and reports counts plus
+`heavy_geometry_refused: true`. Generate a viewport proxy whenever possible;
+`allow_heavy_geometry=true` is an explicit, auditable override.
 
 ## Tool groups
 
