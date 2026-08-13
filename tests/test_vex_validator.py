@@ -91,12 +91,12 @@ float d = dot(n, {0, 1, 0});
         assert validate_vex_snippet_client("int count = nprimitives(0);") == []
 
     def test_kinefx_rotation_and_name_matching_are_allowed(self) -> None:
-        snippet = '''
+        snippet = """
 if (find(s@name, "_claw") >= 0) {
     matrix3 rotation = qconvert(quaternion(radians(12.0), {1, 0, 0}));
     3@transform = rotation * 3@transform;
 }
-'''
+"""
         assert validate_vex_snippet_client(snippet) == []
 
 
