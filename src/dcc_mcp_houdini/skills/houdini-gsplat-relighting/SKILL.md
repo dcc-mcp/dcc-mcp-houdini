@@ -69,6 +69,14 @@ sequence:
 4. reject oversized dark splats outside the expected anatomical scale;
 5. record source/kept/removed counts and cleanup thresholds.
 
+Fixture cleanup is not accepted from a distant beauty frame alone. Validate
+the cleaned splat from at least two source-camera projections and one novel
+view, and explicitly inspect the fitted fixture region for coherent residual
+clusters. Colored rings, labels, mounting wire, or pin fragments that remain
+spatially disconnected from anatomy are a failed cleanup, even when the
+overall silhouette is recognizable. Keep the result as engineering evidence
+until those residuals are removed; do not promote it to a public beauty asset.
+
 Do not use a global luminance threshold as a downstream `bee_mask` or subject
 mask. It removes black compound eyes, dark thorax regions, antennae, and legs,
 and produces a bright hollow silhouette even when the trained splat is valid.

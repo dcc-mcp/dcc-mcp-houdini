@@ -284,6 +284,103 @@ class TestSetRigPose:
         mock_hou.node.assert_not_called()
 
 
+class TestValidateGroundContacts:
+    @staticmethod
+    def _point(name: str, position: tuple[float, float, float]) -> MagicMock:
+        point = MagicMock()
+        point.attribValue.return_value = name
+        point.position.return_value = position
+        return point
+
+    def test_reports_stable_three_point_support_without_penetration(self) -> None:
+        mod = _load_script("validate_ground_contacts.py")
+        rig_geometry = MagicMock()
+        rig_geometry.findPointAttrib.return_value = "name"
+        rig_geometry.points.return_value = [
+            self._point("front_L_claw", (0.0, 0.0, 0.0)),
+            self._point("middle_R_claw", (0.0, 0.0, 0.0004)),
+            self._point("rear_L_claw", (0.0, 0.0, -0.0003)),
+            self._point("front_R_claw", (0.0, 0.0, 0.004)),
+        ]
+        rig = MagicMock()
+        rig.worldTransform = None
+        rig.creator = None
+        rig.path.return_value = "/obj/bee/rig"
+        rig.geometry.return_value = rig_geometry
+
+        bounds = MagicMock()
+        bounds.minvec.return_value = (-1.0, -1.0, 0.0)
+        bounds.maxvec.return_value = (1.0, 1.0, 0.0)
+        ground_geometry = MagicMock()
+        ground_geometry.boundingBox.return_value = bounds
+        ground = MagicMock()
+        ground.worldTransform = None
+        ground.creator = None
+        ground.path.return_value = "/obj/ground/OUT"
+        ground.geometry.return_value = ground_geometry
+
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/obj/bee/rig": rig,
+            "/obj/ground/OUT": ground,
+        }.get(path)
+        mock_hou.Vector3 = lambda *values: tuple(values)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.validate_ground_contacts(
+                "/obj/bee/rig",
+                "/obj/ground/OUT",
+                ["front_L_claw", "middle_R_claw", "rear_L_claw", "front_R_claw"],
+                tolerance=0.001,
+                min_support_contacts=3,
+            )
+
+        context = result["context"]
+        assert result["success"] is True
+        assert context["passed"] is True
+        assert context["contact_count"] == 3
+        assert context["penetrating"] == []
+        assert context["lifted"] == ["front_R_claw"]
+
+    def test_fails_validation_for_penetration_or_missing_joint(self) -> None:
+        mod = _load_script("validate_ground_contacts.py")
+        rig_geometry = MagicMock()
+        rig_geometry.findPointAttrib.return_value = "name"
+        rig_geometry.points.return_value = [self._point("front_L_claw", (0.0, 0.0, -0.003))]
+        rig = MagicMock()
+        rig.worldTransform = None
+        rig.creator = None
+        rig.path.return_value = "/obj/bee/rig"
+        rig.geometry.return_value = rig_geometry
+        bounds = MagicMock()
+        bounds.minvec.return_value = (-1.0, -1.0, 0.0)
+        bounds.maxvec.return_value = (1.0, 1.0, 0.0)
+        ground_geometry = MagicMock()
+        ground_geometry.boundingBox.return_value = bounds
+        ground = MagicMock()
+        ground.worldTransform = None
+        ground.creator = None
+        ground.path.return_value = "/obj/ground/OUT"
+        ground.geometry.return_value = ground_geometry
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: rig if path.endswith("rig") else ground
+        mock_hou.Vector3 = lambda *values: tuple(values)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.validate_ground_contacts(
+                "/obj/bee/rig",
+                "/obj/ground/OUT",
+                ["front_L_claw", "rear_L_claw"],
+                tolerance=0.001,
+            )
+
+        context = result["context"]
+        assert result["success"] is True
+        assert context["passed"] is False
+        assert context["penetrating"] == ["front_L_claw"]
+        assert context["missing"] == ["rear_L_claw"]
+
+
 class TestCaptureJoints:
     def test_capture_joints_proximity(self) -> None:
         mod = _load_script("capture_joints.py")

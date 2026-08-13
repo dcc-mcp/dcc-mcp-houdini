@@ -37,3 +37,5 @@ animation attribute requirements, see the dedicated contract section in
 [SKILL.md](SKILL.md). In particular, public validation must not remove black
 eyes or legs with a global brightness mask, and checkpoint-specific image
 metrics must remain pending until they are freshly measured.
+Fixture/label residuals also fail public beauty acceptance and must be checked
+from source-camera projections plus a novel view, not hidden by the HDR or crop.
