@@ -1,4 +1,5 @@
 """Contract tests for the bounded Houdini Asset Sync skill."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -38,4 +39,3 @@ def test_public_schemas_are_bounded_and_path_free() -> None:
     assert "source_name" in publish_properties
     assert "source_path" not in publish_properties
     assert "store_root" not in publish_properties
-
