@@ -65,7 +65,9 @@ def _honeybee_chain(
         shape_controls.extend((head_width, thorax_width))
 
     for side, sign in (("L", 1.0), ("R", -1.0)):
-        antenna_base = _append(chain, f"antenna_{side}_scape", head, (1.58 * s, sign * 0.20 * s, base_ground + 1.82 * s))
+        antenna_base = _append(
+            chain, f"antenna_{side}_scape", head, (1.58 * s, sign * 0.20 * s, base_ground + 1.82 * s)
+        )
         antenna_pedicel = _append(
             chain,
             f"antenna_{side}_pedicel",
@@ -86,9 +88,7 @@ def _honeybee_chain(
     ):
         abdomen_parent = _append(chain, f"abdomen_{index:02d}", abdomen_parent, (x * s, 0.0, base_ground + z * s))
         abdomen_centers.append((abdomen_parent, x, z))
-    for index, ((parent, x, z), width_factor) in enumerate(
-        zip(abdomen_centers, _ABDOMEN_WIDTH_PROFILE), start=1
-    ):
+    for index, ((parent, x, z), width_factor) in enumerate(zip(abdomen_centers, _ABDOMEN_WIDTH_PROFILE), start=1):
         for side, sign in (("L", 1.0), ("R", -1.0)):
             name = f"abdomen_{index:02d}_width_{side}"
             _append(chain, name, parent, (x * s, sign * 0.45 * width_factor * s, base_ground + z * s))
@@ -153,13 +153,9 @@ def _honeybee_chain(
         x, y, z = joint["translate"]
         sign = -1.0 if y < 0.0 else 1.0
         if "wing_" in name:
-            transformed_y = sign * (
-                target_half_width + (abs(y) - _BASE_HALF_WIDTH) * wing_extension_factor
-            )
+            transformed_y = sign * (target_half_width + (abs(y) - _BASE_HALF_WIDTH) * wing_extension_factor)
         elif any(name.startswith(f"{leg}_") for leg in leg_specs):
-            transformed_y = sign * (
-                target_half_width + (abs(y) - _BASE_HALF_WIDTH) * leg_extension_factor
-            )
+            transformed_y = sign * (target_half_width + (abs(y) - _BASE_HALF_WIDTH) * leg_extension_factor)
         elif name.startswith(("compound_eye_", "antenna_", "head_width_")):
             transformed_y = y * head_y_factor
         elif "_width_" in name and name.startswith("abdomen_"):
@@ -230,9 +226,7 @@ def create_insect_rig(
             invalid_dimensions=invalid_spans,
             effective_anatomy_measurements=effective_measurements,
         )
-    chain, contacts, shape_controls, effective_measurements = _honeybee_chain(
-        scale, ground_z, effective_measurements
-    )
+    chain, contacts, shape_controls, effective_measurements = _honeybee_chain(scale, ground_z, effective_measurements)
     names = [joint["name"] for joint in chain]
     if len(names) != len(set(names)) or len(contacts) != 6:
         return skill_error(
