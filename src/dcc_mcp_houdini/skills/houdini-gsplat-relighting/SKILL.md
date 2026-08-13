@@ -35,10 +35,23 @@ Use the typed tools in this package for the cross-context handoff:
 3. In Solaris, use `Relight GSplats` with USD lights, a render camera, shadows,
    shadow bias, and optional dome/HDRI lighting. Use `houdini-parameters` for
    version-specific Labs parameters that are not exposed by the setup tool.
+   When Labs exposes compatible relit points, the setup tool discovers them by
+   geometry attributes and publishes a stable object-level `sop_output_path`;
+   consumers must not address `/sopmodify.../OUT` or other HDA internals.
+   After changing Dome or relight parameters, call
+   `refresh_gsplat_relight_sop_bridge` before rasterization to force-cook the
+   relight asset and refresh the stable bridge.
 4. In Copernicus, import the prepared or relit SOP result and use `Rasterize
    GSplats` with camera metadata. The setup tool can append Sharpen, HSV,
    Gamma, and Premult nodes and set the H22 network resolution; use parameter
-   skills for further interactive tuning.
+   skills for further interactive tuning. An optional absolute HDR/background
+   image creates a File COP followed by a Blend COP in bounded `over` mode.
+   The Blend connection uses H22 `setNamedInput` for `bg` and `fg`; positional
+   `setInput` is not valid evidence for this multi-input Copernicus contract.
+5. For pixel acceptance, call `write_gsplat_copernicus_image` with the returned
+   COP output and an absolute file path. It renders one frame synchronously
+   through a named Houdini 22 Image ROP and succeeds only when a fresh,
+   non-empty file is present. A cooked COP or Viewer image is not disk evidence.
 
 The expected handoff attributes are `P`, `Cd` or `albedo`, `N`, `orient`,
 `scale`/`pscale`, opacity, and optional `GS_SPH_R/G/B` plus `ao`. The setup

@@ -1,6 +1,6 @@
 # Honeybee showcase provenance and limits
 
-## Captured GSplat engineering validation
+## Interim captured-GSplat engineering validation
 
 The current captured-data validation uses specimen `UCSB-IZC00037044` from
 the University of California, Santa Barbara dataset
@@ -18,7 +18,9 @@ preview evaluation records PSNR 21.90895, SSIM 0.84895, and LPIPS 0.14534.
 Hashes, camera conventions, thresholds, and artifact disclosures are preserved
 in [`honeybee-gsplat-validation.json`](honeybee-gsplat-validation.json).
 
-The Houdini animation and fur are downstream authored layers. KineFX does not
+The current public result is engineering evidence with `public_beauty: fail`,
+not the final high-fidelity honeybee showcase. The Houdini animation and fur
+are downstream authored layers. KineFX does not
 turn the pinned specimen into captured biological motion, and Houdini Groom
 curves are not photographed strands. The outdoor environment is presentation
 lighting, not part of the source capture. Residual support Gaussians and
@@ -39,10 +41,10 @@ are intentionally not painted out.
 
 ## Archived procedural rig validation
 
-The animated asset in this showcase is an original DCC-MCP procedural model.
-It is assembled from authored polygonal forms, curves, materials, and KineFX
-animation. It is not a SideFX sample, photogrammetry reconstruction, CT mesh,
-or trained Gaussian Splat.
+The separate archived procedural sequence is an original DCC-MCP model. It is
+assembled from authored polygonal forms, curves, materials, and KineFX
+animation. It is not the captured asset above, a SideFX sample,
+photogrammetry reconstruction, CT mesh, or trained Gaussian Splat.
 
 ## Published anatomy reference
 
@@ -61,25 +63,28 @@ The flight render uses Poly Haven's
 [Residential Garden](https://polyhaven.com/a/residential_garden) HDRI under the
 CC0 license. It is the only environment emitter in the shot.
 
-## Verified technical evidence
+## Verified technical evidence: captured GSplat
 
-- 96 frames at 1280×720 and 24 fps, rendered with Karma and displayed through
-  the Houdini 22 ACES configuration.
 - The current 5k checkpoint contains 263,630 trained Gaussians. Its Houdini
   subject-filtered engineering scene retains 15,475 Gaussians; fresh held-out
   5k image metrics remain pending and are not substituted with the older 3k
   preview metrics below.
-- Six procedural leg hierarchies with authored tarsus, pad, and claw controls.
-- Per-frame hierarchy checks keep the tested controls at or above Z=-0.003;
-  this is not a substitute for per-primitive collision or contact solving.
-- One bee instance is rendered; body motion blur is disabled to avoid apparent
-  duplicate silhouettes.
 - The Houdini UI captures are real and are not recreated product interfaces,
   but the current framing does not show the complete asset and readable node
   graph together. They are retained as internal validation evidence and are not
   presented as the final public UI acceptance frame.
 
-## Known limitations
+## Verified technical evidence: archived procedural rig
+
+- 96 frames at 1280×720 and 24 fps, rendered with Karma and displayed through
+  the Houdini 22 ACES configuration.
+- Six procedural leg hierarchies with authored tarsus, pad, and claw controls.
+- Per-frame hierarchy checks keep the tested controls at or above Z=-0.003;
+  this is not a substitute for per-primitive collision or contact solving.
+- One procedural insect instance is rendered; body motion blur is disabled to
+  avoid apparent duplicate silhouettes.
+
+## Known limitations of the archived procedural rig
 
 The current thorax, head, abdomen, legs, and wings are stylized procedural
 approximations. The silhouette reads closer to an ant-like generic insect than
@@ -92,8 +97,9 @@ The current body compliance is phase-delayed authored motion, not a biological
 soft-body simulation. Eye motion is a head/attention control, not compound-eye
 deformation. The garden render is also too dark for final LookDev acceptance.
 
-The next reconstruction stage is deliberately separate: train a real honeybee
-Gaussian Splat from a licensed multi-view capture, validate its provenance,
-deform it with the GSplat-aware KineFX tools, and generate fur with the Houdini
-Groom workflow. Until that evidence exists, this procedural asset must not be
-labelled as a real GSplat reconstruction.
+The next reconstruction stage is deliberately separate: produce a
+higher-fidelity honeybee Gaussian Splat from a cleaner licensed multi-view
+capture, validate its provenance and anatomy, deform it with the GSplat-aware
+KineFX tools, and generate fur with the Houdini Groom workflow. Until that
+evidence exists, neither the interim captured result nor the archived
+procedural rig may be presented as final honeybee beauty acceptance.

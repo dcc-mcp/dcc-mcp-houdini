@@ -60,7 +60,7 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Houdini 22 captured GSplat engineering validation
+## Houdini 22 interim captured-GSplat engineering validation
 
 ![Licensed multiview input for specimen UCSB-IZC00037044](docs/showcase/honeybee-ucsb-izc00037044-multiview.jpg)
 
@@ -80,6 +80,7 @@ limitations are in
 
 ![Captured GSplat animated with KineFX and Houdini Groom in an outdoor HDR environment](docs/showcase/houdini-honeybee-gsplat-kinefx-groom.gif)
 
+This is an interim engineering showcase, not the final honeybee beauty target.
 The Houdini 22 scene exercises GSplat-aware KineFX deformation, articulated
 wing/body/leg controls, a deformation-synchronized short-fur Groom, and a fixed
 camera flipbook under a neutral outdoor HDR environment. The five-frame contact
@@ -99,7 +100,8 @@ engineering evidence rather than final beauty approval: pin removal cannot
 synthesize occluded anatomy, residual
 capture-support Gaussians remain visible, and the pinned specimen cannot supply
 biological flight or foot-contact motion. A final living-bee showcase still
-requires a cleaner licensed capture and dedicated contact/occlusion review.
+requires a cleaner licensed capture, higher-fidelity reconstruction, and
+dedicated contact/occlusion review.
 
 Source attribution and the separation between captured evidence and authored
 animation are documented in
@@ -352,7 +354,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-pipeline` | `set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package` |
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
-| `houdini-gsplat-relighting` | `inspect_gsplat_relighting_input`, `prepare_gsplat_sop_chain`, `create_gsplat_relight_lop`, `create_gsplat_copernicus_raster` |
+| `houdini-gsplat-relighting` | `inspect_gsplat_relighting_input`, `prepare_gsplat_sop_chain`, `create_gsplat_relight_lop`, `refresh_gsplat_relight_sop_bridge`, `create_gsplat_copernicus_raster`, `write_gsplat_copernicus_image` |
 
 ## CI and Houdini Docker
 

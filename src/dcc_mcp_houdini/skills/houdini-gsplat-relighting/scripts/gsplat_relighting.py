@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import math
+import os
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def _node(hou: Any, path: str) -> Any:
@@ -23,6 +26,29 @@ def _type_name(node: Any) -> str:
 
 def _summary(node: Any) -> dict:
     return {"path": node.path(), "name": node.name(), "type": _type_name(node)}
+
+
+def _safe_public_error(message: str, error: str, exc: Exception) -> dict:
+    """Return a public failure without exception repr, traceback, or host paths."""
+    return skill_error(message, error, error_type=type(exc).__name__)
+
+
+_GSPLAT_BRIDGE_ATTRIBUTES = (
+    "P",
+    "Cd",
+    "albedo",
+    "N",
+    "orient",
+    "scale",
+    "pscale",
+    "GS_Alpha",
+    "Alpha",
+    "alpha",
+    "GS_SPH_R",
+    "GS_SPH_G",
+    "GS_SPH_B",
+    "ao",
+)
 
 
 def _attributes(geometry: Any, limit: int) -> List[dict]:
@@ -253,7 +279,7 @@ def inspect_gsplat_relighting_input(
             ],
         )
     except Exception as exc:
-        return skill_exception(exc, message="Failed to inspect GSplat input")
+        return _safe_public_error("Failed to inspect GSplat input", "Houdini GSplat inspection failed", exc)
 
 
 @skill_entry
@@ -331,7 +357,11 @@ def prepare_gsplat_sop_chain(
                 item.destroy()
             except Exception:  # noqa: BLE001
                 pass
-        return skill_exception(exc, message="Failed to prepare GSplat SOP chain; created nodes were rolled back")
+        return _safe_public_error(
+            "Failed to prepare GSplat SOP chain; created nodes were rolled back",
+            "Houdini GSplat SOP preparation failed",
+            exc,
+        )
 
 
 @skill_entry
@@ -343,6 +373,7 @@ def create_gsplat_relight_lop(
     shadow_bias: Optional[float] = None,
     lights: Optional[List[Dict[str, Any]]] = None,
     parameters: Optional[Dict[str, Any]] = None,
+    create_sop_bridge: bool = True,
 ) -> dict:
     """Create USD lights and a Labs Relight GSplats LOP."""
     try:
@@ -412,6 +443,24 @@ def create_gsplat_relight_lop(
             (applied if selected else unsupported).append(key)
         if hasattr(parent, "layoutChildren"):
             parent.layoutChildren(items=created)
+        bridge_contract = {
+            "sop_bridge_available": False,
+            "sop_output_path": None,
+            "point_count": 0,
+            "gsplat_attributes": [],
+            "bridge_refreshed": False,
+            "sop_bridge_status": "disabled",
+            "sop_bridge_error_type": None,
+        }
+        if create_sop_bridge:
+            try:
+                bridge_contract = _build_or_refresh_relight_sop_bridge(hou, relight, force=True)
+            except ValueError as exc:
+                bridge_contract["sop_bridge_status"] = "compatible_sop_output_not_available"
+                bridge_contract["sop_bridge_error_type"] = type(exc).__name__
+            except Exception as exc:  # noqa: BLE001
+                bridge_contract["sop_bridge_status"] = "bridge_refresh_failed"
+                bridge_contract["sop_bridge_error_type"] = type(exc).__name__
         return skill_success(
             "Created GSplat Solaris relighting stage",
             input=_summary(source),
@@ -420,6 +469,7 @@ def create_gsplat_relight_lop(
             applied_parameters=applied,
             unsupported_parameters=unsupported,
             output_attributes=["Cd", "GS_SPH_R", "GS_SPH_G", "GS_SPH_B"],
+            **bridge_contract,
         )
     except Exception as exc:
         for item in reversed(created):
@@ -427,9 +477,214 @@ def create_gsplat_relight_lop(
                 item.destroy()
             except Exception:  # noqa: BLE001
                 pass
-        return skill_exception(
-            exc, message="Failed to create GSplat Solaris relighting stage; created nodes were rolled back"
+        return _safe_public_error(
+            "Failed to create GSplat Solaris relighting stage; created nodes were rolled back",
+            "Houdini Solaris relighting setup failed",
+            exc,
         )
+
+
+def _node_point_contract(node: Any) -> Optional[dict]:
+    geometry_method = getattr(node, "geometry", None)
+    if not callable(geometry_method):
+        return None
+    try:
+        geometry = geometry_method()
+        point_count = int(geometry.pointCount())
+        names = {attrib.name() for attrib in geometry.pointAttribs()}
+    except Exception:  # noqa: BLE001
+        return None
+    if point_count <= 0 or "P" not in names:
+        return None
+    checks = (
+        bool({"Cd", "albedo"} & names),
+        "orient" in names,
+        bool({"scale", "pscale"} & names),
+        bool({"GS_Alpha", "Alpha", "alpha"} & names),
+    )
+    if sum(checks) < 3:
+        return None
+    attributes = sorted(names & set(_GSPLAT_BRIDGE_ATTRIBUTES))
+    score = len(attributes)
+    if {"GS_SPH_R", "GS_SPH_G", "GS_SPH_B"}.issubset(names):
+        score += 20
+    try:
+        if str(node.name()).upper() == "OUT":
+            score += 8
+    except Exception:  # noqa: BLE001
+        pass
+    for method_name in ("isDisplayFlagSet", "isRenderFlagSet"):
+        try:
+            if bool(getattr(node, method_name)()):
+                score += 4
+        except Exception:  # noqa: BLE001
+            pass
+    return {"node": node, "point_count": point_count, "gsplat_attributes": attributes, "score": score}
+
+
+def _discover_relight_sop_output(relight: Any, max_nodes: int = 256) -> dict:
+    try:
+        descendants = list(
+            relight.allSubChildren(
+                recurse_in_locked_nodes=True,
+                sync_delayed_definition=True,
+            )
+        )[:max_nodes]
+    except Exception:  # noqa: BLE001
+        descendants = []
+        pending = list(getattr(relight, "children", lambda: ())())
+        while pending and len(descendants) < max_nodes:
+            child = pending.pop(0)
+            descendants.append(child)
+            try:
+                pending.extend(child.children())
+            except Exception:  # noqa: BLE001
+                pass
+    contracts = []
+    for node in descendants:
+        contract = _node_point_contract(node)
+        if contract is not None:
+            contracts.append(contract)
+    if not contracts:
+        raise ValueError("No compatible GSplat SOP output was discovered inside the relight asset")
+    return max(contracts, key=lambda item: item["score"])
+
+
+def _bridge_child(parent: Any, name: str, type_name: str) -> Any:
+    node = parent.node(name)
+    if node is None:
+        return parent.createNode(type_name, name)
+    if _type_name(node).split("::", 1)[0] != type_name:
+        raise ValueError("Stable GSplat SOP bridge contains an incompatible node")
+    return node
+
+
+def _build_or_refresh_relight_sop_bridge(hou: Any, relight: Any, force: bool = True) -> dict:
+    relight.cook(force=bool(force))
+    discovered = _discover_relight_sop_output(relight)
+    internal_output = discovered["node"]
+    internal_output.cook(force=bool(force))
+
+    obj = _node(hou, "/obj")
+    safe_relight_name = re.sub(r"[^A-Za-z0-9_]+", "_", str(relight.name())).strip("_") or "gsplat_relight"
+    bridge_name = "dcc_mcp_{}_sop_bridge".format(safe_relight_name)[:64]
+    bridge_geo = obj.node(bridge_name)
+    if bridge_geo is None:
+        bridge_geo = obj.createNode("geo", bridge_name)
+    elif _type_name(bridge_geo).split("::", 1)[0] != "geo":
+        raise ValueError("Stable GSplat SOP bridge name is occupied by an incompatible node")
+
+    object_merge = _bridge_child(bridge_geo, "GSPLAT_RELIT_SOURCE", "object_merge")
+    output = _bridge_child(bridge_geo, "OUT", "null")
+    source_parm = object_merge.parm("objpath1")
+    if source_parm is None:
+        raise ValueError("Stable GSplat SOP bridge has no source-path parameter")
+    source_parm.deleteAllKeyframes()
+    source_parm.set(internal_output.path())
+    output.setInput(0, object_merge)
+    if hasattr(output, "setDisplayFlag"):
+        output.setDisplayFlag(True)
+    if hasattr(output, "setRenderFlag"):
+        output.setRenderFlag(True)
+    if hasattr(bridge_geo, "layoutChildren"):
+        bridge_geo.layoutChildren(items=[object_merge, output])
+    object_merge.cook(force=bool(force))
+    output.cook(force=bool(force))
+
+    output_contract = _node_point_contract(output)
+    if output_contract is None:
+        raise ValueError("Stable GSplat SOP bridge did not produce compatible point geometry")
+    if hasattr(relight, "setUserData"):
+        relight.setUserData("dcc_mcp.gsplat_relight.sop_output", output.path())
+    return {
+        "sop_bridge_available": True,
+        "sop_output_path": output.path(),
+        "point_count": output_contract["point_count"],
+        "gsplat_attributes": output_contract["gsplat_attributes"],
+        "bridge_refreshed": True,
+        "sop_bridge_status": "ready",
+    }
+
+
+@skill_entry
+def refresh_gsplat_relight_sop_bridge(relight_lop_path: str, force: bool = True) -> dict:
+    """Rediscover and force-cook the stable SOP bridge for a Labs relight LOP."""
+    try:
+        import hou  # noqa: PLC0415
+    except ImportError:
+        return skill_error("Houdini not available", "hou could not be imported")
+    try:
+        relight = _node(hou, relight_lop_path)
+        contract = _build_or_refresh_relight_sop_bridge(hou, relight, force=force)
+        return skill_success("Refreshed GSplat Solaris-to-SOP bridge", relight=_summary(relight), **contract)
+    except ValueError as exc:
+        return _safe_public_error(
+            "GSplat Solaris-to-SOP bridge is unavailable",
+            "Compatible relit GSplat SOP output was not available",
+            exc,
+        )
+    except Exception as exc:
+        return _safe_public_error(
+            "Failed to refresh GSplat Solaris-to-SOP bridge",
+            "Houdini bridge refresh failed",
+            exc,
+        )
+
+
+def _cop_output_reference(source: Any) -> Any:
+    """Return a named Copernicus output when exposed, otherwise output zero."""
+    output_names_method = getattr(source, "outputNames", None)
+    if not callable(output_names_method):
+        raise ValueError("Copernicus source does not expose outputNames")
+    output_names = output_names_method()
+    if not isinstance(output_names, (list, tuple)):
+        raise ValueError("Copernicus source returned an invalid outputNames contract")
+    names = tuple(str(name) for name in output_names if str(name))
+    return names[0] if names else 0
+
+
+def _set_named_cop_input(target: Any, input_name: str, source: Any) -> Any:
+    """Connect a Houdini 22 Copernicus input by name after contract inspection."""
+    input_names_method = getattr(target, "inputNames", None)
+    set_named_input = getattr(target, "setNamedInput", None)
+    if not callable(input_names_method) or not callable(set_named_input):
+        raise ValueError("Copernicus target does not support named inputs")
+    input_names = input_names_method()
+    if not isinstance(input_names, (list, tuple)):
+        raise ValueError("Copernicus target returned an invalid inputNames contract")
+    if input_name not in tuple(str(name) for name in input_names):
+        raise ValueError("Copernicus target is missing a required named input")
+    output_reference = _cop_output_reference(source)
+    set_named_input(input_name, source, output_reference)
+    return output_reference
+
+
+def _configure_file_cop_color_output(file_cop: Any) -> str:
+    """Expose one RGBA ``C`` AOV from a Houdini 22 File COP.
+
+    File COP outputs are dynamic.  A filename alone leaves ``aovs`` at zero,
+    which can draw a cable in the network while the downstream Blend COP still
+    cooks with ``bg is missing``.  Author the same bounded AOV contract that
+    the File COP UI's *Add AOVs from File* callback would create.
+    """
+    aovs_applied = _set_first(file_cop, ("aovs",), 1)
+    if not aovs_applied:
+        raise ValueError("File COP does not expose its Houdini 22 AOV multiparm")
+    applied = {
+        "name": _set_first(file_cop, ("aov1",), "C"),
+        # Houdini 22's File COP menu uses 3 for an RGBA raster.
+        "type": _set_first(file_cop, ("type1",), 3),
+        "raw": _set_first(file_cop, ("raw1",), False),
+    }
+    if not all(applied.values()):
+        raise ValueError("File COP does not expose a complete color AOV contract")
+    cook = getattr(file_cop, "cook", None)
+    if callable(cook):
+        cook(force=True)
+    output_reference = _cop_output_reference(file_cop)
+    if output_reference != "C":
+        raise ValueError("File COP did not expose the configured color AOV")
+    return output_reference
 
 
 @skill_entry
@@ -443,17 +698,45 @@ def create_gsplat_copernicus_raster(
     saturation_scale: Optional[float] = None,
     value_scale: Optional[float] = None,
     gamma: Optional[float] = None,
-    premultiply_alpha: bool = True,
+    premultiply_alpha: bool = False,
+    background_image_path: Optional[str] = None,
+    background_mode: str = "over",
+    background_brightness: float = 1.0,
+    background_rotation: Sequence[float] = (0.0, 0.0, 0.0),
 ) -> dict:
-    """Create a camera-aware GSplat raster and optional image-refinement COPs."""
+    """Create a camera-aware GSplat raster, refinements, and optional background."""
     try:
         import hou  # noqa: PLC0415
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
     created = []
     try:
+        if background_mode != "over":
+            raise ValueError("background_mode must be over")
+        if (
+            isinstance(background_brightness, bool)
+            or not math.isfinite(float(background_brightness))
+            or not 0.01 <= float(background_brightness) <= 16.0
+        ):
+            raise ValueError("background_brightness must be between 0.01 and 16")
+        if not isinstance(background_rotation, (list, tuple)) or len(background_rotation) != 3:
+            raise ValueError("background_rotation must contain exactly [rx, ry, rz]")
+        if any(isinstance(value, bool) or not math.isfinite(float(value)) for value in background_rotation):
+            raise ValueError("background_rotation values must be finite numbers")
+        background_rotation = tuple(float(value) for value in background_rotation)
+        if background_image_path is not None:
+            if not isinstance(background_image_path, str) or not background_image_path.strip():
+                raise ValueError("background_image_path must be a non-empty absolute image path")
+            if not os.path.isabs(background_image_path):
+                raise ValueError("background_image_path must be an absolute image path")
+
         copnet = _node(hou, copnet_path)
         _node(hou, sop_path)
+        camera = None
+        if camera_path:
+            camera = _node(hou, camera_path)
+            if _type_name(camera).split("::", 1)[0] != "cam":
+                raise ValueError("camera_path must reference a Houdini camera node")
         sop_import = _create(copnet, ("sopimport", "sop_import"), "gsplat_sop_import")
         created.append(sop_import)
         import_applied = _set_first(sop_import, ("soppath", "sop_path", "nodepath"), sop_path)
@@ -561,6 +844,83 @@ def create_gsplat_copernicus_raster(
                 "gsplat_premult",
                 {"operation": (("op", "operation"), "mult")},
             )
+
+        background_composite = {"enabled": False}
+        if background_image_path is not None:
+            # Blend/Over consumes alpha-associated foreground color. Keep the
+            # standalone raster straight by default, but establish association
+            # automatically at the composite boundary.
+            if not premultiply_alpha:
+                append_refinement(
+                    ("premult",),
+                    "gsplat_composite_premult",
+                    {"operation": (("op", "operation"), "mult")},
+                )
+            background_file = _create(copnet, ("file",), "gsplat_background_file")
+            created.append(background_file)
+            filename_applied = _set_first(background_file, ("filename",), background_image_path)
+            if not filename_applied:
+                raise ValueError("File COP does not expose its Houdini 22 filename parameter")
+            _configure_file_cop_color_output(background_file)
+
+            # The HDRI is latitude-longitude data, not a camera plate.  Sample
+            # it as a celestial sphere into the same camera/view metadata as
+            # the rasterized GSplat before compositing.
+            background_sphere = _create(
+                copnet,
+                ("spheresample", "sphere_sample"),
+                "gsplat_background_sphere",
+            )
+            created.append(background_sphere)
+            celestial_applied = _set_first(
+                background_sphere,
+                ("celestial", "celestialsphere", "celestial_sphere"),
+                True,
+            )
+            if not celestial_applied:
+                raise ValueError("Sphere Sample COP does not expose its celestial-sphere parameter")
+            # background_rotation is validated as exactly three values above;
+            # avoid zip(strict=...) to preserve the adapter's Python 3.8 floor.
+            for parm_name, value in zip(("rx", "ry", "rz"), background_rotation):
+                if not _set_first(background_sphere, (parm_name,), value):
+                    raise ValueError("Sphere Sample COP does not expose its rotation parameters")
+            # Prefer the imported camera metadata itself.  The refined GSplat
+            # layer can carry a data window but is not guaranteed to remain a
+            # valid camera reference after color operations.
+            _set_named_cop_input(background_sphere, "size_ref", camera_import or current)
+            _set_named_cop_input(background_sphere, "source", background_file)
+
+            background_bright = _create(copnet, ("bright",), "gsplat_background_brightness")
+            created.append(background_bright)
+            brightness_applied = _set_first(background_bright, ("bright",), float(background_brightness))
+            if not brightness_applied:
+                raise ValueError("Bright COP does not expose its Houdini 22 brightness parameter")
+            background_bright.setInput(0, background_sphere)
+
+            blend = _create(copnet, ("blend",), "gsplat_background_over")
+            created.append(blend)
+            mode_applied = _set_first(blend, ("mode",), background_mode)
+            if not mode_applied:
+                raise ValueError("Blend COP does not expose its Houdini 22 mode parameter")
+            alpha_applied = _set_first(blend, ("alpha",), True)
+            clip_applied = _set_first(blend, ("clipbydata",), True)
+            if not alpha_applied or not clip_applied:
+                raise ValueError("Blend COP does not expose its alpha-compositing contract")
+            background_output = _set_named_cop_input(blend, "bg", background_bright)
+            foreground_output = _set_named_cop_input(blend, "fg", current)
+            background_composite = {
+                "enabled": True,
+                "mode": background_mode,
+                "file": _summary(background_file),
+                "sphere": _summary(background_sphere),
+                "brightness": _summary(background_bright),
+                "brightness_scale": float(background_brightness),
+                "rotation": list(background_rotation),
+                "blend": _summary(blend),
+                "named_inputs": {"bg": background_output, "fg": foreground_output},
+            }
+            current = blend
+
         if hasattr(copnet, "layoutChildren"):
             copnet.layoutChildren(items=created)
         return skill_success(
@@ -570,6 +930,7 @@ def create_gsplat_copernicus_raster(
             camera_import=_summary(camera_import) if camera_import else None,
             rasterize=_summary(raster),
             refinements=refinement_results,
+            background_composite=background_composite,
             output=_summary(current),
             attribute_name=attribute_name,
             applied_parameters={
@@ -579,7 +940,11 @@ def create_gsplat_copernicus_raster(
                 "camera_path": camera_applied,
                 "resolution": resolution_applied,
             },
-            next_step="Display or render the returned output COP; parameter edits update the image interactively.",
+            next_step=(
+                "Render the returned output COP through an Image ROP for pixel-level acceptance. "
+                "Rasterize GSplats already produces alpha-associated color; append Premult only "
+                "when a downstream straight-alpha contract explicitly requires it."
+            ),
         )
     except Exception as exc:
         for item in reversed(created):
@@ -587,8 +952,136 @@ def create_gsplat_copernicus_raster(
                 item.destroy()
             except Exception:  # noqa: BLE001
                 pass
-        return skill_exception(
-            exc, message="Failed to create Copernicus GSplat raster chain; created nodes were rolled back"
+        return _safe_public_error(
+            "Failed to create Copernicus GSplat raster chain; created nodes were rolled back",
+            "Houdini Copernicus GSplat setup failed",
+            exc,
+        )
+
+
+def _required_parm(node: Any, name: str) -> Any:
+    parm = node.parm(name)
+    if parm is None:
+        raise ValueError("Houdini 22 Image ROP is missing required parameter: {}".format(name))
+    return parm
+
+
+def _file_signature(path: str) -> Optional[dict]:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    if not os.path.isfile(path):
+        return None
+    return {"mtime_ns": int(stat.st_mtime_ns), "size_bytes": int(stat.st_size)}
+
+
+def write_gsplat_copernicus_image(
+    cop_output_path: str,
+    output_file: str,
+    frame: float,
+    resolution: Sequence[int],
+    color_conversion: str,
+    rop_name: str = "dcc_mcp_gsplat_image_proof",
+) -> dict:
+    """Render one Copernicus frame through a named Houdini 22 Image ROP."""
+    try:
+        import hou  # noqa: PLC0415
+    except ImportError:
+        return skill_error("Houdini not available", "hou could not be imported")
+
+    try:
+        if not isinstance(cop_output_path, str) or not cop_output_path.startswith("/") or ".." in cop_output_path:
+            raise ValueError("cop_output_path must be an absolute Houdini COP node path without '..'")
+        if not isinstance(output_file, str) or not os.path.isabs(output_file):
+            raise ValueError("output_file must be an absolute output file path")
+        if not output_file.strip() or os.path.basename(output_file) in ("", ".", ".."):
+            raise ValueError("output_file must name a file, not a directory")
+        if not isinstance(rop_name, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", rop_name) is None:
+            raise ValueError("rop_name must be a Houdini-safe name with at most 64 characters")
+        if isinstance(frame, bool) or not math.isfinite(float(frame)):
+            raise ValueError("frame must be a finite number")
+        if not isinstance(resolution, (list, tuple)) or len(resolution) != 2:
+            raise ValueError("resolution must contain exactly [width, height]")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in resolution):
+            raise ValueError("resolution values must be integers")
+        width, height = int(resolution[0]), int(resolution[1])
+        if not 1 <= width <= 16384 or not 1 <= height <= 16384:
+            raise ValueError("resolution values must be between 1 and 16384")
+        if color_conversion not in ("raw", "ocio", "bakeocio"):
+            raise ValueError("color_conversion must be one of: raw, ocio, bakeocio")
+
+        cop_output = _node(hou, cop_output_path)
+        out = _node(hou, "/out")
+        rop = out.node(rop_name)
+        created = rop is None
+        if created:
+            rop = out.createNode("image", rop_name)
+        elif _type_name(rop).split("::", 1)[0] != "image":
+            raise ValueError("/out/{} exists but is not a Houdini Image ROP".format(rop_name))
+
+        _required_parm(rop, "coppath").set(cop_output.path())
+        output_parm = _required_parm(rop, "copoutput")
+        # Image ROPs may ship with an expression/default tokenized path. Remove
+        # animation or expressions before assigning the caller-bounded path.
+        output_parm.deleteAllKeyframes()
+        output_parm.set(output_file)
+
+        _required_parm(rop, "trange").set(0)
+        render_frame = float(frame)
+        _required_parm(rop, "f1").set(render_frame)
+        _required_parm(rop, "f2").set(render_frame)
+        _required_parm(rop, "f3").set(1.0)
+        _required_parm(rop, "setres").set(True)
+        _required_parm(rop, "res1").set(width)
+        _required_parm(rop, "res2").set(height)
+        _required_parm(rop, "colorconversion").set(color_conversion)
+        mkpath = rop.parm("mkpath")
+        if mkpath is not None:
+            mkpath.set(True)
+
+        before = _file_signature(output_file)
+        rop.render(frame_range=(render_frame, render_frame, 1.0), verbose=False)
+        after = _file_signature(output_file)
+        exists = after is not None
+        size_bytes = after["size_bytes"] if after else 0
+        updated_by_render = bool(after and after != before)
+        evidence = {
+            "exists": exists,
+            "size_bytes": size_bytes,
+            "updated_by_render": updated_by_render,
+        }
+        if not exists or size_bytes <= 0 or not updated_by_render:
+            return skill_error(
+                "Image ROP did not produce fresh pixel evidence",
+                "The foreground render returned without creating or updating a non-empty output file",
+                written_files=[],
+                output_evidence=evidence,
+                image_rop=_summary(rop),
+            )
+
+        return skill_success(
+            "Rendered Copernicus output to a verified image file",
+            written_files=[output_file],
+            output_evidence=evidence,
+            image_rop=_summary(rop),
+            created=created,
+            cop_output_path=cop_output.path(),
+            frame=render_frame,
+            resolution=[width, height],
+            color_conversion=color_conversion,
+        )
+    except ValueError as exc:
+        return _safe_public_error(
+            "Invalid Copernicus Image ROP request",
+            "Image ROP request validation failed",
+            exc,
+        )
+    except Exception as exc:
+        return _safe_public_error(
+            "Failed to render Copernicus output through Houdini Image ROP",
+            "Houdini Image ROP operation failed",
+            exc,
         )
 
 
@@ -599,7 +1092,9 @@ def main(**kwargs: Any) -> dict:
         "inspect": inspect_gsplat_relighting_input,
         "prepare": prepare_gsplat_sop_chain,
         "relight": create_gsplat_relight_lop,
+        "refresh_relight_sop": refresh_gsplat_relight_sop_bridge,
         "rasterize": create_gsplat_copernicus_raster,
+        "write_image": write_gsplat_copernicus_image,
     }
     if action not in functions:
         return skill_error("Unknown GSplat action", "action must be one of: {}".format(", ".join(functions)))
