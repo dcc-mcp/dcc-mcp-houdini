@@ -31,6 +31,25 @@ def _set_first(node, names: Sequence[str], value) -> Optional[str]:
     return None
 
 
+def _geometry_counts(node) -> tuple[int, int]:
+    geometry = node.geometry()
+    if geometry is None:
+        raise ValueError("Node has no cooked geometry: {}".format(node.path()))
+    return int(geometry.intrinsicValue("pointcount")), int(geometry.intrinsicValue("primitivecount"))
+
+
+def _validate_surface_pair(rest, animated) -> None:
+    rest_counts = _geometry_counts(rest)
+    animated_counts = _geometry_counts(animated)
+    if rest_counts != animated_counts:
+        raise ValueError(
+            "Surface Deform requires matching rest/deformed skin topology; "
+            "rest has {} points/{} primitives and deformed has {} points/{} primitives".format(
+                rest_counts[0], rest_counts[1], animated_counts[0], animated_counts[1]
+            )
+        )
+
+
 def build_short_fur_groom(
     geo_path: str,
     rest_skin: str,
@@ -67,6 +86,8 @@ def build_short_fur_groom(
         rest = _node(hou, "{}/{}".format(geo.path(), rest_skin))
         animated = _node(hou, "{}/{}".format(geo.path(), animated_skin)) if animated_skin else None
         guide_node = _node(hou, "{}/{}".format(geo.path(), guides)) if guides else None
+        if animated is not None and deform_method == "surface":
+            _validate_surface_pair(rest, animated)
 
         hair_type = _find_type(geo, ("hairgen::2.0", "hairgen"))
         hair = geo.createNode(hair_type, node_name="{}_generate".format(name_prefix))
@@ -116,6 +137,11 @@ def build_short_fur_groom(
             node.moveToGoodPosition()
         current.setDisplayFlag(True)
         current.setRenderFlag(True)
+        current.cook(force=True)
+        cook_errors = list(current.errors())
+        if cook_errors:
+            raise RuntimeError("Groom output failed to cook: {}".format("; ".join(cook_errors)))
+        output_counts = _geometry_counts(current)
 
         return skill_success(
             "Built short-fur groom",
@@ -128,6 +154,8 @@ def build_short_fur_groom(
             guides=guide_node.path() if guide_node is not None else None,
             deform_method=deform_method if animated is not None else None,
             configured_parameters=configured,
+            output_point_count=output_counts[0],
+            output_primitive_count=output_counts[1],
         )
     except Exception as exc:
         for node in reversed(created):
