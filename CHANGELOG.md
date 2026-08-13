@@ -16,6 +16,15 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.33.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.0...v0.33.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* report headless Houdini instances correctly ([6ec9f76](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6ec9f76417b88aa0b1411b66c306958c4cbf2643))
+* support Houdini 22 VEX bindings ([c6b2b5f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c6b2b5f85b7237c975e0e055c4016cfc8a4edee6))
+* validate Houdini groom deformation output ([d645bbf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d645bbfec65be9b4b93f30285560da5ff7e27992))
+
 ## [0.33.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.32.0...v0.33.0) (2026-08-13)
 
 
