@@ -384,6 +384,10 @@ class HoudiniHost(HostAdapter):
         super().__init__(dispatcher, name=kwargs.pop("name", "houdini-host"), **kwargs)
         self._callback: Optional[Callable[[], bool]] = None
         self._tick_thread_ident: Optional[int] = None
+        self._headless_state_lock = threading.Lock()
+        self._headless_run_thread_ident: Optional[int] = None
+        self._headless_run_exited = threading.Event()
+        self._headless_run_exited.set()
 
     @property
     def tick_thread_ident(self) -> Optional[int]:
@@ -401,8 +405,37 @@ class HoudiniHost(HostAdapter):
 
     def run_headless(self, stop_event: Optional[threading.Event] = None) -> None:
         """Pump on Hython's owning thread until shutdown is requested."""
-        self._tick_thread_ident = threading.get_ident()
-        super().run_headless(stop_event=stop_event)
+        thread_ident = threading.get_ident()
+        with self._headless_state_lock:
+            self._tick_thread_ident = thread_ident
+            self._headless_run_thread_ident = thread_ident
+            self._headless_run_exited.clear()
+        try:
+            super().run_headless(stop_event=stop_event)
+        finally:
+            with self._headless_state_lock:
+                self._headless_run_thread_ident = None
+                self._headless_run_exited.set()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop only after a caller-owned blocking tick releases its drain lock."""
+        started_wait = time.monotonic()
+        with self._headless_state_lock:
+            run_thread_ident = self._headless_run_thread_ident
+            run_active = not self._headless_run_exited.is_set()
+
+        if run_active:
+            self._stop_event.set()
+            if run_thread_ident == threading.get_ident():
+                # A signal handler can re-enter shutdown on the same thread
+                # while the native blocking tick still owns its receiver lock.
+                # Let run_headless unwind; its finally path performs teardown.
+                return
+            if not self._headless_run_exited.wait(timeout=max(timeout, 0.0)):
+                raise RuntimeError(f"Houdini headless pump did not stop within {timeout}s")
+
+        remaining = max(timeout - (time.monotonic() - started_wait), 0.0)
+        super().stop(timeout=remaining)
 
     def attach_tick(self, tick_fn: TickFn) -> None:
         """Register ``tick_fn`` with ``hou.ui.addEventLoopCallback``."""

@@ -31,6 +31,31 @@ class _FakeHoudiniUi:
         self.callbacks.remove(callback)
 
 
+class _BlockingProbeDispatcher:
+    """Model a headless dispatcher whose blocking tick owns the drain lock."""
+
+    def __init__(self) -> None:
+        self.tick_entered = threading.Event()
+        self.release_tick = threading.Event()
+        self.tick_active = threading.Event()
+        self.shutdown_called = threading.Event()
+        self.shutdown_while_ticking = False
+
+    def tick_blocking(self, max_jobs: int, timeout_ms: int) -> None:
+        _ = (max_jobs, timeout_ms)
+        self.tick_active.set()
+        self.tick_entered.set()
+        self.release_tick.wait(timeout=1)
+        self.tick_active.clear()
+
+    def is_shutdown(self) -> bool:
+        return self.shutdown_called.is_set()
+
+    def shutdown(self) -> None:
+        self.shutdown_while_ticking = self.tick_active.is_set()
+        self.shutdown_called.set()
+
+
 def _fake_hou(ui_available: bool = True):
     ui = _FakeHoudiniUi()
     return SimpleNamespace(isUIAvailable=lambda: ui_available, ui=ui), ui
@@ -75,6 +100,31 @@ def test_legacy_houdini_host_retains_headless_bootstrap_contract() -> None:
     stop = threading.Event()
     stop.set()
     HoudiniHost(BlockingDispatcher()).run_headless(stop_event=stop)
+
+
+def test_headless_stop_waits_for_calling_thread_tick_before_dispatcher_shutdown() -> None:
+    """External shutdown must not race a caller-owned blocking drain."""
+    from dcc_mcp_houdini.host import HoudiniHost
+
+    dispatcher = _BlockingProbeDispatcher()
+    host = HoudiniHost(dispatcher)
+    runner = threading.Thread(target=host.run_headless)
+    runner.start()
+    assert dispatcher.tick_entered.wait(timeout=1)
+
+    stopper = threading.Thread(target=lambda: host.stop(timeout=1))
+    stopper.start()
+    assert not dispatcher.shutdown_called.wait(timeout=0.05)
+    assert stopper.is_alive(), "stop should wait for the active blocking tick"
+
+    dispatcher.release_tick.set()
+    stopper.join(timeout=1)
+    runner.join(timeout=1)
+
+    assert not stopper.is_alive()
+    assert not runner.is_alive()
+    assert dispatcher.shutdown_called.is_set()
+    assert dispatcher.shutdown_while_ticking is False
 
 
 def test_event_loop_adapter_throttles_due_ticks_and_isolates_exceptions() -> None:
