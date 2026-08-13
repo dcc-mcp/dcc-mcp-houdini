@@ -1557,9 +1557,7 @@ class TestNodeSkills:
     def test_create_node_failure_does_not_expose_traceback_or_host_path(self) -> None:
         mod = _load_script("houdini-nodes", "create_node.py")
         parent = MagicMock()
-        parent.createNode.side_effect = RuntimeError(
-            r"Failed inside C:\Users\private-user\project\asset.hip"
-        )
+        parent.createNode.side_effect = RuntimeError(r"Failed inside C:\Users\private-user\project\asset.hip")
         mock_hou = MagicMock()
         mock_hou.node.return_value = parent
 
