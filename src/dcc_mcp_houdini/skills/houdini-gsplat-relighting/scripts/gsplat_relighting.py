@@ -230,14 +230,11 @@ def inspect_gsplat_relighting_input(
             "unknown",
         }:
             raise ValueError(
-                "camera_pose_source must be sfm, calibrated_turntable, "
-                "estimated_turntable, legacy, or unknown"
+                "camera_pose_source must be sfm, calibrated_turntable, estimated_turntable, legacy, or unknown"
             )
         camera_pose_validation = str(camera_pose_validation or "unknown").lower()
         if camera_pose_validation not in {"validated", "pending", "failed", "legacy", "unknown"}:
-            raise ValueError(
-                "camera_pose_validation must be validated, pending, failed, legacy, or unknown"
-            )
+            raise ValueError("camera_pose_validation must be validated, pending, failed, legacy, or unknown")
         capture_coverage = str(capture_coverage or "unknown").lower()
         if capture_coverage not in {"complete", "partial", "unknown"}:
             raise ValueError("capture_coverage must be complete, partial, or unknown")
