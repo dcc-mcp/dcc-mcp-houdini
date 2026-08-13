@@ -29,6 +29,14 @@ The real Houdini UI evidence has only its title bar cropped to remove a local
 path. The application chrome below it, Scene View, parameter editor, timeline,
 and node graph are unmodified.
 
+The current UI/GIF sequence was captured from one exact Houdini window at
+frames 1, 25, 48, 72, and 96. Typed DCC-MCP timeline calls set the frame and
+the project-owned DCC-CUA exact-window WGC route captured the pixels. The
+orange engineering label and title-bar removal are the only presentation
+edits. Frame 1 and frame 96 visually close the loop; frame 48 shows the single
+deformed instance. The visible red/blue fixture rings and floating fragments
+are intentionally not painted out.
+
 ## Archived procedural rig validation
 
 The animated asset in this showcase is an original DCC-MCP procedural model.
@@ -57,6 +65,10 @@ CC0 license. It is the only environment emitter in the shot.
 
 - 96 frames at 1280×720 and 24 fps, rendered with Karma and displayed through
   the Houdini 22 ACES configuration.
+- The current 5k checkpoint contains 263,630 trained Gaussians. Its Houdini
+  subject-filtered engineering scene retains 15,475 Gaussians; fresh held-out
+  5k image metrics remain pending and are not substituted with the older 3k
+  preview metrics below.
 - Six procedural leg hierarchies with authored tarsus, pad, and claw controls.
 - Per-frame hierarchy checks keep the tested controls at or above Z=-0.003;
   this is not a substitute for per-primitive collision or contact solving.

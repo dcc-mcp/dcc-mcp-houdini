@@ -135,6 +135,39 @@
     "showcase_beauty": "conditional",
     "animation_ready": "conditional"
   },
+  "current_houdini_engineering_scene": {
+    "checkpoint_step": 4999,
+    "trained_gaussians": 263630,
+    "subject_filtered_gaussians": 15475,
+    "fresh_checkpoint_metrics": "pending",
+    "must_not_reuse_preview_3k_metrics": true,
+    "audited_frames": [1, 25, 48, 72, 96],
+    "capture": {
+      "timeline_control": "typed DCC-MCP set_timeline",
+      "pixels": "project-owned DCC-CUA exact-window WGC",
+      "presentation_edits": [
+        "crop title bar containing local path",
+        "resize",
+        "add engineering-validation labels"
+      ],
+      "content_retouching": false
+    },
+    "kinefx_ground_contact": {
+      "passed": true,
+      "ground_height": -0.06449999660253525,
+      "tolerance": 0.001,
+      "contact_count": 3,
+      "contacts": ["front_L_claw", "middle_R_claw", "rear_L_claw"],
+      "lifted_clearance": 0.003999996930360794,
+      "penetrating": []
+    },
+    "public_beauty": "fail",
+    "public_beauty_failures": [
+      "capture fixture and label rings remain",
+      "floating support fragments remain",
+      "subject/background exposure is not final LookDev"
+    ]
+  },
   "limitations": [
     "The source is a pinned specimen, not a living bee performance capture.",
     "Pin removal deletes fitted Gaussian regions and does not synthesize missing anatomy.",
