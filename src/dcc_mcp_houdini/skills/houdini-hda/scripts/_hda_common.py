@@ -16,12 +16,15 @@ def hou_import_error() -> dict:
 
 
 def validate_hda_path(file_path: str, *, must_exist: bool = True) -> Path:
-    """Validate a Houdini asset library path."""
+    """Validate a packed file or expanded Houdini asset library path."""
     path = Path(file_path).expanduser()
     if path.suffix.lower() not in _HDA_SUFFIXES:
         raise ValueError("Unsupported HDA file extension: {}".format(path.suffix))
-    if must_exist and not path.is_file():
-        raise FileNotFoundError("HDA file not found: {}".format(path))
+    if must_exist:
+        is_packed_library = path.is_file()
+        is_expanded_library = path.is_dir() and (path / "Sections.list").is_file()
+        if not (is_packed_library or is_expanded_library):
+            raise FileNotFoundError("HDA library not found: {}".format(path))
     if not must_exist:
         path.parent.mkdir(parents=True, exist_ok=True)
     return path
