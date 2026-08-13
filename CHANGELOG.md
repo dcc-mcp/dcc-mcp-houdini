@@ -16,6 +16,25 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.33.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.32.0...v0.33.0) (2026-08-13)
+
+
+### Features
+
+* **groom:** add GSplat rig deformation and short fur ([#242](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/242)) ([d5fd239](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d5fd2393320c4c53f770e209f4dea06eb1ac58df))
+* **gsplat:** enforce provenance for public showcases ([#240](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/240)) ([2c3901b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2c3901b96c335f3e11ae7e36d7fa818aacb60045))
+
+
+### Bug Fixes
+
+* **render:** guard headless OpenGL ROP crashes ([#243](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/243)) ([d0eed10](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d0eed10a093f6f14782afd3a8bb5d031db48d077))
+
+
+### Documentation
+
+* clarify honeybee prototype showcase ([#246](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/246)) ([833f530](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/833f530cd2c574bca80e76e3170f82769d09880f))
+* **showcase:** publish honest Houdini honeybee workflow ([#244](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/244)) ([80b7e58](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/80b7e5858ea5276a21fdcd722d7afaf81a828650))
+
 ## [0.32.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.31.6...v0.32.0) (2026-08-12)
 
 
