@@ -29,6 +29,30 @@ The real Houdini UI evidence has only its title bar cropped to remove a local
 path. The application chrome below it, Scene View, parameter editor, timeline,
 and node graph are unmodified.
 
+## Photogrammetry high-poly quality gate
+
+The high-poly audit uses specimen `UCSB-IZC00038675` from the same UCSB Zenodo
+record and CC BY 4.0 license. The committed multiview sheet and the source
+texture shown in Houdini are licensed dataset content; the comparison layout
+and Houdini scene are DCC-MCP-authored validation material.
+
+The source mesh contains 805,545 vertices and 1,606,745 faces. Its largest
+connected component contains 639,762 vertices and 1,281,475 faces. A
+UV-preserving quadric proxy contains 124,024 vertices and 249,999 faces. The
+proxy is used only for interactive viewport evidence; it is not presented as
+a higher-quality reconstruction than the source.
+
+The specimen pin and fixture base intersect or connect to the reconstructed
+subject. Removing disconnected components therefore cannot isolate complete
+bee anatomy, and deleting the intersecting regions would create holes rather
+than recover the occluded animal. The public quality gate keeps these failures
+visible and records `public_beauty: fail` instead of retouching them away.
+
+The Houdini image was captured from the exact registered Houdini PID and native
+window through the project-owned DCC-CUA route after typed DCC-MCP created and
+assigned the MaterialX texture network. Only the title bar containing a local
+scene path was cropped; no model pixels or Houdini panels were recreated.
+
 The current UI/GIF sequence was captured from one exact Houdini window at
 frames 1, 25, 48, 72, and 96. Typed DCC-MCP timeline calls set the frame and
 the project-owned DCC-CUA exact-window WGC route captured the pixels. The

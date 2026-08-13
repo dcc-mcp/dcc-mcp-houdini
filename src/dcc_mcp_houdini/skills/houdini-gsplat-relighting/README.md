@@ -39,3 +39,9 @@ eyes or legs with a global brightness mask, and checkpoint-specific image
 metrics must remain pending until they are freshly measured.
 Fixture/label residuals also fail public beauty acceptance and must be checked
 from source-camera projections plus a novel view, not hidden by the HDR or crop.
+
+Polygon density is not a substitute for capture completeness. The companion
+[high-poly quality gate](../../../../docs/showcase/honeybee-highpoly-validation.json)
+records a 1.28-million-face scan that still fails because the specimen pin,
+fixture, and occluded anatomy remain. Relighting, denoising, subdivision, and
+denser Groom curves must not be reported as reconstruction-accuracy fixes.
