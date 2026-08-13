@@ -60,42 +60,45 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Houdini 22 honeybee LookDev and KineFX showcase
+## Houdini 22 procedural rig validation (pre-GSplat)
 
-![Public-domain honeybee reference, real Houdini UI, procedural wireframe, and Karma flight render](docs/showcase/houdini-honeybee-workflow.gif)
+![Public-domain honeybee reference, procedural wireframe, and Karma motion test](docs/showcase/houdini-honeybee-workflow.gif)
 
-This showcase uses an original DCC-MCP procedural honeybee prototype, not the
-SideFX sample. It is also **not a captured or trained Gaussian Splat**. The
-opening reference photograph is included to make the remaining anatomical gap
-visible instead of presenting polygon density as reconstruction accuracy.
+This archived validation uses an original DCC-MCP procedural insect prototype,
+not the SideFX sample. It is **not a captured or trained Gaussian Splat**, and
+its ant-like silhouette is not the visual-quality target for the honeybee
+showcase. The opening reference photograph makes that anatomical gap explicit.
 
-The real Houdini 22 workflow demonstrates MaterialX/Solaris LookDev, a KineFX
-flight loop, wing beats, predictive head attention, antenna lag, all-six-leg
-tarsal and claw motion, and phase-delayed thorax/abdomen compliance. Karma uses
-one CC0 Poly Haven Residential Garden HDRI, ACES display conversion, neutral
-calibration spheres, and no duplicate sun or stylized green rim light.
+The Houdini 22 scene remains useful as technical evidence for MaterialX/Solaris
+LookDev, KineFX-driven motion, wing beats, head and antenna controls, articulated
+legs, and phase-delayed body motion. Karma uses one CC0 Poly Haven Residential
+Garden HDRI, ACES display conversion, neutral calibration spheres, and no
+duplicate sun or stylized green rim light.
 
 [Watch the 1280×720, 24 fps MP4](docs/showcase/houdini-honeybee-procedural-flight-v13.mp4)
 
 ![Takeoff, flight, approach, and grounded contact review](docs/showcase/houdini-honeybee-flight-contact-sheet.png)
 
-The 96 rendered frames contain one animated bee: body motion blur is disabled,
-so takeoff silhouettes do not become a second model. Every leg hierarchy was
-checked against the floor on every frame; no geometry falls below the -0.003
-contact tolerance. The low and airborne poses remain intentionally distinct.
-
-![Real Houdini 22 KineFX validation workspace](docs/showcase/houdini-honeybee-ui-kinefx.png)
+The 96 rendered frames contain one animated insect: body motion blur is
+disabled, so takeoff silhouettes do not become a second model. The procedural
+leg controls were checked against a -0.003 floor tolerance. This numerical
+check does not replace collision/contact solving and the result is not accepted
+as final honeybee anatomy or grounded motion.
 
 ![Procedural honeybee topology and shared LookDev calibration references](docs/showcase/houdini-honeybee-wireframe.png)
 
-The older calibration turntable remains useful for inspecting materials and
-topology, but should not be read as scan evidence:
+The older calibration turntable remains useful for inspecting the prototype's
+materials and topology, but should not be read as scan evidence or final art:
 
 ![Houdini 22 procedural honeybee LookDev turntable](docs/showcase/houdini-honeybee-lookdev-turntable.gif)
 
 Reference provenance, license terms, technical evidence, and known limitations
 are recorded in
 [`docs/showcase/honeybee-reference-license.md`](docs/showcase/honeybee-reference-license.md).
+The replacement showcase will be published only after a licensed multi-view
+capture has produced a validated GSplat, followed by GSplat-aware KineFX
+deformation, Houdini Groom fur, contact validation, and a full readable Houdini
+UI capture.
 
 ## Features
 

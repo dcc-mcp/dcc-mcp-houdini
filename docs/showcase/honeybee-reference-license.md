@@ -1,4 +1,4 @@
-# Honeybee showcase provenance and limits
+# Procedural rig validation provenance and limits
 
 The animated asset in this showcase is an original DCC-MCP procedural model.
 It is assembled from authored polygonal forms, curves, materials, and KineFX
@@ -26,19 +26,28 @@ CC0 license. It is the only environment emitter in the shot.
 
 - 96 frames at 1280×720 and 24 fps, rendered with Karma and displayed through
   the Houdini 22 ACES configuration.
-- Six articulated leg hierarchies with tarsus, pad, and dual-claw animation.
-- Per-frame geometry checks keep every leg hierarchy at or above Z=-0.003.
+- Six procedural leg hierarchies with authored tarsus, pad, and claw controls.
+- Per-frame hierarchy checks keep the tested controls at or above Z=-0.003;
+  this is not a substitute for per-primitive collision or contact solving.
 - One bee instance is rendered; body motion blur is disabled to avoid apparent
   duplicate silhouettes.
-- The public UI image is a real Houdini 22 capture with the title/path area
-  excluded. It is not a recreated product interface.
+- The Houdini UI captures are real and are not recreated product interfaces,
+  but the current framing does not show the complete asset and readable node
+  graph together. They are retained as internal validation evidence and are not
+  presented as the final public UI acceptance frame.
 
 ## Known limitations
 
-The current thorax, head, abdomen, legs, and wings are still stylized procedural
-approximations. In particular, the thorax remains smoother and more regular
-than the public anatomy reference. Higher subdivision and denser groom curves
-do not make the asset biologically exact.
+The current thorax, head, abdomen, legs, and wings are stylized procedural
+approximations. The silhouette reads closer to an ant-like generic insect than
+to the public *Apis mellifera* reference. The head/thorax/abdomen proportions,
+compound eyes, wing planform and venation, leg segmentation, tarsi, claws, and
+abdomen termination all require reconstruction-level replacement. Higher
+subdivision and denser groom curves do not correct those anatomical errors.
+
+The current body compliance is phase-delayed authored motion, not a biological
+soft-body simulation. Eye motion is a head/attention control, not compound-eye
+deformation. The garden render is also too dark for final LookDev acceptance.
 
 The next reconstruction stage is deliberately separate: train a real honeybee
 Gaussian Splat from a licensed multi-view capture, validate its provenance,
