@@ -66,7 +66,15 @@ def create_wrangle(hou: Any, spec: WrangleNodeSpec) -> Dict[str, Any]:
     except ValueError as exc:
         return _fail(str(exc))
 
-    sop_type = "attribwrangle" if spec.wrangle_type is WrangleType.TOPOLOGY_WRANGLE else spec.wrangle_type.value
+    # Houdini 22 represents detail and topology wrangles with the generic
+    # Attribute Wrangle SOP.  ``detailwrangle`` is a typed DCC-MCP contract
+    # value, not a creatable Houdini 22 operator name; the run-over parameter
+    # below carries the requested detail context.
+    attrib_wrangle_contracts = {
+        WrangleType.DETAIL_WRANGLE,
+        WrangleType.TOPOLOGY_WRANGLE,
+    }
+    sop_type = "attribwrangle" if spec.wrangle_type in attrib_wrangle_contracts else spec.wrangle_type.value
     node = parent.createNode(sop_type, node_name=spec.node_name)
 
     if node is None:

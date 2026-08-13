@@ -90,6 +90,14 @@ float d = dot(n, {0, 1, 0});
     def test_geometry_count_query_is_allowed(self) -> None:
         assert validate_vex_snippet_client("int count = nprimitives(0);") == []
 
+    def test_bounded_array_analysis_is_allowed(self) -> None:
+        snippet = """
+int counts[];
+resize(counts, 4);
+int count = len(counts);
+"""
+        assert validate_vex_snippet_client(snippet) == []
+
     def test_kinefx_rotation_and_name_matching_are_allowed(self) -> None:
         snippet = """
 if (find(s@name, "_claw") >= 0) {

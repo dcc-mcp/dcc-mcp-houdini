@@ -223,7 +223,7 @@ class TestCreateWrangle:
         bind_parm.set.assert_not_called()
 
     def test_create_different_wrangle_types(self) -> None:
-        for wt in ["volumewrangle", "geometrywrangle", "vertexwrangle", "detailwrangle"]:
+        for wt in ["volumewrangle", "geometrywrangle", "vertexwrangle"]:
             mod = _load_script("houdini-vex", "create_wrangle.py")
             new = _node(f"/obj/geo1/{wt}1", f"{wt}1", wt)
             _snip_parm = MagicMock()
@@ -254,6 +254,35 @@ class TestCreateWrangle:
 
             assert result["success"] is True, f"Failed for wrangle type: {wt}"
             assert result["context"]["wrangle_type"] == wt
+
+    def test_create_detail_wrangle_uses_houdini_22_attribwrangle(self) -> None:
+        mod = _load_script("houdini-vex", "create_wrangle.py")
+        new = _node("/obj/geo1/detail_analysis", "detail_analysis", "attribwrangle")
+        snippet_parm = MagicMock()
+        class_parm = MagicMock()
+        new.parm.side_effect = lambda name: {
+            "snippet": snippet_parm,
+            "class": class_parm,
+        }.get(name)
+        parent = _node("/obj/geo1", "geo1")
+        parent.createNode.return_value = new
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_wrangle(
+                parent_path="/obj/geo1",
+                node_name="detail_analysis",
+                wrangle_type="detailwrangle",
+                run_over="detail",
+                vex_code="i@component_count = 1;",
+            )
+
+        assert result["success"] is True
+        parent.createNode.assert_called_once_with("attribwrangle", node_name="detail_analysis")
+        class_parm.set.assert_called_once_with("detail")
+        assert result["context"]["wrangle_type"] == "detailwrangle"
+        assert result["context"]["node_type"] == "attribwrangle"
 
 
 # ---------------------------------------------------------------------------
