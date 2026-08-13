@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.33.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.1...v0.33.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* preserve Copernicus refinement connections ([#249](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/249)) ([b472d78](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b472d78ea51a7b2fc96644ce8ecddae50b4cd261))
+
 ## [0.33.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.0...v0.33.1) (2026-08-13)
 
 
