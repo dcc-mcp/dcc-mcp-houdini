@@ -12,6 +12,8 @@ _LEG_SEGMENTS = ("coxa", "trochanter", "femur", "tibia", "tarsus", "claw")
 _BASE_MEASUREMENTS = {
     "body_length": 4.30,
     "body_width": 0.84,
+    "head_width": 0.76,
+    "abdomen_width": 0.90,
     "standing_height": 1.90,
     "wing_span": 4.30,
     "leg_span": 3.44,
@@ -19,6 +21,8 @@ _BASE_MEASUREMENTS = {
 _BASE_HALF_WIDTH = _BASE_MEASUREMENTS["body_width"] / 2.0
 _BASE_FOREWING_HALF_SPAN = _BASE_MEASUREMENTS["wing_span"] / 2.0
 _BASE_REAR_LEG_HALF_SPAN = _BASE_MEASUREMENTS["leg_span"] / 2.0
+_ABDOMEN_WIDTH_PROFILE = (0.80, 1.00, 0.95, 0.75, 0.40)
+_LATERAL_MEASUREMENTS = ("head_width", "abdomen_width", "wing_span", "leg_span")
 
 
 def _append(chain: List[dict], name: str, parent: int, position: tuple[float, float, float]) -> int:
@@ -26,11 +30,22 @@ def _append(chain: List[dict], name: str, parent: int, position: tuple[float, fl
     return len(chain) - 1
 
 
+def _effective_measurements(scale: float, anatomy_measurements: Mapping[str, float] | None) -> dict[str, float]:
+    requested = dict(anatomy_measurements or {})
+    effective = {name: value * scale for name, value in _BASE_MEASUREMENTS.items()}
+    if "body_width" in requested:
+        lateral_scale = float(requested["body_width"]) / _BASE_MEASUREMENTS["body_width"]
+        for name in _LATERAL_MEASUREMENTS:
+            effective[name] = _BASE_MEASUREMENTS[name] * lateral_scale
+    effective.update({name: float(value) for name, value in requested.items()})
+    return effective
+
+
 def _honeybee_chain(
     scale: float,
     ground_z: float,
     anatomy_measurements: Mapping[str, float] | None = None,
-) -> tuple[List[dict], List[str], dict[str, float]]:
+) -> tuple[List[dict], List[str], List[str], dict[str, float]]:
     """Return a worker-honeybee skeleton in world-space centimetre-like units."""
     s = 1.0
     base_ground = 0.0
@@ -41,6 +56,13 @@ def _honeybee_chain(
     head = _append(chain, "head", neck, (1.25 * s, 0.0, base_ground + 1.55 * s))
     _append(chain, "compound_eye_L", head, (1.38 * s, 0.38 * s, base_ground + 1.67 * s))
     _append(chain, "compound_eye_R", head, (1.38 * s, -0.38 * s, base_ground + 1.67 * s))
+    shape_controls: List[str] = []
+    for side, sign in (("L", 1.0), ("R", -1.0)):
+        head_width = f"head_width_{side}"
+        thorax_width = f"thorax_width_{side}"
+        _append(chain, head_width, head, (1.25 * s, sign * 0.38 * s, base_ground + 1.55 * s))
+        _append(chain, thorax_width, thorax, (0.0, sign * 0.42 * s, base_ground + 1.55 * s))
+        shape_controls.extend((head_width, thorax_width))
 
     for side, sign in (("L", 1.0), ("R", -1.0)):
         antenna_base = _append(chain, f"antenna_{side}_scape", head, (1.58 * s, sign * 0.20 * s, base_ground + 1.82 * s))
@@ -58,10 +80,19 @@ def _honeybee_chain(
         )
 
     abdomen_parent = thorax
+    abdomen_centers: List[tuple[int, float, float]] = []
     for index, (x, z) in enumerate(
         ((-0.65, 1.55), (-1.20, 1.50), (-1.75, 1.43), (-2.28, 1.34), (-2.72, 1.22)), start=1
     ):
         abdomen_parent = _append(chain, f"abdomen_{index:02d}", abdomen_parent, (x * s, 0.0, base_ground + z * s))
+        abdomen_centers.append((abdomen_parent, x, z))
+    for index, ((parent, x, z), width_factor) in enumerate(
+        zip(abdomen_centers, _ABDOMEN_WIDTH_PROFILE), start=1
+    ):
+        for side, sign in (("L", 1.0), ("R", -1.0)):
+            name = f"abdomen_{index:02d}_width_{side}"
+            _append(chain, name, parent, (x * s, sign * 0.45 * width_factor * s, base_ground + z * s))
+            shape_controls.append(name)
 
     for side, sign in (("L", 1.0), ("R", -1.0)):
         fore = _append(chain, f"forewing_{side}_root", thorax, (-0.18 * s, sign * 0.42 * s, base_ground + 1.90 * s))
@@ -104,10 +135,11 @@ def _honeybee_chain(
                 parent = _append(chain, joint_name, parent, (x * s, sign * y * s, base_ground + z * s))
             contacts.append(f"{leg_name}_{side}_claw")
 
-    requested = dict(anatomy_measurements or {})
-    effective = {name: float(requested.get(name, value * scale)) for name, value in _BASE_MEASUREMENTS.items()}
+    effective = _effective_measurements(scale, anatomy_measurements)
     x_factor = effective["body_length"] / _BASE_MEASUREMENTS["body_length"]
     body_y_factor = effective["body_width"] / _BASE_MEASUREMENTS["body_width"]
+    head_y_factor = effective["head_width"] / _BASE_MEASUREMENTS["head_width"]
+    abdomen_y_factor = effective["abdomen_width"] / _BASE_MEASUREMENTS["abdomen_width"]
     z_factor = effective["standing_height"] / _BASE_MEASUREMENTS["standing_height"]
     target_half_width = effective["body_width"] / 2.0
     wing_extension_factor = (effective["wing_span"] / 2.0 - target_half_width) / (
@@ -128,10 +160,14 @@ def _honeybee_chain(
             transformed_y = sign * (
                 target_half_width + (abs(y) - _BASE_HALF_WIDTH) * leg_extension_factor
             )
+        elif name.startswith(("compound_eye_", "antenna_", "head_width_")):
+            transformed_y = y * head_y_factor
+        elif "_width_" in name and name.startswith("abdomen_"):
+            transformed_y = y * abdomen_y_factor
         else:
             transformed_y = y * body_y_factor
         joint["translate"] = [x * x_factor, transformed_y, ground_z + z * z_factor]
-    return chain, contacts, effective
+    return chain, contacts, shape_controls, effective
 
 
 def _measurement_error(anatomy_measurements: Mapping[str, float] | None) -> dict | None:
@@ -181,10 +217,7 @@ def create_insect_rig(
     measurement_error = _measurement_error(anatomy_measurements)
     if measurement_error:
         return measurement_error
-    effective_measurements = {
-        name: float((anatomy_measurements or {}).get(name, value * scale))
-        for name, value in _BASE_MEASUREMENTS.items()
-    }
+    effective_measurements = _effective_measurements(scale, anatomy_measurements)
     invalid_spans = [
         name
         for name in ("wing_span", "leg_span")
@@ -197,7 +230,9 @@ def create_insect_rig(
             invalid_dimensions=invalid_spans,
             effective_anatomy_measurements=effective_measurements,
         )
-    chain, contacts, effective_measurements = _honeybee_chain(scale, ground_z, effective_measurements)
+    chain, contacts, shape_controls, effective_measurements = _honeybee_chain(
+        scale, ground_z, effective_measurements
+    )
     names = [joint["name"] for joint in chain]
     if len(names) != len(set(names)) or len(contacts) != 6:
         return skill_error(
@@ -217,6 +252,7 @@ def create_insect_rig(
         result["context"].update(
             anatomy_preset="worker_honeybee",
             support_joint_names=contacts,
+            shape_control_joint_names=shape_controls,
             leg_count=6,
             wing_count=4,
             abdomen_segment_count=5,

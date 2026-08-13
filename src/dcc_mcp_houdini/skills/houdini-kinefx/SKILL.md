@@ -29,10 +29,11 @@ attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
 
 - **`rig`:** `create_insect_rig` — build an anatomy-aware worker-honeybee rig
   with six complete leg chains, four wings, flexible abdomen, eyes, antennae,
-  and six grounded claw joints. Optional measured body length, body width,
-  standing height, wing span, and leg span calibrate independent anatomical
-  axes while preserving the legacy uniform `scale`; `create_rig` remains the
-  generic joint-chain API and optional rig pose/attachments.
+  six grounded claw joints, and fourteen head/thorax/abdomen width controls.
+  Optional measured body length, head/thorax/abdomen width, standing height,
+  wing span, and leg span calibrate independent anatomical axes while
+  preserving the legacy uniform `scale`; `create_rig` remains the generic
+  joint-chain API and optional rig pose/attachments.
 - **`pose`:** `set_rig_pose` sets joint transforms;
   `validate_ground_contacts` verifies named support joints against one ground
   surface with numeric clearance and penetration evidence.

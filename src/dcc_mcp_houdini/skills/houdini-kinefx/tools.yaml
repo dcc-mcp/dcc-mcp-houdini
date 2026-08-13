@@ -30,12 +30,17 @@ tools:
           description: >-
             Optional measured world-space worker-honeybee dimensions. Each
             supplied dimension overrides the legacy uniform scale for its
-            anatomical axis; omitted dimensions retain scale-compatible defaults.
+            anatomical axis. A supplied body_width proportionally derives
+            omitted head/abdomen widths, wing span, and leg span.
           properties:
             body_length:
               {type: number, minimum: 0.001, maximum: 100000, description: Head scape base to abdomen tip.}
             body_width:
               {type: number, minimum: 0.001, maximum: 100000, description: Thorax width at the forewing roots.}
+            head_width:
+              {type: number, minimum: 0.001, maximum: 100000, description: Widest left-to-right head span.}
+            abdomen_width:
+              {type: number, minimum: 0.001, maximum: 100000, description: Widest left-to-right abdomen span.}
             standing_height:
               {type: number, minimum: 0.001, maximum: 100000, description: Ground plane to forewing root height.}
             wing_span:
