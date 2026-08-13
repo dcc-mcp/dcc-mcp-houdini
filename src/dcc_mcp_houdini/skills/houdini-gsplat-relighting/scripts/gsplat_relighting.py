@@ -2,9 +2,40 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+
+_MAX_ANATOMY_REGIONS = 64
+_MAX_NOVEL_VIEWS = 64
+_PUBLIC_SHOWCASE_ANATOMY_REGIONS = 12
+
+
+def _optional_bounded_integer(
+    name: str,
+    value: Optional[int],
+    minimum: int,
+    maximum: int,
+) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("{} must be an integer".format(name))
+    if not minimum <= value <= maximum:
+        raise ValueError("{} must be between {} and {}".format(name, minimum, maximum))
+    return value
+
+
+def _optional_unit_interval(name: str, value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("{} must be a number".format(name))
+    measured = float(value)
+    if not math.isfinite(measured) or not 0.0 <= measured <= 1.0:
+        raise ValueError("{} must be a finite number between 0 and 1".format(name))
+    return measured
 
 
 def _node(hou: Any, path: str) -> Any:
@@ -201,6 +232,12 @@ def inspect_gsplat_relighting_input(
     heldout_psnr: Optional[float] = None,
     heldout_ssim: Optional[float] = None,
     heldout_lpips: Optional[float] = None,
+    anatomy_region_count: Optional[int] = None,
+    anatomy_regions_passed: Optional[int] = None,
+    silhouette_iou: Optional[float] = None,
+    normalized_landmark_error: Optional[float] = None,
+    thin_structure_recall: Optional[float] = None,
+    novel_view_count: Optional[int] = None,
     public_showcase: bool = False,
 ) -> dict:
     """Report the point attributes used by the Labs GSplat workflow."""
@@ -246,6 +283,38 @@ def inspect_gsplat_relighting_input(
             raise ValueError("heldout_ssim must be between 0 and 1")
         if heldout_lpips is not None and not 0 <= float(heldout_lpips) <= 1:
             raise ValueError("heldout_lpips must be between 0 and 1")
+        anatomy_region_count = _optional_bounded_integer(
+            "anatomy_region_count",
+            anatomy_region_count,
+            1,
+            _MAX_ANATOMY_REGIONS,
+        )
+        anatomy_regions_passed = _optional_bounded_integer(
+            "anatomy_regions_passed",
+            anatomy_regions_passed,
+            0,
+            _MAX_ANATOMY_REGIONS,
+        )
+        if (anatomy_region_count is None) != (anatomy_regions_passed is None):
+            raise ValueError("anatomy_region_count and anatomy_regions_passed must be provided together")
+        if (
+            anatomy_region_count is not None
+            and anatomy_regions_passed is not None
+            and anatomy_regions_passed > anatomy_region_count
+        ):
+            raise ValueError("anatomy_regions_passed cannot exceed anatomy_region_count")
+        silhouette_iou = _optional_unit_interval("silhouette_iou", silhouette_iou)
+        normalized_landmark_error = _optional_unit_interval(
+            "normalized_landmark_error",
+            normalized_landmark_error,
+        )
+        thin_structure_recall = _optional_unit_interval("thin_structure_recall", thin_structure_recall)
+        novel_view_count = _optional_bounded_integer(
+            "novel_view_count",
+            novel_view_count,
+            0,
+            _MAX_NOVEL_VIEWS,
+        )
         has_capture_type = provenance_type == "captured"
         has_enough_views = int(source_view_count) >= 3
         captured_provenance = has_capture_type and has_enough_views and bool(camera_poses_solved)
@@ -259,7 +328,20 @@ def inspect_gsplat_relighting_input(
             "heldout_ssim": heldout_ssim is not None and float(heldout_ssim) >= 0.8,
             "heldout_lpips": heldout_lpips is not None and float(heldout_lpips) <= 0.2,
         }
-        showcase_quality_pass = all(quality_checks.values()) or not bool(public_showcase)
+        anatomy_checks = {
+            "anatomy_regions": (
+                anatomy_region_count is not None
+                and anatomy_regions_passed is not None
+                and anatomy_region_count >= _PUBLIC_SHOWCASE_ANATOMY_REGIONS
+                and anatomy_regions_passed == anatomy_region_count
+            ),
+            "silhouette_iou": silhouette_iou is not None and silhouette_iou >= 0.90,
+            "normalized_landmark_error": (normalized_landmark_error is not None and normalized_landmark_error <= 0.03),
+            "thin_structure_recall": thin_structure_recall is not None and thin_structure_recall >= 0.85,
+            "novel_view_count": novel_view_count is not None and novel_view_count >= 3,
+        }
+        showcase_anatomy_pass = all(anatomy_checks.values()) or not bool(public_showcase)
+        showcase_quality_pass = (all(quality_checks.values()) and showcase_anatomy_pass) or not bool(public_showcase)
         schema = _gsplat_schema(names)
         checks = schema["native_checks"]
         missing = [key for key, present in checks.items() if not present and key in ("position", "color_or_albedo")]
@@ -282,6 +364,7 @@ def inspect_gsplat_relighting_input(
                 missing
                 + ([] if showcase_provenance_pass else ["captured_gsplat_provenance"])
                 + ([] if showcase_quality_pass else [name for name, passed in quality_checks.items() if not passed])
+                + ([] if showcase_anatomy_pass else [name for name, passed in anatomy_checks.items() if not passed])
             ),
             provenance={
                 "type": provenance_type,
@@ -300,6 +383,23 @@ def inspect_gsplat_relighting_input(
                 "heldout_lpips": None if heldout_lpips is None else float(heldout_lpips),
                 "checks": quality_checks,
                 "public_showcase_pass": showcase_quality_pass,
+                "anatomy_fidelity": {
+                    "anatomy_region_count": anatomy_region_count,
+                    "anatomy_regions_passed": anatomy_regions_passed,
+                    "silhouette_iou": silhouette_iou,
+                    "normalized_landmark_error": normalized_landmark_error,
+                    "thin_structure_recall": thin_structure_recall,
+                    "novel_view_count": novel_view_count,
+                    "checks": anatomy_checks,
+                    "public_showcase_pass": showcase_anatomy_pass,
+                    "thresholds": {
+                        "minimum_anatomy_regions": _PUBLIC_SHOWCASE_ANATOMY_REGIONS,
+                        "minimum_silhouette_iou": 0.90,
+                        "maximum_normalized_landmark_error": 0.03,
+                        "minimum_thin_structure_recall": 0.85,
+                        "minimum_novel_views": 3,
+                    },
+                },
                 "thresholds": {
                     "minimum_evaluation_views": 8,
                     "minimum_psnr": 25.0,
@@ -314,6 +414,7 @@ def inspect_gsplat_relighting_input(
                 "Run Houdini Bake GSplats before Labs when source_schema is standard_3dgs_ply.",
                 "Do not label procedural point sampling as captured GSplat reconstruction.",
                 "Use held-out views and complete subject coverage before publishing a GSplat showcase.",
+                "Require all fixed anatomy regions and measured silhouette, landmark, thin-structure, and novel-view gates before publication.",
             ],
         )
     except Exception as exc:

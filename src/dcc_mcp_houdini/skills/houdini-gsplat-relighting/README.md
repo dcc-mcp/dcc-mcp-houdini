@@ -9,7 +9,11 @@ raw Python.
 ## Workflow
 
 1. `inspect_gsplat_relighting_input` validates the source SOP and required
-   point attributes.
+   point attributes. Public showcase validation also requires every region in
+   the fixed 12-region anatomy checklist—including a distinct tarsi/claws
+   region—to pass, silhouette IoU >= 0.90,
+   normalized landmark error <= 0.03, thin-structure recall >= 0.85, and at
+   least three measured novel views.
 2. `prepare_gsplat_sop_chain` reconstructs normals and optionally extracts
    albedo with SideFX Labs.
 3. `create_gsplat_relight_lop` creates the Solaris relighting node, camera,

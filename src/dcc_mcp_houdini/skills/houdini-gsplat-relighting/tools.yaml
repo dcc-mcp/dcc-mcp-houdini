@@ -78,10 +78,40 @@ tools:
           minimum: 0
           maximum: 1
           description: Mean LPIPS measured on held-out source views.
+        anatomy_region_count:
+          type: integer
+          minimum: 1
+          maximum: 64
+          description: Number of fixed anatomy checklist regions evaluated; public showcase evaluation requires at least 12, including a distinct tarsi/claws region.
+        anatomy_regions_passed:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: Anatomy checklist regions that passed; cannot exceed anatomy_region_count and must equal it for public showcase use.
+        silhouette_iou:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Multi-view silhouette intersection-over-union against approved references.
+        normalized_landmark_error:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean anatomical landmark error normalized by subject scale; lower is better.
+        thin_structure_recall:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Recall for antennae, legs, wing edges, and other reference thin structures.
+        novel_view_count:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: Number of independent novel views used for anatomy fidelity evaluation.
         public_showcase:
           type: boolean
           default: false
-          description: Enforce captured provenance, complete coverage, and held-out quality thresholds before public showcase use.
+          description: Enforce captured provenance, complete coverage, held-out image quality, and anatomy fidelity thresholds before public showcase use.
     next-tools:
       on-success:
         - houdini_gsplat_relighting__prepare_gsplat_sop_chain
