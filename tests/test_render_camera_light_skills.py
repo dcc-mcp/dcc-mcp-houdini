@@ -597,9 +597,7 @@ class TestViewSkills:
         mock_hou.node.return_value = geo
 
         with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.frame_view(
-                node_path="/obj/highpoly", allow_heavy_geometry=True
-            )
+            result = mod.frame_view(node_path="/obj/highpoly", allow_heavy_geometry=True)
 
         assert result["success"] is True
         assert result["context"]["framed"] is True
