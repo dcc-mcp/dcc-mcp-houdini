@@ -879,7 +879,9 @@ def create_gsplat_copernicus_raster(
             )
             if not celestial_applied:
                 raise ValueError("Sphere Sample COP does not expose its celestial-sphere parameter")
-            for parm_name, value in zip(("rx", "ry", "rz"), background_rotation, strict=True):
+            # background_rotation is validated as exactly three values above;
+            # avoid zip(strict=...) to preserve the adapter's Python 3.8 floor.
+            for parm_name, value in zip(("rx", "ry", "rz"), background_rotation):
                 if not _set_first(background_sphere, (parm_name,), value):
                     raise ValueError("Sphere Sample COP does not expose its rotation parameters")
             # Prefer the imported camera metadata itself.  The refined GSplat
