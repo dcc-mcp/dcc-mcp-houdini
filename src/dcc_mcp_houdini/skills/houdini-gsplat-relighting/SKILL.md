@@ -25,9 +25,13 @@ metadata:
 Use the typed tools in this package for the cross-context handoff:
 
 1. Inspect the SOP output and confirm point attributes and provenance before
-   changing it. A public reconstruction showcase requires splats trained from
-   at least three views of the same subject with solved camera poses.
-2. Prepare it with Labs `Normals from GSplats` and/or `Delight GSplats`.
+   changing it. The preflight recognizes Houdini-native GSplats and standard
+   3DGS PLY exports (`f_dc*`, `rot*`, `scale*`, `opacity`, and `f_rest*`). A
+   public reconstruction showcase requires splats trained from at least three
+   views of the same subject with solved camera poses.
+2. Prepare it with Houdini `Bake GSplats` when normalization is required, then
+   Labs `Normals from GSplats` and/or `Delight GSplats`. Keep spherical
+   harmonics enabled when the source provides `f_rest*` coefficients.
 3. In Solaris, use `Relight GSplats` with USD lights, a render camera, shadows,
    shadow bias, and optional dome/HDRI lighting. Use `houdini-parameters` for
    version-specific Labs parameters that are not exposed by the setup tool.
