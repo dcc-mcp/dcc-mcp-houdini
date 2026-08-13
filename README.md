@@ -82,7 +82,7 @@ limitations are in
 
 The Houdini 22 scene exercises GSplat-aware KineFX deformation, articulated
 wing/body/leg controls, a deformation-synchronized short-fur Groom, and a fixed
-camera flipbook under a neutral outdoor HDR environment. The six-frame contact
+camera flipbook under a neutral outdoor HDR environment. The five-frame contact
 sheet verifies that one splat instance remains in frame through the 96-frame
 takeoff/flight/landing cycle; the legacy camera object was hidden so its
 viewport frustum cannot be mistaken for model ghosting.
@@ -91,10 +91,12 @@ viewport frustum cannot be mistaken for model ghosting.
 
 ![Real Houdini 22 Scene View, parameters, and KineFX/Groom node graph](docs/showcase/houdini-honeybee-gsplat-kinefx-groom-ui.png)
 
-The UI capture is from the real Houdini process. Only the title bar was cropped
-to remove a local path; the Scene View, parameter editor, timeline, and node
-graph were not recreated. This remains engineering evidence rather than final
-beauty approval: pin removal cannot synthesize occluded anatomy, residual
+The UI capture is from the real Houdini process. DCC-MCP set each audited frame
+and DCC-CUA captured the same exact Houdini PID/window through Windows Graphics
+Capture. Only the title bar was cropped to remove a local path; the Scene View,
+parameter editor, timeline, and node graph were not recreated. This remains
+engineering evidence rather than final beauty approval: pin removal cannot
+synthesize occluded anatomy, residual
 capture-support Gaussians remain visible, and the pinned specimen cannot supply
 biological flight or foot-contact motion. A final living-bee showcase still
 requires a cleaner licensed capture and dedicated contact/occlusion review.
