@@ -74,9 +74,7 @@ def frame_view(
                 warnings.append(
                     "Refused to frame heavy geometry with {:,} primitives; "
                     "create a viewport proxy or explicitly set "
-                    "allow_heavy_geometry=true.".format(
-                        geometry_counts["primitives"]
-                    )
+                    "allow_heavy_geometry=true.".format(geometry_counts["primitives"])
                 )
             else:
                 try:
