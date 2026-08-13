@@ -113,7 +113,9 @@ tools:
       Create and connect a Labs Relight GSplats LOP after a Solaris input,
       optionally adding USD Light LOPs for a key, fill, dome, or other relight
       lights. Applies only parameters that exist in the installed Houdini/Labs
-      build and reports unsupported version-specific names.
+      build, reports unsupported version-specific names, and when available
+      exposes the relit points through a stable SOP bridge instead of requiring
+      consumers to address Labs HDA internals.
     source_file: scripts/create_gsplat_relight_lop.py
     execution: sync
     affinity: main
@@ -126,6 +128,7 @@ tools:
     produces: [gsplat_relight_stage]
     input_schema:
       type: object
+      additionalProperties: false
       required: [lop_node_path]
       properties:
         lop_node_path:
@@ -162,10 +165,97 @@ tools:
         parameters:
           type: object
           description: Optional exact Labs parameter overrides for the installed build.
+        create_sop_bridge:
+          type: boolean
+          default: true
+          description: >-
+            Discover the compatible relit SOP inside the Labs asset and expose
+            it through a stable object-level SOP bridge.
+    output_schema:
+      type: object
+      required: [success, message, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        context:
+          type: object
+          required: [relight, sop_bridge_available, sop_output_path, point_count, gsplat_attributes]
+          properties:
+            relight: {type: object}
+            sop_bridge_available: {type: boolean}
+            sop_output_path: {type: [string, "null"]}
+            point_count: {type: integer, minimum: 0}
+            gsplat_attributes:
+              type: array
+              items: {type: string}
+            bridge_refreshed: {type: boolean}
+            sop_bridge_status: {type: string}
+            sop_bridge_error_type: {type: [string, "null"]}
     next-tools:
       on-success:
+        - houdini_gsplat_relighting__refresh_gsplat_relight_sop_bridge
         - houdini_usd_lops__list_stage_prims
         - houdini_parameters__get_parms
+      on-failure:
+        - houdini_scene__get_node_info
+
+  - name: refresh_gsplat_relight_sop_bridge
+    description: >-
+      Force-cook an existing Labs Relight GSplats LOP, rediscover its compatible
+      SOP output without relying on an internal HDA path, update the stable
+      object-level bridge, and return its output path, point count, and key
+      GSplat attributes. Use after changing Dome or relight parameters.
+    source_file: scripts/refresh_gsplat_relight_sop_bridge.py
+    execution: sync
+    affinity: main
+    group: gsplat-solaris
+    read_only: false
+    destructive: false
+    idempotent: true
+    tool_role: mutation
+    risk: medium
+    search_aliases: [refresh relit gsplat sop, recook dome relight, solaris sop bridge, update gsplat lighting]
+    produces: [gsplat_relight_sop_bridge]
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [relight_lop_path]
+      properties:
+        relight_lop_path:
+          type: string
+          pattern: ^/
+          description: Absolute path to the Labs Relight GSplats LOP returned by the setup tool.
+        force:
+          type: boolean
+          default: true
+          description: Force-cook the relight LOP, discovered source SOP, and stable bridge nodes.
+    output_schema:
+      type: object
+      required: [success, message, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        context:
+          type: object
+          required: [sop_output_path, point_count, gsplat_attributes, bridge_refreshed]
+          properties:
+            sop_output_path: {type: string}
+            point_count: {type: integer, minimum: 1}
+            gsplat_attributes:
+              type: array
+              items: {type: string}
+            bridge_refreshed: {type: boolean}
+            sop_bridge_available: {type: boolean}
+            sop_bridge_status: {type: string}
+            relight: {type: object}
+    call_examples:
+      - arguments:
+          relight_lop_path: /stage/gsplat_relight
+          force: true
+        note: Recompute the stable relit SOP after changing Dome-light parameters.
+    next-tools:
+      on-success:
+        - houdini_gsplat_relighting__create_gsplat_copernicus_raster
       on-failure:
         - houdini_scene__get_node_info
 
@@ -173,8 +263,10 @@ tools:
     description: >-
       Create a Copernicus SOP Import plus Rasterize GSplats chain, optionally
       wiring a Camera Import COP and Sharpen, HSV, Gamma, and Premult image
-      refinement nodes. Enables H22 external-SOP mode, applies the native
-      Copernicus resolution contract, and reports every created output.
+      refinement nodes. An optional absolute background image is composited by
+      a File COP and Blend COP using the H22 named bg/fg input contract. Enables
+      external-SOP mode, applies the native resolution contract, and reports
+      every created output.
     source_file: scripts/create_gsplat_copernicus_raster.py
     execution: sync
     affinity: main
@@ -187,6 +279,7 @@ tools:
     produces: [gsplat_copernicus_chain]
     input_schema:
       type: object
+      additionalProperties: false
       required: [copnet_path, sop_path]
       properties:
         copnet_path:
@@ -226,11 +319,139 @@ tools:
           description: Optional Gamma COP value.
         premultiply_alpha:
           type: boolean
-          default: true
-          description: Append a Premult COP as the final display/render output.
+          default: false
+          description: >-
+            Append a Premult COP only for an explicit straight-alpha downstream
+            contract. Rasterize GSplats output is already alpha-associated, so
+            enabling this by default would darken translucent splats twice.
+        background_image_path:
+          type: string
+          minLength: 1
+          description: >-
+            Optional absolute HDR or image path loaded by a Houdini 22 File COP.
+            The path is consumed by Houdini but is not echoed in the public result.
+        background_mode:
+          type: string
+          enum: [over]
+          default: over
+          description: >-
+            Bounded Blend COP composite mode. The GSplat output is connected to
+            named fg and the background File COP to named bg.
+        background_brightness:
+          type: number
+          minimum: 0.01
+          maximum: 16.0
+          default: 1.0
+          description: >-
+            Linear brightness multiplier applied only to the camera-projected
+            background branch, without changing Solaris relighting exposure.
+        background_rotation:
+          type: array
+          items: {type: number}
+          minItems: 3
+          maxItems: 3
+          default: [0.0, 0.0, 0.0]
+          description: >-
+            Camera-visible HDR sphere rotation as [rx, ry, rz] degrees. Use the
+            same rotation on the Solaris Dome Light to keep lighting and plate
+            directions physically consistent.
     next-tools:
       on-success:
+        - houdini_gsplat_relighting__write_gsplat_copernicus_image
         - houdini_parameters__set_parms
         - houdini_render__capture_viewport
+      on-failure:
+        - houdini_scene__get_node_info
+
+  - name: write_gsplat_copernicus_image
+    description: >-
+      Render one existing Copernicus output through a clearly named Houdini 22
+      Image ROP under /out. Clears any default output expression before setting
+      the caller-provided absolute file, performs a synchronous foreground
+      render for one frame, and accepts the result only when the file was
+      created or updated with non-zero bytes.
+    source_file: scripts/write_gsplat_copernicus_image.py
+    execution: sync
+    affinity: main
+    group: gsplat-copernicus
+    read_only: false
+    destructive: true
+    idempotent: true
+    tool_role: mutation
+    risk: medium
+    search_aliases: [write gsplat pixels, copernicus image rop, render cop to disk, verify gsplat image]
+    produces: [gsplat_pixel_evidence]
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [cop_output_path, output_file, frame, resolution, color_conversion]
+      properties:
+        cop_output_path:
+          type: string
+          pattern: ^/
+          description: Absolute path to the existing Copernicus output node to render.
+        output_file:
+          type: string
+          minLength: 1
+          description: Absolute image file path. An existing file may be overwritten.
+        frame:
+          type: number
+          minimum: -1000000
+          maximum: 1000000
+          description: Single frame to render synchronously in the current Houdini process.
+        resolution:
+          type: array
+          items: {type: integer, minimum: 1, maximum: 16384}
+          minItems: 2
+          maxItems: 2
+          description: Image ROP default resolution as [width, height].
+        color_conversion:
+          type: string
+          enum: [raw, ocio, bakeocio]
+          description: Houdini 22 Image ROP Colorspace Conversion token.
+        rop_name:
+          type: string
+          pattern: ^[A-Za-z_][A-Za-z0-9_]{0,63}$
+          default: dcc_mcp_gsplat_image_proof
+          description: Fixed child name to create or reuse directly under /out.
+    output_schema:
+      type: object
+      required: [success, message, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        context:
+          type: object
+          required: [written_files, output_evidence, image_rop, created, frame, resolution, color_conversion]
+          properties:
+            written_files:
+              type: array
+              items: {type: string}
+            output_evidence:
+              type: object
+              required: [exists, size_bytes, updated_by_render]
+              properties:
+                exists: {type: boolean}
+                size_bytes: {type: integer, minimum: 0}
+                updated_by_render: {type: boolean}
+            image_rop: {type: object}
+            created: {type: boolean}
+            cop_output_path: {type: string}
+            frame: {type: number}
+            resolution:
+              type: array
+              items: {type: integer}
+              minItems: 2
+              maxItems: 2
+            color_conversion: {type: string}
+    call_examples:
+      - arguments:
+          cop_output_path: /img/gsplat_final/OUT
+          output_file: D:/renders/gsplat-proof.exr
+          frame: 48
+          resolution: [1280, 720]
+          color_conversion: raw
+        note: Write one linear EXR frame and verify the file was freshly produced.
+    next-tools:
       on-failure:
         - houdini_scene__get_node_info

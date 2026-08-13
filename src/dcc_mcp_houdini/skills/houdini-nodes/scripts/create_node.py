@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from _node_common import get_node, hou_import_error, node_summary
-from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def create_node(
@@ -40,7 +40,11 @@ def create_node(
             node=node_summary(node),
         )
     except Exception as exc:
-        return skill_exception(exc, message="Failed to create Houdini node")
+        return skill_error(
+            "Failed to create Houdini node",
+            "Houdini node creation failed",
+            error_type=type(exc).__name__,
+        )
 
 
 @skill_entry

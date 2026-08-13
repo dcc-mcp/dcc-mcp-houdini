@@ -200,7 +200,10 @@ tools:
           description: SOP node to inspect.
   - name: get_cook_status
     description: >-
-      Cook a SOP node and return cook success plus any errors and warnings.
+      Cook a lightweight SOP node and return cook success plus errors and
+      warnings. Direct inputs above the inline safety limit are rejected by
+      default because execution still occupies Houdini's UI thread; use
+      houdini_nodes__start_cook_job for potentially long cooks.
     source_file: scripts/get_cook_status.py
     execution: async
     affinity: main
@@ -224,3 +227,9 @@ tools:
           type: boolean
           default: false
           description: Force a recook even when the node is already cooked.
+        allow_heavy_inline:
+          type: boolean
+          default: false
+          description: >-
+            Explicitly accept UI-thread blocking when direct inputs exceed the
+            safety limit. Prefer the isolated node-cook job instead.

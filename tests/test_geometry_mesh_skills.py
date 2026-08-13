@@ -404,6 +404,65 @@ class TestGeometrySkills:
         assert result["context"]["cooked"] is False
         assert result["context"]["cook_error"] == "cook failed"
 
+    def test_get_cook_status_redacts_host_path_from_cook_error(self) -> None:
+        mod = _load_script("houdini-geometry", "get_cook_status.py")
+        node = _node("/obj/geo1/box1", "box1")
+        node.cook.side_effect = RuntimeError(r"failed in C:\Users\private-user\asset.hip")
+        node.errors.return_value = []
+        node.warnings.return_value = []
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_cook_status("/obj/geo1/box1")
+
+        assert result["success"] is True
+        assert result["context"]["cook_error"] == "RuntimeError"
+        assert "private-user" not in str(result)
+
+    def test_get_cook_status_rejects_heavy_inline_cook(self) -> None:
+        mod = _load_script("houdini-geometry", "get_cook_status.py")
+        source = _node("/obj/geo1/points", "points")
+        source_geo = MagicMock()
+        source_geo.pointCount.return_value = 1_005_483
+        source.geometry.return_value = source_geo
+        node = _node("/obj/geo1/surface", "surface")
+        node.inputs.return_value = (source,)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_cook_status("/obj/geo1/surface", force=True)
+
+        assert result["success"] is False
+        assert result["error"] == "Potentially heavy SOP cook requires isolated execution"
+        assert result["context"]["input_point_count"] == 1_005_483
+        assert result["context"]["recommended_tool"] == "houdini_nodes__start_cook_job"
+        node.cook.assert_not_called()
+
+    def test_get_cook_status_allows_explicit_heavy_inline_override(self) -> None:
+        mod = _load_script("houdini-geometry", "get_cook_status.py")
+        source = _node("/obj/geo1/points", "points")
+        source_geo = MagicMock()
+        source_geo.pointCount.return_value = 1_005_483
+        source.geometry.return_value = source_geo
+        node = _node("/obj/geo1/surface", "surface")
+        node.inputs.return_value = (source,)
+        node.errors.return_value = []
+        node.warnings.return_value = []
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_cook_status(
+                "/obj/geo1/surface",
+                force=True,
+                allow_heavy_inline=True,
+            )
+
+        assert result["success"] is True
+        node.cook.assert_called_once_with(force=True)
+
 
 class TestMeshOpsSkills:
     def _wire_downstream(self, optype: str = "xform"):

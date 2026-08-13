@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from contextlib import ExitStack
 from pathlib import Path
@@ -205,6 +206,423 @@ def test_stage_loader_maps_bootstrap_and_scene() -> None:
 
 
 class TestGsplatRelightingSkills:
+    def test_public_exception_results_redact_tracebacks_and_local_paths(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        sensitive_error = RuntimeError(r"C:\Users\private-user\secret_asset\lighting.hdr")
+        calls = (
+            lambda: mod.inspect_gsplat_relighting_input(node_path="/obj/gsplat/OUT"),
+            lambda: mod.prepare_gsplat_sop_chain(node_path="/obj/gsplat/OUT"),
+            lambda: mod.create_gsplat_relight_lop(lop_node_path="/stage/gsplat"),
+            lambda: mod.refresh_gsplat_relight_sop_bridge(relight_lop_path="/stage/gsplat_relight"),
+            lambda: mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/gsplat",
+                sop_path="/obj/gsplat/OUT",
+            ),
+            lambda: mod.write_gsplat_copernicus_image(
+                cop_output_path="/img/gsplat/OUT",
+                output_file=str(tmp_path / "proof.exr"),
+                frame=1,
+                resolution=[640, 480],
+                color_conversion="raw",
+            ),
+        )
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            for call_public_tool in calls:
+                with patch.object(mod, "_node", side_effect=sensitive_error):
+                    result = call_public_tool()
+
+                serialized = json.dumps(result, sort_keys=True)
+                assert result["success"] is False
+                assert result["context"]["error_type"] == "RuntimeError"
+                assert "traceback" not in serialized.lower()
+                assert "RuntimeError(" not in serialized
+                assert "C:" not in serialized
+                assert "private-user" not in serialized
+                assert "secret_asset" not in serialized
+
+        source = (_SKILLS_ROOT / "houdini-gsplat-relighting" / "scripts" / "gsplat_relighting.py").read_text(
+            encoding="utf-8"
+        )
+        assert "skill_exception" not in source
+
+    def test_optional_bridge_failure_reports_safe_status_without_failing_relight(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        source = MagicMock()
+        source.path.return_value = "/stage/gsplat_source"
+        source.name.return_value = "gsplat_source"
+        source.type.return_value.name.return_value = "sopimport"
+        parent = MagicMock()
+        source.parent.return_value = parent
+        relight = MagicMock()
+        relight.path.return_value = "/stage/gsplat_relight"
+        relight.name.return_value = "gsplat_relight"
+        relight.type.return_value.name.return_value = "labs::relight_gsplats::1.0"
+        sensitive_error = RuntimeError(r"D:\Users\private-user\secret_asset\bridge.bgeo")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            stack.enter_context(patch.object(mod, "_node", return_value=source))
+            stack.enter_context(patch.object(mod, "_create", return_value=relight))
+            stack.enter_context(patch.object(mod, "_resolve_parm", return_value=None))
+            stack.enter_context(patch.object(mod, "_build_or_refresh_relight_sop_bridge", side_effect=sensitive_error))
+            result = mod.create_gsplat_relight_lop(lop_node_path="/stage/gsplat_source")
+
+        serialized = json.dumps(result, sort_keys=True)
+        assert result["success"] is True
+        assert result["context"]["sop_bridge_status"] == "bridge_refresh_failed"
+        assert result["context"]["sop_bridge_error_type"] == "RuntimeError"
+        assert "traceback" not in serialized.lower()
+        assert "D:" not in serialized
+        assert "private-user" not in serialized
+        assert "secret_asset" not in serialized
+
+    def test_create_relight_returns_stable_sop_bridge_contract_when_available(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        source = MagicMock()
+        source.path.return_value = "/stage/gsplat_source"
+        source.name.return_value = "gsplat_source"
+        source.type.return_value.name.return_value = "sopimport"
+        parent = MagicMock()
+        source.parent.return_value = parent
+        relight = MagicMock()
+        relight.path.return_value = "/stage/gsplat_relight"
+        relight.name.return_value = "gsplat_relight"
+        relight.type.return_value.name.return_value = "labs::relight_gsplats::1.0"
+        bridge_contract = {
+            "sop_bridge_available": True,
+            "sop_output_path": "/obj/dcc_mcp_gsplat_relight_sop_bridge/OUT",
+            "point_count": 58324,
+            "gsplat_attributes": ["P", "Cd", "orient", "scale", "GS_Alpha"],
+            "bridge_refreshed": True,
+        }
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            stack.enter_context(patch.object(mod, "_node", return_value=source))
+            stack.enter_context(patch.object(mod, "_create", return_value=relight))
+            stack.enter_context(patch.object(mod, "_resolve_parm", return_value=None))
+            refresh = stack.enter_context(
+                patch.object(mod, "_build_or_refresh_relight_sop_bridge", return_value=bridge_contract)
+            )
+            result = mod.create_gsplat_relight_lop(lop_node_path="/stage/gsplat_source")
+
+        assert result["success"] is True
+        assert result["context"]["sop_output_path"] == "/obj/dcc_mcp_gsplat_relight_sop_bridge/OUT"
+        assert result["context"]["point_count"] == 58324
+        assert result["context"]["gsplat_attributes"] == ["P", "Cd", "orient", "scale", "GS_Alpha"]
+        refresh.assert_called_once()
+        assert refresh.call_args.args[1] is relight
+        assert refresh.call_args.kwargs == {"force": True}
+
+    def test_refresh_relight_bridge_force_cooks_and_hides_internal_sop_path(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        relight = MagicMock()
+        relight.path.return_value = "/stage/gsplat_relight"
+        relight.name.return_value = "gsplat_relight"
+        relight.type.return_value.name.return_value = "labs::relight_gsplats::1.0"
+        internal = MagicMock()
+        internal.path.return_value = "/stage/gsplat_relight/internal_versioned_source/OUT"
+        internal.name.return_value = "OUT"
+        internal.type.return_value.name.return_value = "null"
+        attributes = []
+        for name in ("P", "Cd", "orient", "scale", "GS_Alpha", "GS_SPH_R", "GS_SPH_G", "GS_SPH_B"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attributes.append(attrib)
+        geometry = MagicMock()
+        geometry.pointCount.return_value = 58324
+        geometry.pointAttribs.return_value = attributes
+        internal.geometry.return_value = geometry
+        relight.allSubChildren.return_value = (internal,)
+
+        obj = MagicMock()
+        bridge_geo = MagicMock()
+        bridge_geo.path.return_value = "/obj/dcc_mcp_gsplat_relight_sop_bridge"
+        bridge_geo.name.return_value = "dcc_mcp_gsplat_relight_sop_bridge"
+        bridge_geo.type.return_value.name.return_value = "geo"
+        object_merge = MagicMock()
+        object_merge.path.return_value = "/obj/dcc_mcp_gsplat_relight_sop_bridge/GSPLAT_RELIT_SOURCE"
+        object_merge.name.return_value = "GSPLAT_RELIT_SOURCE"
+        object_merge.type.return_value.name.return_value = "object_merge"
+        source_parm = MagicMock()
+        object_merge.parm.side_effect = lambda name: source_parm if name == "objpath1" else None
+        output = MagicMock()
+        output.path.return_value = "/obj/dcc_mcp_gsplat_relight_sop_bridge/OUT"
+        output.name.return_value = "OUT"
+        output.type.return_value.name.return_value = "null"
+        output.geometry.return_value = geometry
+        obj.node.return_value = None
+        obj.createNode.return_value = bridge_geo
+        bridge_geo.node.side_effect = lambda name: None
+        bridge_geo.createNode.side_effect = [object_merge, output]
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {"/stage/gsplat_relight": relight, "/obj": obj}.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.refresh_gsplat_relight_sop_bridge(
+                relight_lop_path="/stage/gsplat_relight",
+                force=True,
+            )
+
+        assert result["success"] is True
+        context = result["context"]
+        assert context["sop_output_path"] == "/obj/dcc_mcp_gsplat_relight_sop_bridge/OUT"
+        assert context["point_count"] == 58324
+        assert context["gsplat_attributes"] == [
+            "Cd",
+            "GS_Alpha",
+            "GS_SPH_B",
+            "GS_SPH_G",
+            "GS_SPH_R",
+            "P",
+            "orient",
+            "scale",
+        ]
+        assert "internal_sop_path" not in context
+        relight.cook.assert_called_once_with(force=True)
+        internal.cook.assert_called_once_with(force=True)
+        object_merge.cook.assert_called_once_with(force=True)
+        output.cook.assert_called_once_with(force=True)
+        source_parm.deleteAllKeyframes.assert_called_once_with()
+        source_parm.set.assert_called_once_with("/stage/gsplat_relight/internal_versioned_source/OUT")
+
+    def test_refresh_relight_bridge_has_bounded_public_schema(self) -> None:
+        tools = yaml.safe_load((_SKILLS_ROOT / "houdini-gsplat-relighting" / "tools.yaml").read_text(encoding="utf-8"))[
+            "tools"
+        ]
+        tool = next(item for item in tools if item["name"] == "refresh_gsplat_relight_sop_bridge")
+
+        assert tool["source_file"] == "scripts/refresh_gsplat_relight_sop_bridge.py"
+        assert tool["execution"] == "sync"
+        assert tool["affinity"] == "main"
+        assert tool["input_schema"]["additionalProperties"] is False
+        assert tool["input_schema"]["required"] == ["relight_lop_path"]
+        assert set(tool["input_schema"]["properties"]) == {"relight_lop_path", "force"}
+        assert tool["next-tools"]["on-success"] == ["houdini_gsplat_relighting__create_gsplat_copernicus_raster"]
+
+    def test_write_copernicus_image_creates_named_image_rop_and_reports_file_evidence(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        output_file = tmp_path / "gsplat-proof.png"
+        cop_output = MagicMock()
+        cop_output.path.return_value = "/img/gsplat_final/OUT"
+        out = MagicMock()
+        out.path.return_value = "/out"
+        rop = MagicMock()
+        rop.path.return_value = "/out/dcc_mcp_gsplat_image_proof"
+        rop.name.return_value = "dcc_mcp_gsplat_image_proof"
+        rop.type.return_value.name.return_value = "image"
+        parms = {
+            "coppath": MagicMock(),
+            "copoutput": MagicMock(),
+            "trange": MagicMock(),
+            "f1": MagicMock(),
+            "f2": MagicMock(),
+            "f3": MagicMock(),
+            "setres": MagicMock(),
+            "res1": MagicMock(),
+            "res2": MagicMock(),
+            "colorconversion": MagicMock(),
+            "mkpath": MagicMock(),
+        }
+        rop.parm.side_effect = lambda name: parms.get(name)
+        out.node.return_value = None
+        out.createNode.return_value = rop
+
+        def render(**_kwargs):
+            output_file.write_bytes(b"png-pixel-evidence")
+
+        rop.render.side_effect = render
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/img/gsplat_final/OUT": cop_output,
+            "/out": out,
+        }.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.write_gsplat_copernicus_image(
+                cop_output_path="/img/gsplat_final/OUT",
+                output_file=str(output_file),
+                frame=48,
+                resolution=[1280, 720],
+                color_conversion="ocio",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["written_files"] == [str(output_file)]
+        assert result["context"]["output_evidence"] == {
+            "exists": True,
+            "size_bytes": len(b"png-pixel-evidence"),
+            "updated_by_render": True,
+        }
+        out.createNode.assert_called_once_with("image", "dcc_mcp_gsplat_image_proof")
+        parms["coppath"].set.assert_called_once_with("/img/gsplat_final/OUT")
+        parms["copoutput"].deleteAllKeyframes.assert_called_once_with()
+        parms["copoutput"].set.assert_called_once_with(str(output_file))
+        parms["trange"].set.assert_called_once_with(0)
+        parms["f1"].set.assert_called_once_with(48.0)
+        parms["f2"].set.assert_called_once_with(48.0)
+        parms["f3"].set.assert_called_once_with(1.0)
+        parms["setres"].set.assert_called_once_with(True)
+        parms["res1"].set.assert_called_once_with(1280)
+        parms["res2"].set.assert_called_once_with(720)
+        parms["colorconversion"].set.assert_called_once_with("ocio")
+        parms["mkpath"].set.assert_called_once_with(True)
+        rop.render.assert_called_once_with(frame_range=(48.0, 48.0, 1.0), verbose=False)
+
+    def test_write_copernicus_image_reuses_only_matching_named_image_rop(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        output_file = tmp_path / "proof.exr"
+        cop_output = MagicMock()
+        out = MagicMock()
+        existing = MagicMock()
+        existing.type.return_value.name.return_value = "image"
+        existing.path.return_value = "/out/GSPLAT_PIXEL_PROOF"
+        existing.name.return_value = "GSPLAT_PIXEL_PROOF"
+        parms = {
+            name: MagicMock()
+            for name in (
+                "coppath",
+                "copoutput",
+                "trange",
+                "f1",
+                "f2",
+                "f3",
+                "setres",
+                "res1",
+                "res2",
+                "colorconversion",
+                "mkpath",
+            )
+        }
+        existing.parm.side_effect = lambda name: parms.get(name)
+        existing.render.side_effect = lambda **_kwargs: output_file.write_bytes(b"exr")
+        out.node.return_value = existing
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/img/copnet/OUT": cop_output,
+            "/out": out,
+        }.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.write_gsplat_copernicus_image(
+                cop_output_path="/img/copnet/OUT",
+                output_file=str(output_file),
+                frame=1,
+                resolution=[640, 480],
+                color_conversion="raw",
+                rop_name="GSPLAT_PIXEL_PROOF",
+            )
+
+        assert result["success"] is True
+        assert result["context"]["created"] is False
+        out.createNode.assert_not_called()
+
+    def test_write_copernicus_image_rejects_render_without_disk_pixels(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        output_file = tmp_path / "missing.png"
+        cop_output = MagicMock()
+        cop_output.path.return_value = "/img/copnet/OUT"
+        out = MagicMock()
+        rop = MagicMock()
+        rop.path.return_value = "/out/dcc_mcp_gsplat_image_proof"
+        rop.name.return_value = "dcc_mcp_gsplat_image_proof"
+        rop.type.return_value.name.return_value = "image"
+        parms = {
+            name: MagicMock()
+            for name in (
+                "coppath",
+                "copoutput",
+                "trange",
+                "f1",
+                "f2",
+                "f3",
+                "setres",
+                "res1",
+                "res2",
+                "colorconversion",
+                "mkpath",
+            )
+        }
+        rop.parm.side_effect = lambda name: parms.get(name)
+        out.node.return_value = None
+        out.createNode.return_value = rop
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {
+            "/img/copnet/OUT": cop_output,
+            "/out": out,
+        }.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.write_gsplat_copernicus_image(
+                cop_output_path="/img/copnet/OUT",
+                output_file=str(output_file),
+                frame=1,
+                resolution=[640, 480],
+                color_conversion="raw",
+            )
+
+        assert result["success"] is False
+        assert result["context"]["written_files"] == []
+        assert result["context"]["output_evidence"] == {
+            "exists": False,
+            "size_bytes": 0,
+            "updated_by_render": False,
+        }
+
+    @pytest.mark.parametrize(
+        ("cop_output_path", "output_file", "private_fragment"),
+        (
+            ("img/copnet/OUT", "C:/renders/proof.exr", "C:/renders"),
+            ("/img/copnet/OUT", "proof.exr", "proof.exr"),
+        ),
+    )
+    def test_write_copernicus_image_rejects_unbounded_paths(
+        self,
+        cop_output_path: str,
+        output_file: str,
+        private_fragment: str,
+    ) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.write_gsplat_copernicus_image(
+                cop_output_path=cop_output_path,
+                output_file=output_file,
+                frame=1,
+                resolution=[640, 480],
+                color_conversion="raw",
+            )
+
+        assert result["success"] is False
+        assert result["message"] == "Invalid Copernicus Image ROP request"
+        assert result["error"] == "Image ROP request validation failed"
+        assert result["context"]["error_type"] == "ValueError"
+        assert private_fragment not in json.dumps(result)
+
+    def test_write_copernicus_image_has_bounded_public_schema(self) -> None:
+        tools = yaml.safe_load((_SKILLS_ROOT / "houdini-gsplat-relighting" / "tools.yaml").read_text(encoding="utf-8"))[
+            "tools"
+        ]
+        tool = next(item for item in tools if item["name"] == "write_gsplat_copernicus_image")
+
+        assert tool["source_file"] == "scripts/write_gsplat_copernicus_image.py"
+        assert tool["execution"] == "sync"
+        assert tool["affinity"] == "main"
+        assert tool["input_schema"]["additionalProperties"] is False
+        assert tool["input_schema"]["required"] == [
+            "cop_output_path",
+            "output_file",
+            "frame",
+            "resolution",
+            "color_conversion",
+        ]
+        assert tool["input_schema"]["properties"]["color_conversion"]["enum"] == [
+            "raw",
+            "ocio",
+            "bakeocio",
+        ]
+        assert tool["output_schema"]["required"] == ["success", "message", "context"]
+
     def test_find_node_type_accepts_houdini_versioned_labs_name(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
         parent = MagicMock()
@@ -457,6 +875,7 @@ class TestGsplatRelightingSkills:
                 copnet_path="/img/copnet1",
                 sop_path="/obj/geo1/OUT",
                 resolution=[960, 540],
+                premultiply_alpha=True,
             )
 
         assert result["success"] is True
@@ -504,6 +923,7 @@ class TestGsplatRelightingSkills:
                 saturation_scale=1.1,
                 value_scale=1.2,
                 gamma=0.8,
+                premultiply_alpha=True,
             )
 
         assert result["success"] is True
@@ -519,6 +939,203 @@ class TestGsplatRelightingSkills:
         hsv.setInput.assert_called_once_with(0, sharpen)
         gamma_node.setInput.assert_called_once_with(0, hsv)
         premult.setInput.assert_called_once_with(0, gamma_node)
+
+    def test_copernicus_raster_composites_background_with_named_h22_inputs(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+
+        def node(path: str, name: str, type_name: str) -> MagicMock:
+            value = MagicMock()
+            value.path.return_value = path
+            value.name.return_value = name
+            value.type.return_value.name.return_value = type_name
+            return value
+
+        background_path = tmp_path / "garden.exr"
+        copnet = node("/img/copnet1", "copnet1", "copnet")
+        source = node("/obj/geo1/OUT", "OUT", "null")
+        sop_import = node("/img/copnet1/import", "import", "sopimport")
+        raster = node("/img/copnet1/raster", "raster", "rasterizegsplats")
+        background = node("/img/copnet1/background", "background", "file")
+        sphere = node("/img/copnet1/sphere", "sphere", "spheresample")
+        bright = node("/img/copnet1/bright", "bright", "bright")
+        composite_premult = node("/img/copnet1/composite_premult", "composite_premult", "premult")
+        blend = node("/img/copnet1/over", "over", "blend")
+        raster.outputNames.return_value = ("color",)
+        background.outputNames.return_value = ("C",)
+        sphere.outputNames.return_value = ("transform", "mask")
+        sphere.inputNames.return_value = ("size_ref", "source")
+        bright.outputNames.return_value = ("bright",)
+        composite_premult.outputNames.return_value = ("color",)
+        blend.inputNames.return_value = ("bg", "fg", "mask")
+
+        selected = []
+
+        def set_first(target, names, value):
+            selected.append((target, tuple(names), value))
+            return names[0]
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", side_effect=[copnet, source]))
+            create = stack.enter_context(
+                patch.object(
+                    mod,
+                    "_create",
+                    side_effect=[sop_import, raster, composite_premult, background, sphere, bright, blend],
+                )
+            )
+            stack.enter_context(patch.object(mod, "_set_first", side_effect=set_first))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                background_image_path=str(background_path),
+                background_mode="over",
+            )
+
+        assert result["success"] is True
+        assert [call.args[2] for call in create.call_args_list] == [
+            "gsplat_sop_import",
+            "gsplat_rasterize",
+            "gsplat_composite_premult",
+            "gsplat_background_file",
+            "gsplat_background_sphere",
+            "gsplat_background_brightness",
+            "gsplat_background_over",
+        ]
+        assert any(target is background and names[0] == "filename" for target, names, _ in selected)
+        assert any(
+            target is composite_premult and names[0] == "op" and value == "mult" for target, names, value in selected
+        )
+        composite_premult.setInput.assert_called_once_with(0, raster)
+        assert any(target is blend and names[0] == "mode" and value == "over" for target, names, value in selected)
+        assert any(target is background and names == ("aovs",) and value == 1 for target, names, value in selected)
+        assert any(target is background and names == ("aov1",) and value == "C" for target, names, value in selected)
+        assert any(target is background and names == ("type1",) and value == 3 for target, names, value in selected)
+        assert any(target is background and names == ("raw1",) and value is False for target, names, value in selected)
+        background.cook.assert_called_once_with(force=True)
+        sphere.setNamedInput.assert_any_call("size_ref", composite_premult, "color")
+        sphere.setNamedInput.assert_any_call("source", background, "C")
+        bright.setInput.assert_called_once_with(0, sphere)
+        blend.setNamedInput.assert_any_call("bg", bright, "bright")
+        blend.setNamedInput.assert_any_call("fg", composite_premult, composite_premult.outputNames.return_value[0])
+        blend.setInput.assert_not_called()
+        assert result["context"]["output"]["path"] == "/img/copnet1/over"
+        assert result["context"]["background_composite"] == {
+            "enabled": True,
+            "mode": "over",
+            "file": {
+                "path": "/img/copnet1/background",
+                "name": "background",
+                "type": "file",
+            },
+            "sphere": {
+                "path": "/img/copnet1/sphere",
+                "name": "sphere",
+                "type": "spheresample",
+            },
+            "brightness": {
+                "path": "/img/copnet1/bright",
+                "name": "bright",
+                "type": "bright",
+            },
+            "brightness_scale": 1.0,
+            "rotation": [0.0, 0.0, 0.0],
+            "blend": {
+                "path": "/img/copnet1/over",
+                "name": "over",
+                "type": "blend",
+            },
+            "named_inputs": {"bg": "bright", "fg": "color"},
+        }
+        assert str(background_path) not in json.dumps(result)
+
+    def test_copernicus_raster_rejects_missing_camera_before_mutation(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        copnet = MagicMock()
+        source = MagicMock()
+        hou = MagicMock()
+
+        with ExitStack() as stack:
+            node_lookup = stack.enter_context(
+                patch.object(mod, "_node", side_effect=[copnet, source, ValueError("missing camera")])
+            )
+            create = stack.enter_context(patch.object(mod, "_create"))
+            stack.enter_context(patch.dict(sys.modules, {"hou": hou}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                camera_path="/obj/missing_camera",
+            )
+
+        assert result["success"] is False
+        assert result["error"] == "Houdini Copernicus GSplat setup failed"
+        assert result["context"]["error_type"] == "ValueError"
+        assert node_lookup.call_count == 3
+        create.assert_not_called()
+
+    def test_copernicus_background_missing_named_bg_rolls_back_and_redacts(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        background_path = tmp_path / "private-user" / "garden.exr"
+        copnet = MagicMock()
+        source = MagicMock()
+        sop_import = MagicMock()
+        raster = MagicMock()
+        composite_premult = MagicMock()
+        background = MagicMock()
+        sphere = MagicMock()
+        bright = MagicMock()
+        blend = MagicMock()
+        background.outputNames.return_value = ("C",)
+        raster.outputNames.return_value = ("color",)
+        composite_premult.outputNames.return_value = ("color",)
+        sphere.outputNames.return_value = ("transform", "mask")
+        sphere.inputNames.return_value = ("size_ref", "source")
+        bright.outputNames.return_value = ("bright",)
+        blend.inputNames.return_value = ("foreground", "mask")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", side_effect=[copnet, source]))
+            stack.enter_context(
+                patch.object(
+                    mod,
+                    "_create",
+                    side_effect=[sop_import, raster, composite_premult, background, sphere, bright, blend],
+                )
+            )
+            stack.enter_context(patch.object(mod, "_set_first", side_effect=lambda _node, names, _value: names[0]))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                background_image_path=str(background_path),
+            )
+
+        serialized = json.dumps(result, sort_keys=True)
+        assert result["success"] is False
+        assert result["error"] == "Houdini Copernicus GSplat setup failed"
+        assert result["context"]["error_type"] == "ValueError"
+        assert "traceback" not in serialized.lower()
+        assert "private-user" not in serialized
+        blend.setNamedInput.assert_not_called()
+        for created in (blend, bright, sphere, background, composite_premult, raster, sop_import):
+            created.destroy.assert_called_once_with()
+
+    def test_copernicus_background_has_bounded_public_schema(self) -> None:
+        tools = yaml.safe_load((_SKILLS_ROOT / "houdini-gsplat-relighting" / "tools.yaml").read_text(encoding="utf-8"))[
+            "tools"
+        ]
+        tool = next(item for item in tools if item["name"] == "create_gsplat_copernicus_raster")
+        schema = tool["input_schema"]
+
+        assert schema["additionalProperties"] is False
+        assert schema["properties"]["background_mode"]["enum"] == ["over"]
+        assert schema["properties"]["background_mode"]["default"] == "over"
+        assert schema["properties"]["background_image_path"]["type"] == "string"
+        assert schema["properties"]["background_brightness"]["minimum"] == 0.01
+        assert schema["properties"]["background_brightness"]["maximum"] == 16.0
+        assert schema["properties"]["background_rotation"]["minItems"] == 3
+        assert schema["properties"]["background_rotation"]["maxItems"] == 3
+        assert "python" not in {name.lower() for name in schema["properties"]}
 
     def test_copernicus_raster_rejects_partial_resolution_contract(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
@@ -542,7 +1159,8 @@ class TestGsplatRelightingSkills:
             )
 
         assert result["success"] is False
-        assert "resolution parameters" in result["error"]
+        assert result["error"] == "Houdini Copernicus GSplat setup failed"
+        assert result["context"]["error_type"] == "ValueError"
         raster.destroy.assert_called_once_with()
         sop_import.destroy.assert_called_once_with()
 
@@ -935,6 +1553,44 @@ class TestNodeSkills:
         assert result["success"] is True
         parent.createNode.assert_called_once()
         assert result["context"]["node"]["path"] == "/obj/geo1"
+
+    def test_create_node_failure_does_not_expose_traceback_or_host_path(self) -> None:
+        mod = _load_script("houdini-nodes", "create_node.py")
+        parent = MagicMock()
+        parent.createNode.side_effect = RuntimeError(
+            r"Failed inside C:\Users\private-user\project\asset.hip"
+        )
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.create_node("/obj", "invalid")
+
+        assert result["success"] is False
+        assert "traceback" not in result["context"]
+        assert "private-user" not in result["message"]
+        assert "private-user" not in result["error"]
+        assert result["context"]["error_type"] == "RuntimeError"
+
+    def test_cook_node_rejects_heavy_inline_cook(self) -> None:
+        mod = _load_script("houdini-nodes", "cook_node.py")
+        source = MagicMock()
+        source_geo = MagicMock()
+        source_geo.pointCount.return_value = 1_005_483
+        source.geometry.return_value = source_geo
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/surface"
+        node.inputs.return_value = (source,)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.cook_node("/obj/geo1/surface", force=True)
+
+        assert result["success"] is False
+        assert result["error"] == "Potentially heavy SOP cook requires isolated execution"
+        assert result["context"]["recommended_tool"] == "houdini_nodes__start_cook_job"
+        node.cook.assert_not_called()
 
     def test_set_node_parms_with_scalar_tuple_and_button(self) -> None:
         mod = _load_script("houdini-nodes", "set_node_parms.py")
