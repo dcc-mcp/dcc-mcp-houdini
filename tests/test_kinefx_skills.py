@@ -144,7 +144,6 @@ class TestCreateRig:
         assert result["success"] is False
         geo.createNode.assert_not_called()
 
-
     def test_create_rig_validates_joint_name_before_creating_nodes(self) -> None:
         mod = _load_script("create_rig.py")
         geo = MagicMock()

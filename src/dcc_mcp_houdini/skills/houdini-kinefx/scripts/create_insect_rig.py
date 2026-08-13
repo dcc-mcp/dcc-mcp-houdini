@@ -27,9 +27,7 @@ def _honeybee_chain(scale: float, ground_z: float) -> tuple[List[dict], List[str
     _append(chain, "compound_eye_R", head, (1.38 * s, -0.38 * s, ground_z + 1.67 * s))
 
     for side, sign in (("L", 1.0), ("R", -1.0)):
-        antenna_base = _append(
-            chain, f"antenna_{side}_scape", head, (1.58 * s, sign * 0.20 * s, ground_z + 1.82 * s)
-        )
+        antenna_base = _append(chain, f"antenna_{side}_scape", head, (1.58 * s, sign * 0.20 * s, ground_z + 1.82 * s))
         antenna_pedicel = _append(
             chain,
             f"antenna_{side}_pedicel",
@@ -57,9 +55,30 @@ def _honeybee_chain(scale: float, ground_z: float) -> tuple[List[dict], List[str
 
     contacts: List[str] = []
     leg_specs = {
-        "front": ((0.52, 0.38, 1.42), (0.86, 0.70, 1.10), (1.15, 0.86, 0.64), (1.32, 0.94, 0.25), (1.50, 0.98, 0.08), (1.58, 1.00, 0.0)),
-        "middle": ((0.00, 0.44, 1.38), (0.08, 0.84, 1.02), (0.05, 1.12, 0.55), (-0.08, 1.30, 0.20), (0.06, 1.48, 0.07), (0.14, 1.55, 0.0)),
-        "rear": ((-0.48, 0.40, 1.40), (-0.72, 0.78, 1.15), (-1.02, 1.10, 0.72), (-1.20, 1.36, 0.28), (-1.08, 1.60, 0.08), (-1.00, 1.72, 0.0)),
+        "front": (
+            (0.52, 0.38, 1.42),
+            (0.86, 0.70, 1.10),
+            (1.15, 0.86, 0.64),
+            (1.32, 0.94, 0.25),
+            (1.50, 0.98, 0.08),
+            (1.58, 1.00, 0.0),
+        ),
+        "middle": (
+            (0.00, 0.44, 1.38),
+            (0.08, 0.84, 1.02),
+            (0.05, 1.12, 0.55),
+            (-0.08, 1.30, 0.20),
+            (0.06, 1.48, 0.07),
+            (0.14, 1.55, 0.0),
+        ),
+        "rear": (
+            (-0.48, 0.40, 1.40),
+            (-0.72, 0.78, 1.15),
+            (-1.02, 1.10, 0.72),
+            (-1.20, 1.36, 0.28),
+            (-1.08, 1.60, 0.08),
+            (-1.00, 1.72, 0.0),
+        ),
     }
     for leg_name, positions in leg_specs.items():
         for side, sign in (("L", 1.0), ("R", -1.0)):
