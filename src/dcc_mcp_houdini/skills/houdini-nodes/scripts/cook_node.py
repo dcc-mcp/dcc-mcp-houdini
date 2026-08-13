@@ -23,6 +23,7 @@ def cook_node(node_path: str, force: bool = False) -> dict:
     except ImportError:
         return hou_import_error()
 
+    node = None
     try:
         node = get_node(hou, node_path)
         node.cook(force=force)
@@ -34,7 +35,16 @@ def cook_node(node_path: str, force: bool = False) -> dict:
             warnings=_call_string_list(node, "warnings"),
         )
     except Exception as exc:
-        return skill_exception(exc, message="Failed to cook Houdini node")
+        result = skill_exception(exc, message="Failed to cook Houdini node")
+        if node is not None:
+            context = result.setdefault("context", {})
+            context.update(
+                node=node_summary(node),
+                force=force,
+                errors=_call_string_list(node, "errors"),
+                warnings=_call_string_list(node, "warnings"),
+            )
+        return result
 
 
 @skill_entry
