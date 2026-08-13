@@ -3,7 +3,9 @@ tools:
     description: >-
       Inspect a SOP GSplat output for the attributes needed by Labs normal
       reconstruction, delighting, Solaris relighting, and Copernicus
-      rasterization. Read-only and bounded to attribute metadata and counts.
+      rasterization. Detects both Houdini-native attributes and standard 3DGS
+      PLY attributes that can be normalized with Bake GSplats. Read-only and
+      bounded to attribute metadata and counts.
     source_file: scripts/inspect_gsplat_relighting_input.py
     execution: sync
     affinity: main
@@ -55,9 +57,10 @@ tools:
   - name: prepare_gsplat_sop_chain
     description: >-
       Append the installed Labs Normals from GSplats and/or Delight GSplats
-      SOPs to an existing GSplat output, preserving the source and returning
-      the actual node paths and output attributes. Rolls back newly created
-      nodes if the chain cannot be built.
+      SOPs to an existing GSplat output. Standard 3DGS PLY inputs are first
+      normalized with Houdini's Bake GSplats SOP. Preserves the source,
+      returns actual node paths and output attributes, and rolls back newly
+      created nodes if the chain cannot be built.
     source_file: scripts/prepare_gsplat_sop_chain.py
     execution: sync
     affinity: main
@@ -83,6 +86,14 @@ tools:
           type: boolean
           default: true
           description: Append Labs Delight GSplats, which writes the albedo attribute.
+        normalize_input:
+          type: boolean
+          default: true
+          description: Insert Houdini Bake GSplats when standard 3DGS PLY attributes are detected.
+        preserve_spherical_harmonics:
+          type: boolean
+          default: true
+          description: Convert f_rest coefficients to GS_SPH_R/G/B when the source provides them.
         name_prefix:
           type: string
           default: gsplat_relight

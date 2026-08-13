@@ -45,6 +45,49 @@ def _names(attributes: Iterable[dict]) -> set:
     return {item["name"] for item in attributes}
 
 
+def _has_expanded_attribute(names: set, base: str, count: int) -> bool:
+    """Accept the expanded PLY spellings emitted by common 3DGS exporters."""
+    return any(
+        all("{}{}{}".format(base, separator, index) in names for index in range(count)) for separator in ("", "_")
+    )
+
+
+def _gsplat_schema(names: set) -> dict:
+    native_checks = {
+        "position": "P" in names,
+        "color_or_albedo": bool({"Cd", "albedo"} & names),
+        "normal": "N" in names,
+        "orientation": "orient" in names,
+        "scale": bool({"scale", "pscale"} & names),
+        "opacity": bool({"GS_Alpha", "Alpha", "alpha"} & names),
+        "spherical_harmonics": {"GS_SPH_R", "GS_SPH_G", "GS_SPH_B"}.issubset(names),
+        "ambient_occlusion": "ao" in names,
+    }
+    raw_checks = {
+        "position": "P" in names,
+        "color": "f_dc" in names or _has_expanded_attribute(names, "f_dc", 3),
+        "orientation": "rot" in names or _has_expanded_attribute(names, "rot", 4),
+        "scale": "scale" in names or _has_expanded_attribute(names, "scale", 3),
+        "opacity": "opacity" in names,
+        "spherical_harmonics": "f_rest" in names or _has_expanded_attribute(names, "f_rest", 45),
+    }
+    raw_core = all(raw_checks[key] for key in ("position", "color", "orientation", "scale", "opacity"))
+    native_core = all(native_checks[key] for key in ("position", "color_or_albedo", "orientation", "scale", "opacity"))
+    if native_core:
+        source_schema = "houdini_gsplat"
+    elif raw_core:
+        source_schema = "standard_3dgs_ply"
+    else:
+        source_schema = "unknown"
+    return {
+        "source_schema": source_schema,
+        "native_checks": native_checks,
+        "raw_checks": raw_checks,
+        "normalization_required": source_schema == "standard_3dgs_ply",
+        "normalization_available": raw_core,
+    }
+
+
 def _find_node_type(parent: Any, aliases: Sequence[str]) -> str:
     category = parent.childTypeCategory()
     available = category.nodeTypes()
@@ -175,17 +218,10 @@ def inspect_gsplat_relighting_input(
         has_enough_views = int(source_view_count) >= 3
         captured_provenance = has_capture_type and has_enough_views and bool(camera_poses_solved)
         showcase_provenance_pass = captured_provenance or not bool(public_showcase)
-        checks = {
-            "position": "P" in names,
-            "color_or_albedo": bool({"Cd", "albedo"} & names),
-            "normal": "N" in names,
-            "orientation": "orient" in names,
-            "scale": bool({"scale", "pscale"} & names),
-            "opacity": bool({"GS_Alpha", "Alpha", "alpha"} & names),
-            "spherical_harmonics": {"GS_SPH_R", "GS_SPH_G", "GS_SPH_B"}.issubset(names),
-            "ambient_occlusion": "ao" in names,
-        }
+        schema = _gsplat_schema(names)
+        checks = schema["native_checks"]
         missing = [key for key, present in checks.items() if not present and key in ("position", "color_or_albedo")]
+        ready_for_preparation = schema["source_schema"] in ("houdini_gsplat", "standard_3dgs_ply")
         return skill_success(
             "Inspected GSplat relighting input",
             source=_summary(source),
@@ -193,6 +229,12 @@ def inspect_gsplat_relighting_input(
             primitive_count=int(geometry.primCount()),
             point_attributes=attributes,
             checks=checks,
+            raw_checks=schema["raw_checks"],
+            source_schema=schema["source_schema"],
+            normalization_required=schema["normalization_required"],
+            normalization_available=schema["normalization_available"],
+            recommended_normalizer="bakegsplat" if schema["normalization_required"] else None,
+            ready_for_preparation=ready_for_preparation,
             ready_for_relighting=not missing and showcase_provenance_pass,
             blocking_missing=missing + ([] if showcase_provenance_pass else ["captured_gsplat_provenance"]),
             provenance={
@@ -206,6 +248,7 @@ def inspect_gsplat_relighting_input(
                 "Run Labs Normals from GSplats when N is absent.",
                 "Run Labs Delight GSplats when albedo is absent or captured lighting must be removed.",
                 "Preserve GS_SPH_R/G/B when view-dependent captured appearance matters.",
+                "Run Houdini Bake GSplats before Labs when source_schema is standard_3dgs_ply.",
                 "Do not label procedural point sampling as captured GSplat reconstruction.",
             ],
         )
@@ -218,6 +261,8 @@ def prepare_gsplat_sop_chain(
     node_path: str,
     create_normals: bool = True,
     create_albedo: bool = True,
+    normalize_input: bool = True,
+    preserve_spherical_harmonics: bool = True,
     name_prefix: str = "gsplat_relight",
     cook: bool = True,
 ) -> dict:
@@ -240,6 +285,22 @@ def prepare_gsplat_sop_chain(
         if not stages:
             raise ValueError("At least one of create_normals/create_albedo must be true")
         current = source
+        names = {attrib.name() for attrib in source.geometry().pointAttribs()}
+        schema = _gsplat_schema(names)
+        normalizer = None
+        convert_spherical_harmonics = False
+        if schema["normalization_required"]:
+            if not normalize_input:
+                raise ValueError("Standard 3DGS PLY attributes require Houdini Bake GSplats before Labs processing")
+            bake = _create(parent, ("bakegsplat",), "{}_bake".format(name_prefix))
+            created.append(bake)
+            bake.setInput(0, current)
+            convert_spherical_harmonics = bool(
+                preserve_spherical_harmonics and schema["raw_checks"]["spherical_harmonics"]
+            )
+            _set_first(bake, ("sphcoeff",), convert_spherical_harmonics)
+            current = bake
+            normalizer = _summary(bake)
         for suffix, aliases in stages:
             child = _create(parent, aliases, "{}_{}".format(name_prefix, suffix))
             created.append(child)
@@ -254,7 +315,14 @@ def prepare_gsplat_sop_chain(
             source=_summary(source),
             nodes=[_summary(item) for item in created],
             output=_summary(current),
-            output_attributes=[name for name, enabled in (("N", create_normals), ("albedo", create_albedo)) if enabled],
+            source_schema=schema["source_schema"],
+            normalized_input=normalizer is not None,
+            normalizer=normalizer,
+            output_attributes=(
+                (["Cd", "orient", "scale", "GS_Alpha"] if normalizer else [])
+                + (["GS_SPH_R", "GS_SPH_G", "GS_SPH_B"] if normalizer and convert_spherical_harmonics else [])
+                + [name for name, enabled in (("N", create_normals), ("albedo", create_albedo)) if enabled]
+            ),
             cooked=bool(cook),
         )
     except Exception as exc:

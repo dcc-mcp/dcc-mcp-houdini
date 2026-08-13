@@ -256,6 +256,42 @@ class TestGsplatRelightingSkills:
         assert result["context"]["ready_for_relighting"] is True
         assert result["context"]["checks"]["spherical_harmonics"] is True
 
+    def test_inspect_recognizes_standard_3dgs_ply_as_convertible(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        names = ["P", "opacity"]
+        names.extend("f_dc_{}".format(index) for index in range(3))
+        names.extend("rot_{}".format(index) for index in range(4))
+        names.extend("scale_{}".format(index) for index in range(3))
+        names.extend("f_rest_{}".format(index) for index in range(45))
+        attrs = []
+        for name in names:
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3 if name == "P" else 1
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 70269
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/raw_ply"
+        node.name.return_value = "raw_ply"
+        node.type.return_value.name.return_value = "file"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(node_path="/obj/geo1/raw_ply")
+
+        context = result["context"]
+        assert result["success"] is True
+        assert context["source_schema"] == "standard_3dgs_ply"
+        assert context["normalization_required"] is True
+        assert context["normalization_available"] is True
+        assert context["ready_for_preparation"] is True
+        assert context["ready_for_relighting"] is False
+        assert context["raw_checks"]["spherical_harmonics"] is True
+        assert context["recommended_normalizer"] == "bakegsplat"
+
     def test_public_showcase_rejects_synthetic_point_sampling(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
         attrs = []
@@ -296,6 +332,54 @@ class TestGsplatRelightingSkills:
 
         assert result["success"] is False
         source.parent.return_value.createNode.assert_not_called()
+
+    def test_prepare_normalizes_standard_3dgs_ply_with_bake_gsplats(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        source = MagicMock()
+        source.path.return_value = "/obj/geo1/raw_ply"
+        source.name.return_value = "raw_ply"
+        source.type.return_value.name.return_value = "file"
+        attributes = []
+        names = ["P", "opacity"]
+        names.extend("f_dc_{}".format(index) for index in range(3))
+        names.extend("rot_{}".format(index) for index in range(4))
+        names.extend("scale_{}".format(index) for index in range(3))
+        names.extend("f_rest_{}".format(index) for index in range(45))
+        for name in names:
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attributes.append(attrib)
+        source.geometry.return_value.pointAttribs.return_value = attributes
+        parent = MagicMock()
+        source.parent.return_value = parent
+        bake = MagicMock()
+        bake.path.return_value = "/obj/geo1/relight_bake"
+        bake.name.return_value = "relight_bake"
+        bake.type.return_value.name.return_value = "bakegsplat"
+        normals = MagicMock()
+        normals.path.return_value = "/obj/geo1/relight_normals"
+        normals.name.return_value = "relight_normals"
+        normals.type.return_value.name.return_value = "labs::normals_from_gsplats::1.0"
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(mod, "_node", return_value=source))
+            create = stack.enter_context(patch.object(mod, "_create", side_effect=[bake, normals]))
+            set_first = stack.enter_context(patch.object(mod, "_set_first", return_value="sphcoeff"))
+            stack.enter_context(patch.dict(sys.modules, {"hou": MagicMock()}))
+            result = mod.prepare_gsplat_sop_chain(
+                node_path="/obj/geo1/raw_ply",
+                create_normals=True,
+                create_albedo=False,
+            )
+
+        assert result["success"] is True
+        assert result["context"]["normalized_input"] is True
+        assert result["context"]["source_schema"] == "standard_3dgs_ply"
+        assert result["context"]["normalizer"]["type"] == "bakegsplat"
+        assert create.call_args_list[0].args[1] == ("bakegsplat",)
+        bake.setInput.assert_called_once_with(0, source)
+        normals.setInput.assert_called_once_with(0, bake)
+        set_first.assert_any_call(bake, ("sphcoeff",), True)
 
     def test_copernicus_raster_uses_houdini_22_external_sop_and_resolution_contract(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
