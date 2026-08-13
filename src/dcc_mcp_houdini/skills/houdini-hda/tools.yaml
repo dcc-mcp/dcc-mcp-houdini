@@ -1,13 +1,13 @@
 tools:
   - name: install_hda_file
-    description: "Install a Houdini .hda/.otl file into the current session and return discovered definitions."
+    description: "Install a packed Houdini .hda/.otl file or SideFX expanded HDA directory into the current session and return discovered definitions."
     input_schema:
       type: object
       required: [file_path]
       properties:
         file_path:
           type: string
-          description: "Path to an existing .hda, .hdalc, .hdanc, .otl, or .otllc file."
+          description: "Path to an existing packed or expanded .hda, .hdalc, .hdanc, .otl, or .otllc library."
     read_only: false
     destructive: false
     idempotent: true

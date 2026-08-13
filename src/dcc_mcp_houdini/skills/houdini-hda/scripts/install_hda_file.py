@@ -7,7 +7,7 @@ from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
 def install_hda_file(file_path: str) -> dict:
-    """Install an HDA/OTL file into the current Houdini session."""
+    """Install a packed or expanded HDA/OTL library into the current session."""
     try:
         import hou  # noqa: PLC0415
     except ImportError:
@@ -18,8 +18,9 @@ def install_hda_file(file_path: str) -> dict:
         hou.hda.installFile(str(path))
         definitions = definitions_in_file(hou, str(path))
         return skill_success(
-            "Installed Houdini Digital Asset file",
+            "Installed Houdini Digital Asset library",
             file_path=str(path),
+            library_format="expanded" if path.is_dir() else "packed",
             definitions=definitions,
             definition_count=len(definitions),
         )

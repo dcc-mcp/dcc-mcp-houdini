@@ -9,6 +9,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 _SCRIPTS = Path(__file__).parents[1] / "src" / "dcc_mcp_houdini" / "skills" / "houdini-hda" / "scripts"
@@ -23,6 +24,43 @@ def _load_script(name: str) -> ModuleType:
     with skill_script_import_context(spec):
         spec.loader.exec_module(module)
     return module
+
+
+def test_validate_hda_path_accepts_sidefx_expanded_library(tmp_path: Path) -> None:
+    mod = _load_script("_hda_common.py")
+    library = tmp_path / "normals_from_gsplats.1.0.hda"
+    library.mkdir()
+    (library / "Sections.list").write_text("INDEX__SECTION\n", encoding="utf-8")
+
+    assert mod.validate_hda_path(str(library)) == library
+
+
+def test_validate_hda_path_rejects_empty_hda_directory(tmp_path: Path) -> None:
+    mod = _load_script("_hda_common.py")
+    library = tmp_path / "not_a_library.hda"
+    library.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="HDA library not found"):
+        mod.validate_hda_path(str(library))
+
+
+def test_install_hda_file_reports_expanded_library(tmp_path: Path) -> None:
+    mod = _load_script("install_hda_file.py")
+    library = tmp_path / "delight_gsplats.1.0.hda"
+    library.mkdir()
+    (library / "Sections.list").write_text("INDEX__SECTION\n", encoding="utf-8")
+    definition = MagicMock()
+    definition.nodeTypeName.return_value = "labs::delight_gsplats::1.0"
+    definition.nodeType.return_value.category.return_value.name.return_value = "Sop"
+    mock_hou = MagicMock()
+    mock_hou.hda.definitionsInFile.return_value = [definition]
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.install_hda_file(str(library))
+
+    assert result["success"] is True
+    assert result["context"]["library_format"] == "expanded"
+    mock_hou.hda.installFile.assert_called_once_with(str(library))
 
 
 def test_promote_hda_parameters_clones_interface_and_links_internal_tuple() -> None:
