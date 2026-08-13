@@ -88,6 +88,14 @@ def test_houdini_server_options_port() -> None:
     assert bridge.host_dispatcher is dispatcher.host_dispatcher
 
 
+def test_houdini_server_options_preserve_gui_instance_type() -> None:
+    from dcc_mcp_houdini.server import HoudiniServerOptions
+
+    core = HoudiniServerOptions(instance_type="gui").to_core_options()
+
+    assert core.instance_type == "gui"
+
+
 def test_houdini_ui_dispatcher_bridge_attaches_http_queue() -> None:
     from dcc_mcp_houdini.host import HoudiniUiDispatcher
     from dcc_mcp_houdini.server import HoudiniServerOptions
