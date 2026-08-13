@@ -44,10 +44,74 @@ tools:
           type: boolean
           default: false
           description: Whether source camera poses were reconstructed and retained.
+        camera_pose_source:
+          type: string
+          enum: [sfm, calibrated_turntable, estimated_turntable, legacy, unknown]
+          default: legacy
+          description: Typed origin of the retained camera poses; estimated turntable poses require validation before showcase use.
+        camera_pose_validation:
+          type: string
+          enum: [validated, pending, failed, legacy, unknown]
+          default: legacy
+          description: Independent validation state for source poses, such as held-out reprojection or calibrated turntable checks.
+        capture_coverage:
+          type: string
+          enum: [complete, partial, unknown]
+          default: unknown
+          description: Whether the captured views cover the complete subject without known missing regions.
+        evaluation_view_count:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Number of held-out views used for reconstruction quality evaluation.
+        heldout_psnr:
+          type: number
+          minimum: 0
+          description: Mean PSNR measured on held-out source views.
+        heldout_ssim:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean SSIM measured on held-out source views.
+        heldout_lpips:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean LPIPS measured on held-out source views.
+        anatomy_region_count:
+          type: integer
+          minimum: 1
+          maximum: 64
+          description: Number of fixed anatomy checklist regions evaluated; public showcase evaluation requires at least 12, including a distinct tarsi/claws region.
+        anatomy_regions_passed:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: Anatomy checklist regions that passed; cannot exceed anatomy_region_count and must equal it for public showcase use.
+        silhouette_iou:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Multi-view silhouette intersection-over-union against approved references.
+        normalized_landmark_error:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mean anatomical landmark error normalized by subject scale; lower is better.
+        thin_structure_recall:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Recall for antennae, legs, wing edges, and other reference thin structures.
+        novel_view_count:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: Number of independent novel views used for anatomy fidelity evaluation.
         public_showcase:
           type: boolean
           default: false
-          description: Enforce captured-GSplat provenance before allowing public showcase use.
+          description: Enforce captured provenance, complete coverage, held-out image quality, and anatomy fidelity thresholds before public showcase use.
     next-tools:
       on-success:
         - houdini_gsplat_relighting__prepare_gsplat_sop_chain

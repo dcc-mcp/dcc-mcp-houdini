@@ -367,6 +367,285 @@ class TestGsplatRelightingSkills:
         assert result["context"]["provenance"]["public_showcase_pass"] is False
         assert "captured_gsplat_provenance" in result["context"]["blocking_missing"]
 
+    @pytest.mark.parametrize(
+        ("capture_coverage", "psnr", "ssim", "lpips", "expected_blocker"),
+        [
+            ("partial", 27.0, 0.86, 0.12, "complete_capture_coverage"),
+            ("complete", 24.11, 0.86, 0.12, "heldout_psnr"),
+            ("complete", 27.0, 0.725, 0.12, "heldout_ssim"),
+            ("complete", 27.0, 0.86, 0.24, "heldout_lpips"),
+        ],
+    )
+    def test_public_showcase_rejects_incomplete_or_low_quality_capture(
+        self,
+        capture_coverage: str,
+        psnr: float,
+        ssim: float,
+        lpips: float,
+        expected_blocker: str,
+    ) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                provenance_type="captured",
+                source_view_count=31,
+                camera_poses_solved=True,
+                capture_coverage=capture_coverage,
+                evaluation_view_count=18,
+                heldout_psnr=psnr,
+                heldout_ssim=ssim,
+                heldout_lpips=lpips,
+                public_showcase=True,
+            )
+
+        assert result["context"]["ready_for_relighting"] is False
+        assert result["context"]["provenance"]["public_showcase_pass"] is True
+        assert result["context"]["quality"]["public_showcase_pass"] is False
+        assert expected_blocker in result["context"]["blocking_missing"]
+
+    def test_public_showcase_accepts_measured_complete_capture(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                provenance_type="captured",
+                source_view_count=96,
+                camera_poses_solved=True,
+                capture_coverage="complete",
+                evaluation_view_count=12,
+                heldout_psnr=27.5,
+                heldout_ssim=0.86,
+                heldout_lpips=0.12,
+                anatomy_region_count=12,
+                anatomy_regions_passed=12,
+                silhouette_iou=0.90,
+                normalized_landmark_error=0.03,
+                thin_structure_recall=0.85,
+                novel_view_count=3,
+                public_showcase=True,
+            )
+
+        assert result["context"]["ready_for_relighting"] is True
+        assert result["context"]["blocking_missing"] == []
+        anatomy = result["context"]["quality"]["anatomy_fidelity"]
+        assert anatomy["public_showcase_pass"] is True
+        assert anatomy["checks"] == {
+            "anatomy_regions": True,
+            "silhouette_iou": True,
+            "normalized_landmark_error": True,
+            "thin_structure_recall": True,
+            "novel_view_count": True,
+        }
+
+    @pytest.mark.parametrize(
+        ("overrides", "expected_blocker"),
+        [
+            ({"anatomy_region_count": 11, "anatomy_regions_passed": 11}, "anatomy_regions"),
+            ({"anatomy_region_count": 12, "anatomy_regions_passed": 11}, "anatomy_regions"),
+            ({"anatomy_region_count": None, "anatomy_regions_passed": None}, "anatomy_regions"),
+            ({"silhouette_iou": 0.899999}, "silhouette_iou"),
+            ({"silhouette_iou": None}, "silhouette_iou"),
+            ({"normalized_landmark_error": 0.030001}, "normalized_landmark_error"),
+            ({"normalized_landmark_error": None}, "normalized_landmark_error"),
+            ({"thin_structure_recall": 0.849999}, "thin_structure_recall"),
+            ({"thin_structure_recall": None}, "thin_structure_recall"),
+            ({"novel_view_count": 2}, "novel_view_count"),
+            ({"novel_view_count": None}, "novel_view_count"),
+        ],
+    )
+    def test_public_showcase_rejects_anatomy_fidelity_below_gate(
+        self,
+        overrides: dict[str, object],
+        expected_blocker: str,
+    ) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        inputs: dict[str, object] = {
+            "node_path": "/obj/geo1/OUT",
+            "provenance_type": "captured",
+            "source_view_count": 96,
+            "camera_poses_solved": True,
+            "capture_coverage": "complete",
+            "evaluation_view_count": 12,
+            "heldout_psnr": 27.5,
+            "heldout_ssim": 0.86,
+            "heldout_lpips": 0.12,
+            "anatomy_region_count": 12,
+            "anatomy_regions_passed": 12,
+            "silhouette_iou": 0.90,
+            "normalized_landmark_error": 0.03,
+            "thin_structure_recall": 0.85,
+            "novel_view_count": 3,
+            "public_showcase": True,
+        }
+        inputs.update(overrides)
+
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(**inputs)
+
+        assert result["context"]["ready_for_relighting"] is False
+        assert result["context"]["quality"]["anatomy_fidelity"]["public_showcase_pass"] is False
+        assert expected_blocker in result["context"]["blocking_missing"]
+
+    @pytest.mark.parametrize(
+        ("invalid_input", "expected_parameter"),
+        [
+            ({"anatomy_region_count": 0}, "anatomy_region_count"),
+            ({"anatomy_region_count": 65}, "anatomy_region_count"),
+            ({"anatomy_region_count": True}, "anatomy_region_count"),
+            ({"anatomy_region_count": "11"}, "anatomy_region_count"),
+            (
+                {"anatomy_region_count": 11, "anatomy_regions_passed": 12},
+                "anatomy_regions_passed",
+            ),
+            ({"silhouette_iou": -0.001}, "silhouette_iou"),
+            ({"silhouette_iou": 1.001}, "silhouette_iou"),
+            ({"silhouette_iou": float("nan")}, "silhouette_iou"),
+            ({"normalized_landmark_error": -0.001}, "normalized_landmark_error"),
+            ({"normalized_landmark_error": 1.001}, "normalized_landmark_error"),
+            ({"thin_structure_recall": -0.001}, "thin_structure_recall"),
+            ({"thin_structure_recall": 1.001}, "thin_structure_recall"),
+            ({"novel_view_count": -1}, "novel_view_count"),
+            ({"novel_view_count": 65}, "novel_view_count"),
+            ({"novel_view_count": 3.0}, "novel_view_count"),
+        ],
+    )
+    def test_anatomy_fidelity_inputs_are_strictly_bounded_and_typed(
+        self,
+        invalid_input: dict[str, object],
+        expected_parameter: str,
+    ) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = []
+        geometry.pointCount.return_value = 0
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                **invalid_input,
+            )
+
+        assert result["success"] is False
+        assert expected_parameter in str(result)
+
+    def test_gsplat_anatomy_fidelity_schema_is_bounded(self) -> None:
+        tools_path = _SKILLS_ROOT / "houdini-gsplat-relighting" / "tools.yaml"
+        tools = yaml.safe_load(tools_path.read_text(encoding="utf-8"))["tools"]
+        inspect_tool = next(tool for tool in tools if tool["name"] == "inspect_gsplat_relighting_input")
+        properties = inspect_tool["input_schema"]["properties"]
+
+        assert properties["anatomy_region_count"] == {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": (
+                "Number of fixed anatomy checklist regions evaluated; public showcase evaluation requires at least 12, "
+                "including a distinct tarsi/claws region."
+            ),
+        }
+        assert properties["anatomy_regions_passed"]["minimum"] == 0
+        assert properties["anatomy_regions_passed"]["maximum"] == 64
+        for metric in ("silhouette_iou", "normalized_landmark_error", "thin_structure_recall"):
+            assert properties[metric]["type"] == "number"
+            assert properties[metric]["minimum"] == 0
+            assert properties[metric]["maximum"] == 1
+        assert properties["novel_view_count"]["type"] == "integer"
+        assert properties["novel_view_count"]["minimum"] == 0
+        assert properties["novel_view_count"]["maximum"] == 64
+
+    def test_public_showcase_rejects_unvalidated_estimated_turntable_poses(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        attrs = []
+        for name in ("P", "Cd", "orient", "pscale", "GS_Alpha"):
+            attrib = MagicMock()
+            attrib.name.return_value = name
+            attrib.dataType.return_value.name.return_value = "Float"
+            attrib.size.return_value = 3
+            attrs.append(attrib)
+        geometry = MagicMock()
+        geometry.pointAttribs.return_value = attrs
+        geometry.pointCount.return_value = 100
+        geometry.primCount.return_value = 0
+        node = MagicMock()
+        node.path.return_value = "/obj/geo1/OUT"
+        node.name.return_value = "OUT"
+        node.type.return_value.name.return_value = "null"
+        node.geometry.return_value = geometry
+        with patch.dict(sys.modules, {"hou": MagicMock(node=lambda _path: node)}):
+            result = mod.inspect_gsplat_relighting_input(
+                node_path="/obj/geo1/OUT",
+                provenance_type="captured",
+                source_view_count=142,
+                camera_poses_solved=True,
+                camera_pose_source="estimated_turntable",
+                camera_pose_validation="pending",
+                capture_coverage="complete",
+                evaluation_view_count=15,
+                heldout_psnr=27.5,
+                heldout_ssim=0.86,
+                heldout_lpips=0.12,
+                public_showcase=True,
+            )
+
+        assert result["context"]["ready_for_relighting"] is False
+        assert "camera_pose_source" in result["context"]["blocking_missing"]
+        assert "camera_pose_validation" in result["context"]["blocking_missing"]
+
     def test_prepare_rolls_back_when_labs_node_is_missing(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
         source = MagicMock()
