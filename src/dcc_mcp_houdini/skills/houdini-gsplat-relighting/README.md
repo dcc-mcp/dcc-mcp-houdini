@@ -1,6 +1,6 @@
 # Houdini GSplat relighting
 
-![Concept illustration of a honeybee GSplat relighting workflow](../../../../docs/images/houdini-gsplat-relighting-showcase.webp)
+![Captured honeybee GSplat animated with KineFX and Houdini Groom](../../../../docs/showcase/houdini-honeybee-gsplat-kinefx-groom-contact.png)
 
 Prepare an existing Gaussian Splat for interactive relighting, build its USD
 lighting stage, and produce a refined Copernicus image without falling back to
@@ -24,6 +24,10 @@ Requires Houdini 22 and current SideFX Labs GSplat assets. See
 [SKILL.md](SKILL.md) for attribute and execution contracts; `tools.yaml`
 contains the callable schemas.
 
-The header image is a workflow illustration, not capture or reconstruction
-evidence. A public GSplat showcase must separately provide captured multi-view
-provenance, solved camera poses, and live Houdini validation output.
+The header is real Houdini output from a licensed multiview reconstruction, not
+a concept illustration or SideFX sample. Its source record, reconstruction
+metrics, hashes, authored-animation disclosure, and known visual limitations
+are documented in
+[the showcase provenance](../../../../docs/showcase/honeybee-reference-license.md)
+and
+[`honeybee-gsplat-validation.json`](../../../../docs/showcase/honeybee-gsplat-validation.json).

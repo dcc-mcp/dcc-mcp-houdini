@@ -60,7 +60,50 @@ SideFX Houdini adapter for the DCC Model Context Protocol (MCP) ecosystem.
 It embeds a Streamable HTTP MCP server inside Houdini/hython and exposes
 skills-first Houdini automation tools to agents.
 
-## Houdini 22 procedural rig validation (pre-GSplat)
+## Houdini 22 captured GSplat engineering validation
+
+![Licensed multiview input for specimen UCSB-IZC00037044](docs/showcase/honeybee-ucsb-izc00037044-multiview.jpg)
+
+This validation starts from the University of California, Santa Barbara
+specimen `UCSB-IZC00037044`, published under CC BY 4.0 in
+[Honey Bee Heat Budget Images and Models](https://doi.org/10.5281/zenodo.17823483).
+It is our own reconstruction and Houdini scene, not the SideFX sample. The
+source is a pinned specimen photographed from multiple views; it is not a live
+bee performance capture.
+
+The COLMAP/Nerfstudio reconstruction contains 70,269 retained Gaussians after
+deterministic pin-region removal. Its held-out preview metrics pass the recorded
+engineering thresholds: PSNR 21.91, SSIM 0.849, and LPIPS 0.145. The complete
+machine-readable provenance, hashes, coordinate contract, thresholds, and
+limitations are in
+[`honeybee-gsplat-validation.json`](docs/showcase/honeybee-gsplat-validation.json).
+
+![Captured GSplat animated with KineFX and Houdini Groom in an outdoor HDR environment](docs/showcase/houdini-honeybee-gsplat-kinefx-groom.gif)
+
+The Houdini 22 scene exercises GSplat-aware KineFX deformation, articulated
+wing/body/leg controls, a deformation-synchronized short-fur Groom, and a fixed
+camera flipbook under a neutral outdoor HDR environment. The six-frame contact
+sheet verifies that one splat instance remains in frame through the 96-frame
+takeoff/flight/landing cycle; the legacy camera object was hidden so its
+viewport frustum cannot be mistaken for model ghosting.
+
+![Takeoff, flight, and landing contact sheet for the captured GSplat](docs/showcase/houdini-honeybee-gsplat-kinefx-groom-contact.png)
+
+![Real Houdini 22 Scene View, parameters, and KineFX/Groom node graph](docs/showcase/houdini-honeybee-gsplat-kinefx-groom-ui.png)
+
+The UI capture is from the real Houdini process. Only the title bar was cropped
+to remove a local path; the Scene View, parameter editor, timeline, and node
+graph were not recreated. This remains engineering evidence rather than final
+beauty approval: pin removal cannot synthesize occluded anatomy, residual
+capture-support Gaussians remain visible, and the pinned specimen cannot supply
+biological flight or foot-contact motion. A final living-bee showcase still
+requires a cleaner licensed capture and dedicated contact/occlusion review.
+
+Source attribution and the separation between captured evidence and authored
+animation are documented in
+[`docs/showcase/honeybee-reference-license.md`](docs/showcase/honeybee-reference-license.md).
+
+### Archived procedural rig validation (pre-GSplat)
 
 ![Public-domain honeybee reference, procedural wireframe, and Karma motion test](docs/showcase/houdini-honeybee-workflow.gif)
 
@@ -95,10 +138,9 @@ materials and topology, but should not be read as scan evidence or final art:
 Reference provenance, license terms, technical evidence, and known limitations
 are recorded in
 [`docs/showcase/honeybee-reference-license.md`](docs/showcase/honeybee-reference-license.md).
-The replacement showcase will be published only after a licensed multi-view
-capture has produced a validated GSplat, followed by GSplat-aware KineFX
-deformation, Houdini Groom fur, contact validation, and a full readable Houdini
-UI capture.
+The archived procedural model remains useful for topology and control-rig
+comparison, but it is superseded as GSplat provenance evidence by the captured
+specimen validation above.
 
 ## Features
 
