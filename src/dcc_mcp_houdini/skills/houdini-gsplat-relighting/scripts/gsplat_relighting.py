@@ -507,11 +507,17 @@ def create_gsplat_copernicus_raster(
             nonlocal current
             node = _create(copnet, aliases, name)
             created.append(node)
-            node.setInput(0, current)
             applied, unsupported = [], []
             for key, (parm_aliases, value) in controls.items():
                 selected = _set_first(node, parm_aliases, value)
                 (applied if selected else unsupported).append(key)
+            # Some Copernicus controls (notably Premultiply's operation) rebuild
+            # the node's input signature.  Connect only after applying controls
+            # so Houdini cannot silently discard the source connection.
+            node.setInput(0, current)
+            inputs = node.inputs() if hasattr(node, "inputs") else None
+            if isinstance(inputs, (list, tuple)) and (not inputs or inputs[0] != current):
+                raise RuntimeError("{} did not retain its source connection".format(name))
             refinement_results.append(
                 {
                     "node": _summary(node),

@@ -223,6 +223,52 @@ class TestGsplatRelightingSkills:
 
         assert result == "rasterizegsplats"
 
+    def test_refinement_connects_after_input_signature_controls(self) -> None:
+        mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
+        copnet = MagicMock()
+        copnet.path.return_value = "/img/copnet1"
+        copnet.name.return_value = "copnet1"
+        copnet.type.return_value.name.return_value = "cop2net"
+        source = MagicMock()
+        sop_import = MagicMock()
+        raster = MagicMock()
+        premult = MagicMock()
+        operation = MagicMock()
+        premult.parm.side_effect = lambda name: operation if name == "op" else None
+        retained_inputs = []
+
+        def connect(_index, upstream):
+            retained_inputs[:] = [upstream]
+
+        def change_operation(_value):
+            retained_inputs.clear()
+
+        operation.set.side_effect = change_operation
+        premult.setInput.side_effect = connect
+        premult.inputs.side_effect = lambda: tuple(retained_inputs)
+        for item, path, name, type_name in (
+            (sop_import, "/img/copnet1/gsplat_sop_import", "gsplat_sop_import", "sopimport"),
+            (raster, "/img/copnet1/gsplat_rasterize", "gsplat_rasterize", "rasterizegsplats"),
+            (premult, "/img/copnet1/gsplat_premult", "gsplat_premult", "premult"),
+        ):
+            item.path.return_value = path
+            item.name.return_value = name
+            item.type.return_value.name.return_value = type_name
+        sop_import.parm.side_effect = lambda name: MagicMock() if name in {"soppath", "usesoppath"} else None
+        with patch.dict(sys.modules, {"hou": MagicMock()}), patch.object(
+            mod, "_node", side_effect=lambda _hou, path: copnet if path == "/img/copnet1" else source
+        ), patch.object(mod, "_create", side_effect=[sop_import, raster, premult]):
+            result = mod.create_gsplat_copernicus_raster(
+                copnet_path="/img/copnet1",
+                sop_path="/obj/geo1/OUT",
+                premultiply_alpha=True,
+            )
+
+        assert result["success"] is True
+        operation.set.assert_called_once()
+        premult.setInput.assert_called_once_with(0, raster)
+        assert retained_inputs == [raster]
+
     def test_menu_value_maps_label_to_houdini_token(self) -> None:
         mod = _load_script("houdini-gsplat-relighting", "gsplat_relighting.py")
         parm = MagicMock()
@@ -829,6 +875,27 @@ class TestSceneNodeInspectionSkills:
 
 
 class TestNodeSkills:
+    def test_cook_node_preserves_houdini_errors_on_failure(self) -> None:
+        mod = _load_script("houdini-nodes", "cook_node.py")
+        node = MagicMock()
+        node.path.return_value = "/img/copnet1/premult1"
+        node.name.return_value = "premult1"
+        node.type.return_value.name.return_value = "premult"
+        node.cook.side_effect = RuntimeError("Error while cooking")
+        node.errors.return_value = ["source is missing"]
+        node.warnings.return_value = ["using fallback precision"]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.cook_node("/img/copnet1/premult1", force=True)
+
+        assert result["success"] is False
+        assert result["context"]["node"]["path"] == "/img/copnet1/premult1"
+        assert result["context"]["force"] is True
+        assert result["context"]["errors"] == ["source is missing"]
+        assert result["context"]["warnings"] == ["using fallback precision"]
+
     def test_layout_children_can_match_network_editor_selected_layout(self) -> None:
         mod = _load_script("houdini-nodes", "layout_children.py")
         parent = MagicMock()
