@@ -7,7 +7,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig` | no |
-| `interchange` | `houdini-interchange`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
+| `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting` | no |
 
 ## Common chains
@@ -45,6 +45,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Run an HDA | `load_skill("houdini-hda")` → `houdini_hda__execute_hda` |
 | Publish or revise an HDA | `load_skill("houdini-hda")` → `houdini_hda__author_hda_interface` → `houdini_hda__save_node_as_hda` / `houdini_hda__publish_hda_library` → `houdini_hda__validate_hda_contract` → `houdini_hda__sync_hda_instance` |
 | Cross-DCC asset import | `load_skill("houdini-import-to-scene")` → `houdini_import_to_scene__import_to_scene` (uses AssetDescriptor contract from dcc-mcp-core) |
+| Revisioned Houdini/Maya sync | `load_skill("houdini-asset-sync")` → `publish_usd_revision` / `read_asset_head` → receiver `sync_usd_revision` or `reference_usd_revision` |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | Inspect a Solaris USD Stage | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_prim_info` / `houdini_usd_lops__get_prim_attributes` |
 | Relight Gaussian Splats | `load_skill("houdini-gsplat-relighting")` → `inspect_gsplat_relighting_input` → `prepare_gsplat_sop_chain` → `create_gsplat_relight_lop` → `create_gsplat_copernicus_raster` → existing parameter/render skills |

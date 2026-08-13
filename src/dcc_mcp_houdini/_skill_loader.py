@@ -39,6 +39,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
     ),
     "interchange": (
         "houdini-interchange",
+        "houdini-asset-sync",
         "houdini-export-preset",
         "houdini-import-to-scene",
         "houdini-usd-lops",
