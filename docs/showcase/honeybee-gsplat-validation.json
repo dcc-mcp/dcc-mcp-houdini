@@ -1,0 +1,172 @@
+{
+  "schema": "ReconstructionBundle.validation.v1",
+  "asset_id": "honeybee-UCSB-IZC00037044-preview3k-pin-removed",
+  "source": {
+    "title": "Honey Bee Heat Budget Images and Models",
+    "creator": "University of California, Santa Barbara",
+    "record_url": "https://zenodo.org/records/17823483",
+    "doi": "10.5281/zenodo.17823483",
+    "license": "CC-BY-4.0",
+    "specimen": "UCSB-IZC00037044"
+  },
+  "method": {
+    "reconstruction": "Nerfstudio splatfacto",
+    "training_step": 2999,
+    "camera_solution": "COLMAP",
+    "postprocess": "deterministic geometric specimen-pin removal from GSplat PLY",
+    "postprocess_disclosure": {
+      "source_gaussians": 75746,
+      "kept_gaussians": 70269,
+      "removed_gaussians": 5477,
+      "removed_fraction": 0.07230744857814274
+    }
+  },
+  "coordinate_system": {
+    "name": "RH_Z_UP_NORMALIZED_SCENE_UNITS",
+    "handedness": "right",
+    "up_axis": "z",
+    "units": "normalized_scene_units",
+    "physical_scale_status": "unknown",
+    "dcc_display_scale_must_not_be_reported_as_measured_specimen_size": true
+  },
+  "geometry": {
+    "point_count": 70269,
+    "bounds": {
+      "min": [
+        -0.3443068563938141,
+        -0.40462031960487366,
+        -0.31269001960754395
+      ],
+      "max": [
+        0.522424578666687,
+        0.42873334884643555,
+        0.2619456350803375
+      ]
+    },
+    "extent": [
+      0.8667314052581787,
+      0.8333536386489868,
+      0.5746356248855591
+    ],
+    "all_arrays_finite": true,
+    "finite_by_array": {
+      "points": true,
+      "confidence": true,
+      "color": true,
+      "scale": true,
+      "orient": true,
+      "sh_dc": true,
+      "opacity_logit": true,
+      "normal": true
+    },
+    "confidence": {
+      "min": 0.003999246750026941,
+      "p01": 0.02441393703222275,
+      "p50": 0.3924696743488312,
+      "p99": 1.0,
+      "max": 1.0
+    },
+    "scale": {
+      "x": {
+        "min": 1.745122713003866e-09,
+        "p01": 9.996324621397435e-08,
+        "p50": 0.00038271030643954873,
+        "p99": 0.004728656914085136,
+        "max": 0.0420590415596962
+      },
+      "y": {
+        "min": 2.9833968628878438e-09,
+        "p01": 1.9235007826523545e-08,
+        "p50": 0.0007388984085991979,
+        "p99": 0.005363505333662033,
+        "max": 0.04695550352334976
+      },
+      "z": {
+        "min": 5.155292726044536e-08,
+        "p01": 1.5308008369174789e-06,
+        "p50": 0.0010913349688053131,
+        "p99": 0.008683233447372846,
+        "max": 0.05290442332625389
+      }
+    },
+    "mean_color": [
+      0.22618694603443146,
+      0.20981048047542572,
+      0.1853262186050415
+    ]
+  },
+  "attribute_contract": {
+    "points": "float32[N,3]",
+    "confidence": "float32[N], sigmoid(opacity_logit)",
+    "color": "float32[N,3], clip(SH_C0 * f_dc + 0.5)",
+    "scale": "float32[N,3], exp(scale_log)",
+    "orient": "float32[N,4], normalized rot_0..rot_3 in Nerfstudio export order",
+    "normal": "float32[N,3] when present; source export values may be zero"
+  },
+  "evaluation": {
+    "experiment": "worker_37044_real_multiview",
+    "method": "splatfacto",
+    "metrics": {
+      "psnr": 21.908950805664062,
+      "psnr_std": 2.445838689804077,
+      "ssim": 0.8489475846290588,
+      "ssim_std": 0.009197733364999294,
+      "lpips": 0.1453414410352707,
+      "lpips_std": 0.017967144027352333,
+      "num_rays_per_sec": 13255896.0,
+      "num_rays_per_sec_std": 3080915.0,
+      "fps": 8.183656692504883,
+      "fps_std": 1.9020329713821411
+    },
+    "thresholds": {
+      "psnr_min": 20.0,
+      "ssim_min": 0.8,
+      "lpips_max": 0.2
+    },
+    "threshold_pass": {
+      "psnr": true,
+      "ssim": true,
+      "lpips": true
+    }
+  },
+  "acceptance": {
+    "bundle_integrity": true,
+    "reconstruction_metrics": "pass",
+    "showcase_beauty": "conditional",
+    "animation_ready": "conditional"
+  },
+  "limitations": [
+    "The source is a pinned specimen, not a living bee performance capture.",
+    "Pin removal deletes fitted Gaussian regions and does not synthesize missing anatomy.",
+    "Physical specimen scale cannot be audited from the downloaded project subset.",
+    "Occluded or poorly photographed legs, claws, antennae, and wing edges may be incomplete.",
+    "KineFX deformation and Houdini groom are downstream authored layers, not captured strands.",
+    "Final public beauty approval requires fresh Houdini renders and contact/occlusion review."
+  ],
+  "diagnostics": [
+    {
+      "path": "diagnostics\\source_contact_sheet.jpg",
+      "purpose": "licensed multiview input"
+    },
+    {
+      "path": "diagnostics\\sparse_cloud_projections.png",
+      "purpose": "camera solve projections"
+    }
+  ],
+  "artifacts": {
+    "geometry_npz": {
+      "path": "geometry.npz",
+      "sha256": "d274cca64d3c6c6bbf222d31e62d6f7e565a302e689228ad4650aef4083bd9c6"
+    },
+    "geometry_ply": {
+      "path": "geometry.ply",
+      "sha256": "3e108562aa0b9656b1a6fc8263cbb42c6526a38bce83d88ea27c405bcbbb9cca"
+    },
+    "cameras": {
+      "path": "cameras.json",
+      "sha256": "f748cc818a3fe262fb0379ffee9a12d02b2c578cdedfb863ffcbdc97d1131eb2"
+    },
+    "source_ply_sha256": "3e108562aa0b9656b1a6fc8263cbb42c6526a38bce83d88ea27c405bcbbb9cca",
+    "source_transforms_sha256": "f925b430461322086b52e754631dfa5afd1d6bfa94eb1fd18f49e5a32ba120bd"
+  }
+}
