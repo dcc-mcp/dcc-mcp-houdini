@@ -105,6 +105,28 @@ Source attribution and the separation between captured evidence and authored
 animation are documented in
 [`docs/showcase/honeybee-reference-license.md`](docs/showcase/honeybee-reference-license.md).
 
+### Photogrammetry high-poly quality gate
+
+![Licensed multiview input and real Houdini 22 high-poly proxy validation](docs/showcase/houdini-honeybee-highpoly-validation.webp)
+
+Increasing polygon count alone does not correct the captured specimen. A
+second licensed UCSB scan, `UCSB-IZC00038675`, contains 1,606,745 source faces.
+Keeping its largest connected component retains 1,281,475 faces; a
+UV-preserving 249,999-face proxy carries the source texture into a real
+Houdini 22 viewport for bounded interactive review.
+
+This audit intentionally fails final-asset acceptance. The pin intersects the
+body, the fixture base remains connected, and occluded legs, claws, antennae,
+and wing regions are incomplete. Those errors cannot be repaired by subdivision,
+decimation, Groom density, relighting, or denoising. The machine-readable
+counts, hashes, and acceptance result are in
+[`honeybee-highpoly-validation.json`](docs/showcase/honeybee-highpoly-validation.json).
+
+The next visual-quality stage must therefore use a clean licensed living-bee
+multiview capture (or another source with complete anatomy), retrain the GSplat,
+and pass source-view plus novel-view silhouette checks before KineFX and Groom
+are treated as final presentation layers.
+
 ### Archived procedural rig validation (pre-GSplat)
 
 ![Public-domain honeybee reference, procedural wireframe, and Karma motion test](docs/showcase/houdini-honeybee-workflow.gif)

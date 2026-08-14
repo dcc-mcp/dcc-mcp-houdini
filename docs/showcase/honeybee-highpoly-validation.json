@@ -1,0 +1,56 @@
+{
+  "schema": "ReconstructionBundle.highpoly-validation.v1",
+  "asset_id": "honeybee-UCSB-IZC00038675-largest-component",
+  "source": {
+    "title": "Honey Bee Heat Budget Images and Models",
+    "creator": "University of California, Santa Barbara",
+    "record_url": "https://zenodo.org/records/17823483",
+    "doi": "10.5281/zenodo.17823483",
+    "license": "CC-BY-4.0",
+    "specimen": "UCSB-IZC00038675",
+    "sha256": "90d6ba60a3f36e9487cca66bd5ef7a1f6a78cf8aac88230efce0f8b816cce905"
+  },
+  "source_mesh": {
+    "vertices": 805545,
+    "faces": 1606745
+  },
+  "largest_connected_component": {
+    "component_count": 1577,
+    "vertices": 639762,
+    "faces": 1281475,
+    "retained_face_fraction": 0.79755966,
+    "has_wedge_texcoords": true,
+    "sha256": "ad0b8753d5dd1d26d51664afb01f61eb20d693a1101278d5b72295c63378285b"
+  },
+  "viewport_proxy": {
+    "method": "UV-preserving quadric decimation",
+    "vertices": 124024,
+    "faces": 249999,
+    "has_wedge_texcoords": true,
+    "sha256": "ac0bfab2bf9c08356baa91858633ec94aa2a1f31d89ba6c280850c8c50df651c"
+  },
+  "houdini_validation": {
+    "version": "22.0.368",
+    "material_authoring": "typed DCC-MCP MaterialX PBR",
+    "capture": "project-owned DCC-CUA exact-window capture",
+    "presentation_edits": [
+      "crop title bar containing local path",
+      "resize into comparison layout",
+      "add quality-gate labels"
+    ],
+    "content_retouching": false
+  },
+  "acceptance": {
+    "mesh_integrity": "pass",
+    "uv_retention": "pass",
+    "interactive_proxy": "pass",
+    "anatomy_completeness": "fail",
+    "public_beauty": "fail"
+  },
+  "failures": [
+    "specimen pin intersects the body",
+    "fixture base remains connected to retained geometry",
+    "occluded legs, claws, antennae, and wing regions are incomplete",
+    "polygon density cannot synthesize missing anatomy"
+  ]
+}
