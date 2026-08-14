@@ -16,6 +16,30 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.34.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.2...v0.34.0) (2026-08-14)
+
+
+### Features
+
+* add anatomy-region groom profiles ([#262](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/262)) ([2dd1b1f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2dd1b1f6fa6240fcc48a741e7c4aece254f20ce8))
+* add revisioned usd asset sync ([f0a6420](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f0a6420d21654e6f868a818cc1f9de4c01f2e6bd))
+* validate KineFX ground contacts ([e832c6e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e832c6eafa4f5d1a7337f40a9c0ce0f871839808))
+
+
+### Bug Fixes
+
+* avoid headless shutdown drain race ([f6c60c7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f6c60c7d938ce1291617689daee7b4aff996e077))
+* guard heavy viewport framing ([ea79b13](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ea79b133441e0c3e63089e47084dbde7c74a9501))
+* support bounded detail VEX analysis ([9b20a69](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9b20a692eeb2ba12c3106082a42e8b784c6e3607))
+* support expanded HDA libraries ([3bdb5ce](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3bdb5ced94b0b38bd6a42bdd4b1be4290e1a3abb))
+* support KineFX GSplat animation validation ([7381b43](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7381b434dee699fa088699e9c89f334696e60d3d))
+
+
+### Documentation
+
+* add verified Houdini GSplat capture ([9d116d5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9d116d58c79b3f5d62f51c57920261209234783c))
+* publish captured honeybee GSplat validation ([686b0e9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/686b0e9179997cf955613583c73b39ab78db3d65))
+
 ## [0.33.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.1...v0.33.2) (2026-08-13)
 
 
