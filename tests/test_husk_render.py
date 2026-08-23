@@ -341,3 +341,71 @@ def test_create_snapshot_fails_when_usd_rop_writes_nothing(tmp_path: Path) -> No
     assert result["success"] is False
     assert parent.rop.input is source
     assert parent.rop.destroyed is True
+
+
+def test_create_snapshot_accepts_lop_karma_outside_stage(tmp_path: Path) -> None:
+    snapshot = _load_script("create_snapshot.py")
+    output = tmp_path / "karma.usda"
+    parent = _SnapshotParent(write_output=True, expanded_output=output)
+    source = _SnapshotSource(parent)
+    source.path = lambda: "/obj/HAIR_V2_SOLARIS/KARMA_RENDER"
+    source.type = lambda: SimpleNamespace(
+        name=lambda: "karma",
+        category=lambda: SimpleNamespace(name=lambda: "Lop"),
+    )
+    hou = SimpleNamespace(
+        node=lambda _path: source,
+        frame=lambda: 2.0,
+        text=SimpleNamespace(expandStringAtFrame=lambda path, _frame: path),
+    )
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = snapshot.create_snapshot(source_path=source.path(), snapshot_path=str(output), frame=2)
+
+    assert result["success"] is True
+    assert parent.created_type == ("usd_rop", "snapshot_export")
+    assert parent.rop.input is source
+    assert result["context"]["source"] == source.path()
+    assert result["context"]["written"] is True
+
+
+def test_create_snapshot_resolves_displayed_lop_from_obj_lopnet(tmp_path: Path) -> None:
+    snapshot = _load_script("create_snapshot.py")
+    output = tmp_path / "lopnet.usda"
+    parent = _SnapshotParent(write_output=True, expanded_output=output)
+    source = _SnapshotSource(parent)
+    network = _SnapshotNetwork(source)
+    network.path = lambda: "/obj/HAIR_V2_SOLARIS"
+    network.type = lambda: SimpleNamespace(name=lambda: "lopnet")
+    hou = SimpleNamespace(
+        node=lambda _path: network,
+        frame=lambda: 1.0,
+        text=SimpleNamespace(expandStringAtFrame=lambda path, _frame: path),
+    )
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = snapshot.create_snapshot(source_path=network.path(), snapshot_path=str(output))
+
+    assert result["success"] is True
+    assert parent.rop.input is source
+    assert result["context"]["source"] == source.path()
+
+
+def test_create_snapshot_rejects_non_lop_with_typed_redirect(tmp_path: Path) -> None:
+    snapshot = _load_script("create_snapshot.py")
+    source = SimpleNamespace(
+        path=lambda: "/obj/geo1",
+        type=lambda: SimpleNamespace(
+            name=lambda: "geo",
+            category=lambda: SimpleNamespace(name=lambda: "Object"),
+        ),
+    )
+    hou = SimpleNamespace(node=lambda _path: source)
+
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = snapshot.create_snapshot(source_path=source.path(), snapshot_path=str(tmp_path / "scene.usd"))
+
+    assert result["success"] is False
+    assert result["error"] == "UNSUPPORTED_SNAPSHOT_SOURCE"
+    assert result["context"]["code"] == "UNSUPPORTED_SNAPSHOT_SOURCE"
+    assert result["context"]["dcc"]["next_tools"] == ["houdini_interchange__export_usd"]

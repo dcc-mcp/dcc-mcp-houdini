@@ -34,6 +34,14 @@ def _expand_outputs(pattern: Optional[str]) -> list:
     return [pattern] if os.path.isfile(pattern) else []
 
 
+def _node_category_name(node) -> Optional[str]:
+    try:
+        name = node.type().category().name()
+    except Exception:  # noqa: BLE001
+        return None
+    return name if isinstance(name, str) else None
+
+
 def render_rop(
     rop_path: str,
     frame_range: Optional[List[float]] = None,
@@ -50,6 +58,25 @@ def render_rop(
         rop = get_node(hou, rop_path)
         rop_type = rop.type().name().split("::", 1)[0]
         is_solaris = rop_type == "usdrender_rop"
+        if _node_category_name(rop) == "Lop" and not is_solaris:
+            return skill_error(
+                "Solaris LOP requires USD and Husk rendering",
+                "UNSUPPORTED_LOP_RENDER",
+                prompt="Export the LOP stage to USD, then render that USD with Husk.",
+                possible_solutions=[
+                    "Call houdini_interchange__export_usd with this LOP node path.",
+                    "Pass the written USD file to houdini_husk__render_with_husk.",
+                ],
+                code="UNSUPPORTED_LOP_RENDER",
+                rop=node_summary(rop),
+                frame_range=frame_range,
+                dcc={
+                    "next_tools": [
+                        "houdini_interchange__export_usd",
+                        "houdini_husk__render_with_husk",
+                    ]
+                },
+            )
         if rop_type == "opengl" and not bool(hou.isUIAvailable()):
             return skill_error(
                 "OpenGL ROP requires interactive Houdini",

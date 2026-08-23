@@ -38,7 +38,7 @@ hython worker so Karma cannot occupy Houdini's UI thread.
 ## Tracer-bullet flow
 
 1. `set_husk_options(list_options=true, category="render")` → browse available options
-2. `create_snapshot(source_path="/stage", snapshot_path="/tmp/scene_snapshot.usd", flatten=true)`
+2. `create_snapshot(source_path="/stage", snapshot_path="/tmp/scene_snapshot.usd", flatten=true)` (a LOP or `lopnet` under `/obj` is also accepted)
 3. `set_husk_options(node_path="/stage/karmarenderproduct1", options={"threads": 8, "verbose": true})`
 4. `create_checkpoint(usd_file="/tmp/scene_snapshot.usd", checkpoint_path="/tmp/checkpoint_001.usd")`
 5. `render_with_husk(usd_file="/tmp/scene_snapshot.usd", output_path="/tmp/render/beauty.$F4.exr", renderer="karma", resolution=[1920, 1080], frame_range=[1, 120])` → `job_id`

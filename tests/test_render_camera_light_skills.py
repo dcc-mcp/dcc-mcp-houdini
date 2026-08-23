@@ -2658,6 +2658,26 @@ class TestRenderExecution:
         assert result["success"] is False
         rop.render.assert_not_called()
 
+    def test_render_rop_redirects_lop_karma_outside_stage(self) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        karma = _node("/obj/HAIR_V2_SOLARIS/KARMA_RENDER", "KARMA_RENDER", "karma")
+        karma.type.return_value.category.return_value.name.return_value = "Lop"
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = karma
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.render_rop(karma.path(), frame_range=[2, 2, 1], background=True)
+
+        assert result["success"] is False
+        assert result["error"] == "UNSUPPORTED_LOP_RENDER"
+        assert result["context"]["code"] == "UNSUPPORTED_LOP_RENDER"
+        assert result["context"]["rop"]["path"] == karma.path()
+        assert result["context"]["dcc"]["next_tools"] == [
+            "houdini_interchange__export_usd",
+            "houdini_husk__render_with_husk",
+        ]
+        karma.render.assert_not_called()
+
     def test_expand_outputs_accepts_single_value_parm_tuple(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         out = tmp_path / "beauty.0001.exr"
