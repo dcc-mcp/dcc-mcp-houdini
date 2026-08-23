@@ -148,6 +148,37 @@ def test_husk_worker_records_nonzero_exit_without_touching_host(tmp_path: Path) 
     assert status["error"] == "husk exited with code 7"
 
 
+def test_husk_worker_replaces_pending_outcome_when_render_times_out(tmp_path: Path) -> None:
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    write_status(
+        status_path,
+        {
+            "job_id": "timeout",
+            "job_kind": "husk_render",
+            "expected_outputs": [],
+            "output_glob": "",
+            "timeout_secs": 1,
+            "render_outcome": "pending",
+            "render_errors": [],
+            "warnings": [],
+        },
+    )
+
+    with patch.object(sys, "argv", ["_husk_worker.py", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess,
+        "run",
+        side_effect=worker.subprocess.TimeoutExpired(["husk", "scene.usda"], timeout=1),
+    ):
+        worker.main()
+
+    status = read_status(status_path)
+    assert status["state"] == "failed"
+    assert status["render_outcome"] == "failed"
+    assert status["render_errors"] == []
+    assert status["warnings"] == []
+
+
 def test_husk_worker_verifies_written_output(tmp_path: Path) -> None:
     worker = _load_script("_husk_worker.py")
     status_path = tmp_path / "status.json"
@@ -176,7 +207,97 @@ def test_husk_worker_verifies_written_output(tmp_path: Path) -> None:
 
     status = read_status(status_path)
     assert status["state"] == "completed"
+    assert status["render_outcome"] == "completed_clean"
+    assert status["render_errors"] == []
+    assert status["warnings"] == []
     assert status["written_files"] == [str(output)]
+    assert status["output_verification"]["state"] == "verified"
+
+
+def test_husk_worker_rejects_verified_output_with_procedural_render_errors(tmp_path: Path) -> None:
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    stderr_path = tmp_path / "stderr.log"
+    output = tmp_path / "beauty.0001.exr"
+    write_status(
+        status_path,
+        {
+            "job_id": "render-errors",
+            "job_kind": "husk_render",
+            "expected_outputs": [str(output)],
+            "output_glob": str(tmp_path / "beauty.*.exr"),
+            "stderr_path": str(stderr_path),
+            "timeout_secs": 30,
+        },
+    )
+
+    def render(*_args, **_kwargs):
+        output.write_bytes(b"degraded render")
+        stderr_path.write_text(
+            "hou.OperationFailed: Invalid node setup\n"
+            "Error: Missing point attribute pscale\n"
+            "Houdini procedural invocation failed for /World/Hair\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    with patch.object(sys, "argv", ["_husk_worker.py", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess,
+        "run",
+        side_effect=render,
+    ):
+        worker.main()
+
+    status = read_status(status_path)
+    assert status["state"] == "failed"
+    assert status["render_outcome"] == "completed_with_render_errors"
+    assert status["render_errors"] == [
+        {"code": "HOUDINI_OPERATION_FAILED", "message": "hou.OperationFailed: Invalid node setup"},
+        {"code": "RENDERER_ERROR", "message": "Error: Missing point attribute pscale"},
+        {
+            "code": "PROCEDURAL_INVOCATION_FAILED",
+            "message": "Houdini procedural invocation failed for /World/Hair",
+        },
+    ]
+    assert status["warnings"] == []
+    assert status["written_files"] == [str(output)]
+    assert status["output_verification"]["state"] == "verified"
+
+
+def test_husk_worker_reports_renderer_warning_without_failing_written_output(tmp_path: Path) -> None:
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    stderr_path = tmp_path / "stderr.log"
+    output = tmp_path / "beauty.0001.exr"
+    write_status(
+        status_path,
+        {
+            "job_id": "render-warning",
+            "job_kind": "husk_render",
+            "expected_outputs": [str(output)],
+            "output_glob": str(output),
+            "stderr_path": str(stderr_path),
+            "timeout_secs": 30,
+        },
+    )
+
+    def render(*_args, **_kwargs):
+        output.write_bytes(b"render")
+        stderr_path.write_text("Warning: Falling back to one render device\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    with patch.object(sys, "argv", ["_husk_worker.py", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess,
+        "run",
+        side_effect=render,
+    ):
+        worker.main()
+
+    status = read_status(status_path)
+    assert status["state"] == "completed"
+    assert status["render_outcome"] == "completed_with_warnings"
+    assert status["render_errors"] == []
+    assert status["warnings"] == [{"code": "RENDERER_WARNING", "message": "Warning: Falling back to one render device"}]
     assert status["output_verification"]["state"] == "verified"
 
 
@@ -209,6 +330,9 @@ def test_husk_job_launch_is_nonblocking_and_pollable(tmp_path: Path) -> None:
 
     assert launch_elapsed < 1.0
     assert launched["state"] == "queued"
+    assert launched["render_outcome"] == "pending"
+    assert launched["render_errors"] == []
+    assert launched["warnings"] == []
     deadline = time.monotonic() + 10.0
     status = jobs.read_husk_job(launched["job_id"])
     while status["state"] not in {"completed", "failed", "cancelled", "interrupted"}:

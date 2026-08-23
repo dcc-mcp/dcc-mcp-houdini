@@ -51,7 +51,9 @@ tools:
   - name: get_husk_job
     description: >-
       Poll a durable isolated Husk render. Returns state, elapsed time,
-      verified output files, bounded stdout/stderr tails, and worker ownership.
+      verified output files, bounded stdout/stderr tails, typed renderer
+      warnings/errors, render outcome, and worker ownership. A verified output
+      may still have a failed state when Husk reports procedural errors.
     source_file: scripts/get_husk_job.py
     execution: sync
     affinity: any

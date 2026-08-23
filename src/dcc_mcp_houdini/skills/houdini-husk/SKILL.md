@@ -42,7 +42,9 @@ hython worker so Karma cannot occupy Houdini's UI thread.
 3. `set_husk_options(node_path="/stage/karmarenderproduct1", options={"threads": 8, "verbose": true})`
 4. `create_checkpoint(usd_file="/tmp/scene_snapshot.usd", checkpoint_path="/tmp/checkpoint_001.usd")`
 5. `render_with_husk(usd_file="/tmp/scene_snapshot.usd", output_path="/tmp/render/beauty.$F4.exr", renderer="karma", resolution=[1920, 1080], frame_range=[1, 120])` → `job_id`
-6. `get_husk_job(job_id="...")` until `state` is terminal → `written_files`, `elapsed_secs`
+6. `get_husk_job(job_id="...")` until `state` is terminal → inspect
+   `render_outcome`, `render_errors`, `warnings`, `written_files`, and
+   `output_verification`; verified partial files do not override procedural errors.
 
 `use_hython_fallback=true` is rejected because in-process rendering can freeze
 the Houdini event loop. Export a USD snapshot and use the isolated native Husk
