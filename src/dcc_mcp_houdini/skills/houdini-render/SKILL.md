@@ -56,7 +56,7 @@ or Karma/Husk for batch rendering.
 1. `houdini_camera_light__create_camera(name="rendercam")`
 2. `set_render_settings(rop_path="/out/mantra1", camera="/obj/rendercam", resolution=[1280,720], output_path="/tmp/beauty.exr")`
 3. `get_render_settings("/out/mantra1")` → verify
-4. `capture_viewport(output_path="/tmp/preview.jpg")` for a quick look (UI only)
+4. `capture_viewport(output_path="/tmp/preview.jpg")` for a quick look (UI only; decoded dimensions and pixel extrema are verified, and degenerate frames fail closed)
 5. `flipbook(output_path="/tmp/preview.$F4.jpg", frame_range=[1,24,4], camera_path="/obj/rendercam")` for a sparse camera preview (UI only)
 6. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive or headless Houdini
 

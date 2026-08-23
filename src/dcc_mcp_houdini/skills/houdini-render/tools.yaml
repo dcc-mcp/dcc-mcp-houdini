@@ -2,7 +2,9 @@ tools:
   - name: capture_viewport
     description: >-
       Capture the current Scene Viewer to an image file for a single frame via
-      flipbook, with clamped resolution. UI-aware (headless returns a warning).
+      flipbook, with clamped resolution. Decodes the written image and rejects
+      wrong-size, all-black, or single-color captures. UI-aware (headless
+      returns a warning).
     source_file: scripts/capture_viewport.py
     execution: async
     affinity: main

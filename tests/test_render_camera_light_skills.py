@@ -629,7 +629,14 @@ class TestViewportCapture:
         mock_hou.frame.return_value = 1.0
         mock_hou.ui.paneTabOfType.return_value = viewer
 
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        inspection = {
+            "dimensions": [4096, 720],
+            "rgb_min": [0, 0, 0],
+            "rgb_max": [255, 255, 255],
+            "single_color": False,
+            "all_black": False,
+        }
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "_inspect_capture", return_value=inspection):
             result = mod.capture_viewport(str(out), resolution=[99999, 720])
 
         assert result["success"] is True
@@ -637,6 +644,105 @@ class TestViewportCapture:
         assert result["context"]["written_files"] == [str(out)]
         # resolution clamped to MAX_DIMENSION
         assert result["context"]["resolution"] == [4096, 720]
+        assert result["context"]["validation"] == inspection
+
+    @pytest.mark.parametrize(
+        ("inspection", "reason"),
+        [
+            (
+                {
+                    "dimensions": [1280, 960],
+                    "rgb_min": [0, 0, 0],
+                    "rgb_max": [0, 0, 0],
+                    "single_color": True,
+                    "all_black": True,
+                },
+                "all_black",
+            ),
+            (
+                {
+                    "dimensions": [1280, 960],
+                    "rgb_min": [24, 48, 72],
+                    "rgb_max": [24, 48, 72],
+                    "single_color": True,
+                    "all_black": False,
+                },
+                "single_color",
+            ),
+        ],
+    )
+    def test_capture_viewport_rejects_degenerate_frame(self, tmp_path: Path, inspection: dict, reason: str) -> None:
+        mod = _load_script("houdini-render", "capture_viewport.py")
+        out = tmp_path / "frame.png"
+        viewer = MagicMock()
+        viewer.flipbookSettings.return_value.stash.return_value = MagicMock()
+        viewer.flipbook.side_effect = lambda vp, settings: out.write_bytes(b"image")
+        viewer.pwd.return_value = _node("/obj/geo1", "geo1")
+        viewer.curViewport.return_value.camera.return_value = _node("/obj/cam1", "cam1", "cam")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.frame.return_value = 12.0
+        mock_hou.ui.paneTabOfType.return_value = viewer
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "_inspect_capture", return_value=inspection):
+            result = mod.capture_viewport(str(out), resolution=[1280, 960])
+
+        assert result["success"] is False
+        assert result["error"] == "EMPTY_VIEWPORT_CAPTURE"
+        assert result["context"]["code"] == "EMPTY_VIEWPORT_CAPTURE"
+        assert result["context"]["captured"] is False
+        assert result["context"]["written_files"] == [str(out)]
+        assert result["context"]["validation"][reason] is True
+        assert result["context"]["viewer"]["pwd"] == "/obj/geo1"
+        assert result["context"]["viewer"]["camera"] == "/obj/cam1"
+        assert result["context"]["frame"] == 12.0
+
+    def test_capture_viewport_rejects_wrong_decoded_dimensions(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "capture_viewport.py")
+        out = tmp_path / "frame.png"
+        viewer = MagicMock()
+        viewer.flipbookSettings.return_value.stash.return_value = MagicMock()
+        viewer.flipbook.side_effect = lambda vp, settings: out.write_bytes(b"image")
+        mock_hou = MagicMock()
+        mock_hou.isUIAvailable.return_value = True
+        mock_hou.frame.return_value = 1.0
+        mock_hou.ui.paneTabOfType.return_value = viewer
+        inspection = {
+            "dimensions": [640, 480],
+            "rgb_min": [0, 0, 0],
+            "rgb_max": [255, 255, 255],
+            "single_color": False,
+            "all_black": False,
+        }
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(mod, "_inspect_capture", return_value=inspection):
+            result = mod.capture_viewport(str(out), resolution=[1280, 960])
+
+        assert result["success"] is False
+        assert result["error"] == "CAPTURE_DIMENSION_MISMATCH"
+        assert result["context"]["expected_dimensions"] == [1280, 960]
+        assert result["context"]["validation"] == inspection
+
+    def test_capture_rgb_statistics_detect_degenerate_and_varied_frames(self) -> None:
+        mod = _load_script("houdini-render", "capture_viewport.py")
+
+        black = mod._rgb_statistics(bytes([0, 0, 0, 0, 0, 0]), width=2, height=1, bytes_per_line=6)
+        solid = mod._rgb_statistics(bytes([8, 16, 24, 8, 16, 24]), width=2, height=1, bytes_per_line=6)
+        varied = mod._rgb_statistics(bytes([0, 0, 0, 255, 128, 64]), width=2, height=1, bytes_per_line=6)
+
+        assert black == {"rgb_min": [0, 0, 0], "rgb_max": [0, 0, 0], "single_color": True, "all_black": True}
+        assert solid == {
+            "rgb_min": [8, 16, 24],
+            "rgb_max": [8, 16, 24],
+            "single_color": True,
+            "all_black": False,
+        }
+        assert varied == {
+            "rgb_min": [0, 0, 0],
+            "rgb_max": [255, 128, 64],
+            "single_color": False,
+            "all_black": False,
+        }
 
     def test_flipbook_launch_returns_job_id(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "flipbook.py")
