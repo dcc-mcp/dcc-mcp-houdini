@@ -35,6 +35,9 @@ def launch_husk_job(
             "expected_outputs": list(expected_outputs),
             "output_glob": output_glob,
             "timeout_secs": int(timeout_secs),
+            "render_outcome": "pending",
+            "render_errors": [],
+            "warnings": [],
         }
     )
     worker_path = Path(__file__).resolve().parent / "_husk_worker.py"
