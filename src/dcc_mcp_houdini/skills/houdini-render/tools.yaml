@@ -80,7 +80,6 @@ tools:
     source_file: scripts/get_flipbook_job.py
     execution: sync
     affinity: any
-    timeout_hint_secs: 10
     group: viewport
     read_only: true
     destructive: false
