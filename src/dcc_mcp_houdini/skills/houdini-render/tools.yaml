@@ -214,6 +214,8 @@ tools:
       calls stay responsive. Plain calls return that render job_id directly;
       explicit MCP async metadata still returns a core job that must be resolved
       first. Pass background=false only for intentional foreground execution.
+      Solaris LOP nodes return a typed redirect to USD export and Husk instead
+      of being misclassified as ROPs.
     source_file: scripts/render_rop.py
     execution: sync
     affinity: main
