@@ -6,7 +6,7 @@ description: >-
   when an agent must relight a captured splat while retaining typed scene and
   parameter control. Not for training or importing a new Gaussian Splat.
 license: MIT
-compatibility: "dcc-mcp-core 0.19.70+, Houdini 22.0+, SideFX Labs GSplat nodes"
+compatibility: "dcc-mcp-core 0.19.91+, Houdini 22.0+, SideFX Labs GSplat nodes"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

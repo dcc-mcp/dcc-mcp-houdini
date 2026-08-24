@@ -18,6 +18,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--dcc-path")
     parser.add_argument("--python", dest="python_path")
+    parser.add_argument("--instance-id", help=argparse.SUPPRESS)
+    parser.add_argument("--host-pid", type=int, help=argparse.SUPPRESS)
     return parser
 
 
@@ -30,6 +32,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         python_path=args.python_path,
         yes=args.yes,
         dry_run=args.dry_run,
+        instance_id=args.instance_id,
+        host_pid=args.host_pid,
     )
     if args.as_json:
         print(json.dumps(outcome.result, sort_keys=True))

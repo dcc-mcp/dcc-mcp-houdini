@@ -8,7 +8,7 @@ entry point is `dcc-mcp-houdini`.
 
 - SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
 - Python 3.7 or newer in that Houdini build.
-- `dcc-mcp-core >= 0.19.70,<1.0.0` and the same `dcc-mcp-houdini` version
+- `dcc-mcp-core >= 0.19.91,<1.0.0` and the same `dcc-mcp-houdini` version
   installed in the selected `hython` environment.
 - Write access to the matching user profile. The installer never edits the
   Houdini application directory.
@@ -27,7 +27,9 @@ floor; the selected build must provide Python 3.7+. SideFX changes the bundled
 Python minor between Houdini releases, so preflight executes the chosen
 interpreter and, when `hou` is available, checks its reported Houdini version
 against `--dcc-path`. It does not guess a Python compatibility row from a
-different Houdini installation.
+different Houdini installation. Preflight also binds the reported Hython
+executable and the imported HOM, adapter, and Core module origins to the
+selected Houdini installation and installed distributions.
 
 Typical interpreter locations are:
 
@@ -54,6 +56,11 @@ All lifecycle verbs accept `--json`, `--yes`, `--dry-run`, `--dcc-path`, and
 `30` install or rollback, `40` verify, and `50` a Core-proven loaded-file lock
 requiring a Houdini restart. JSON follows Install SOP schema v1 and every
 recovery action is an argv-array `next_steps[].command`.
+
+The Draft 2020-12 contract currently comes from the exact schema proposed by
+`dcc-mcp/dcc-mcp-core#2320`; the adapter validates a bounded fixture until that
+API is part of a released Core package. The public runtime floor above is a
+real published version and does not claim that the pending Core API exists.
 
 The installer writes a receipted package JSON and owned startup hooks to the
 matching versioned Houdini profile. `123.py` covers an empty session and
@@ -100,8 +107,9 @@ dcc-mcp-houdini verify --json --dcc-path <houdini> --python <hython>
 ```
 
 Verification checks receipt/file digests, the exact target interpreter import,
-captured bootstrap errors, one live Houdini registry entry, and the typed
-read-only `houdini_scripting__get_session_info` main-thread probe. A copied
+captured bootstrap errors, one selected instance/PID/start identity, the live
+host executable and module origins, and the typed read-only
+`houdini_scripting__get_session_info` main-thread probe. A copied
 package or healthy transport alone is not `directly_usable: true`. Headless
 `hython` uses `hython -m dcc_mcp_houdini`; it does not prove GUI readiness.
 
@@ -117,7 +125,8 @@ dcc-mcp-houdini upgrade --json --yes --dcc-path <houdini> --python <hython>
 ```
 
 The adapter stages a complete replacement, preserves the prior package and
-receipt, and restores them if commit fails.
+receipt through live verification, and restores the exact prior bytes if
+commit or verification fails.
 
 ## Uninstall
 
@@ -129,8 +138,10 @@ dcc-mcp-houdini uninstall --json --yes --dcc-path <houdini> --python <hython>
 <hython> -m pip uninstall dcc-mcp-houdini
 ```
 
-Uninstall consumes the receipt and refuses to delete modified or ambiguous
-unreceipted files. A second uninstall is safe. For a legacy quickinstall,
+Uninstall consumes an exact typed ownership manifest for files, directories,
+links, and package registration. It refuses to delete modified, linked,
+unexpected, or ambiguous unreceipted paths, and restores the complete prior
+state if an atomic move or removal fails. A second uninstall is safe. For a legacy quickinstall,
 remove `dcc_mcp_houdini.json` from the matching profile before deleting the
 extracted directory; the legacy installer predates receipts.
 

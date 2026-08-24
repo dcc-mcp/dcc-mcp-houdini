@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import runpy
 import sys
 from pathlib import Path
@@ -11,19 +10,67 @@ from pathlib import Path
 from dcc_mcp_houdini.cli import main
 
 
+def _hython_for(host: Path) -> Path:
+    return host.with_name("hython.exe" if sys.platform == "win32" else "hython")
+
+
 def _synthetic_host(tmp_path: Path, monkeypatch) -> Path:
     root = tmp_path / "Side Effects Software" / "Houdini 20.5.487"
     executable = root / "bin" / ("houdini.exe" if sys.platform == "win32" else "houdini")
     executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"")
-    python_modules = tmp_path / "hython-modules"
-    python_modules.mkdir(exist_ok=True)
-    (python_modules / "hou.py").write_text(
-        'def applicationVersionString():\n    return "20.5.487"\n',
-        encoding="utf-8",
+    executable.write_bytes(b"houdini")
+    hython = _hython_for(executable)
+    hython.write_bytes(b"hython")
+    modules = tmp_path / "hython-modules"
+    modules.mkdir(exist_ok=True)
+    hou_file = modules / "hou.py"
+    adapter_file = modules / "dcc_mcp_houdini.py"
+    core_file = modules / "dcc_mcp_core.py"
+    for path in (hou_file, adapter_file, core_file):
+        path.write_text("# synthetic module\n", encoding="utf-8")
+    from dcc_mcp_houdini import _installer
+
+    monkeypatch.setattr(
+        _installer,
+        "_query_python",
+        lambda _path, _host: {
+            "python_version": "3.12.10",
+            "core_version": _installer.MIN_CORE_VERSION,
+            "adapter_version": _installer.__version__,
+            "host_version": "20.5.487",
+            "executable": str(hython.resolve()),
+            "hou_file": str(hou_file.resolve()),
+            "adapter_file": str(adapter_file.resolve()),
+            "core_file": str(core_file.resolve()),
+        },
     )
-    existing = os.environ.get("PYTHONPATH", "")
-    monkeypatch.setenv("PYTHONPATH", str(python_modules) + (os.pathsep + existing if existing else ""))
+    entry = {
+        "mcp_url": "http://127.0.0.1:18812/mcp",
+        "instance_id": "houdini-test-4242",
+        "adapter_version": _installer.__version__,
+        "metadata": {"dcc_pid": 4242, "dcc_version": "20.5.487"},
+    }
+    context = {
+        "host_pid": 4242,
+        "process_start_identity": "test-start-4242",
+        "houdini_version_string": "20.5.487",
+        "adapter_version": _installer.__version__,
+        "ui_available": True,
+        "host_executable": str(executable.resolve()),
+        "houdini_root": str(executable.parents[1].resolve()),
+        "hou_module_path": str(hou_file.resolve()),
+        "adapter_module_path": str(adapter_file.resolve()),
+        "core_module_path": str(core_file.resolve()),
+    }
+    readiness = {
+        "success": True,
+        "entry": entry,
+        "probe": {"result": {"structuredContent": {"success": True, "context": context}}},
+    }
+    monkeypatch.setattr(_installer, "query_runtime_state", lambda *_args, **_kwargs: {"entries": [entry]})
+    monkeypatch.setattr(_installer, "wait_for_sidecar_ready", lambda *_args, **_kwargs: readiness)
+    monkeypatch.setattr(_installer, "_process_executable_path", lambda _pid: executable.resolve())
+    monkeypatch.setattr(_installer, "_process_start_identity", lambda _pid: "test-start-4242")
     return executable
 
 
@@ -44,7 +91,7 @@ def test_install_dry_run_emits_contract_without_mutation(
             "--dcc-path",
             str(host_executable),
             "--python",
-            sys.executable,
+            str(_hython_for(host_executable)),
         ]
     )
 
@@ -54,7 +101,7 @@ def test_install_dry_run_emits_contract_without_mutation(
     assert payload["status"] == "planned"
     assert payload["dcc_type"] == "houdini"
     assert payload["plan"]["host_version"] == "20.5.487"
-    assert Path(payload["plan"]["interpreter"]).resolve() == Path(sys.executable).resolve()
+    assert Path(payload["plan"]["interpreter"]).resolve() == _hython_for(host_executable).resolve()
     assert [step["id"] for step in payload["steps"]] == ["preflight", "install", "verify"]
     assert payload["next_steps"][0]["command"][:3] == ["dcc-mcp-houdini", "install", "--json"]
     assert payload["verify"] == {
@@ -76,16 +123,16 @@ def test_receipt_round_trip_is_idempotent_and_uninstall_is_receipt_driven(
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
     monkeypatch.setenv("DCC_MCP_REGISTRY_DIR", str(tmp_path / "registry"))
     monkeypatch.setenv("DCC_MCP_INSTALL_VERIFY_TIMEOUT", "0.01")
-    common = ["--json", "--dcc-path", str(host), "--python", sys.executable]
+    common = ["--json", "--dcc-path", str(host), "--python", str(_hython_for(host))]
 
-    assert main(["install", *common, "--yes"]) == 40
+    assert main(["install", *common, "--yes"]) == 0
     installed = json.loads(capsys.readouterr().out)
-    assert installed["status"] == "partial"
-    assert installed["verify"]["failure_stage"] == "readiness"
+    assert installed["status"] == "ok"
+    assert installed["verify"]["directly_usable"] is True
     receipt_path = Path(installed["receipt_path"])
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert receipt["host"]["version"] == "20.5.487"
-    assert receipt["python"]["path"] == str(Path(sys.executable).resolve())
+    assert receipt["python"]["path"] == str(_hython_for(host).resolve())
     assert all(len(item["sha256"]) == 64 for item in receipt["files"])
     install_root = Path(receipt["install_root"])
     package_file = Path(receipt["package_file"])
@@ -95,7 +142,7 @@ def test_receipt_round_trip_is_idempotent_and_uninstall_is_receipt_driven(
     assert "capture_bootstrap_errors" in bootstrap
     before = {path: path.read_bytes() for path in install_root.rglob("*") if path.is_file()}
 
-    assert main(["install", *common, "--yes"]) == 40
+    assert main(["install", *common, "--yes"]) == 0
     capsys.readouterr()
     assert {path: path.read_bytes() for path in install_root.rglob("*") if path.is_file()} == before
     assert main(["status", *common]) == 0
@@ -121,7 +168,7 @@ def test_partial_unreceipted_package_fails_closed(monkeypatch, tmp_path: Path, c
     (packages / "dcc_mcp_houdini.json").write_text("{}\n", encoding="utf-8")
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
 
-    exit_code = main(["install", "--json", "--yes", "--dcc-path", str(host), "--python", sys.executable])
+    exit_code = main(["install", "--json", "--yes", "--dcc-path", str(host), "--python", str(_hython_for(host))])
 
     result = json.loads(capsys.readouterr().out)
     assert exit_code == 10
@@ -133,9 +180,17 @@ def test_preflight_rejects_an_interpreter_without_houdini_hom(monkeypatch, tmp_p
     host = _synthetic_host(tmp_path, monkeypatch)
     packages = tmp_path / "profile" / "packages"
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
-    monkeypatch.delenv("PYTHONPATH")
+    from dcc_mcp_houdini import _installer
 
-    code = main(["install", "--json", "--dry-run", "--dcc-path", str(host), "--python", sys.executable])
+    monkeypatch.setattr(
+        _installer,
+        "_query_python",
+        lambda _path, _host: (_ for _ in ()).throw(
+            _installer.LifecycleFailure("python", "Target interpreter import check failed: no HOM")
+        ),
+    )
+
+    code = main(["install", "--json", "--dry-run", "--dcc-path", str(host), "--python", str(_hython_for(host))])
     result = json.loads(capsys.readouterr().out)
 
     assert code == 10
@@ -149,7 +204,7 @@ def test_upgrade_requires_an_existing_receipt(monkeypatch, tmp_path: Path, capsy
     packages = tmp_path / "profile" / "packages"
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
 
-    code = main(["upgrade", "--json", "--dry-run", "--dcc-path", str(host), "--python", sys.executable])
+    code = main(["upgrade", "--json", "--dry-run", "--dcc-path", str(host), "--python", str(_hython_for(host))])
     result = json.loads(capsys.readouterr().out)
 
     assert code == 10
@@ -163,8 +218,8 @@ def test_modified_receipted_file_is_preserved_on_uninstall(monkeypatch, tmp_path
     packages = tmp_path / "profile" / "packages"
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
     monkeypatch.setenv("DCC_MCP_REGISTRY_DIR", str(tmp_path / "registry"))
-    common = ["--json", "--dcc-path", str(host), "--python", sys.executable]
-    assert main(["install", *common, "--yes"]) == 40
+    common = ["--json", "--dcc-path", str(host), "--python", str(_hython_for(host))]
+    assert main(["install", *common, "--yes"]) == 0
     installed = json.loads(capsys.readouterr().out)
     receipt_path = Path(installed["receipt_path"])
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -187,8 +242,8 @@ def test_failed_upgrade_restores_previous_root_package_and_receipt(
     packages = tmp_path / "profile" / "packages"
     monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
     monkeypatch.setenv("DCC_MCP_REGISTRY_DIR", str(tmp_path / "registry"))
-    common = ["--json", "--dcc-path", str(host), "--python", sys.executable]
-    assert main(["install", *common, "--yes"]) == 40
+    common = ["--json", "--dcc-path", str(host), "--python", str(_hython_for(host))]
+    assert main(["install", *common, "--yes"]) == 0
     installed = json.loads(capsys.readouterr().out)
     receipt_path = Path(installed["receipt_path"])
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -233,7 +288,7 @@ def test_restart_exit_requires_core_lock_evidence(monkeypatch, tmp_path: Path, c
         },
     )
 
-    code = main(["install", "--json", "--yes", "--dcc-path", str(host), "--python", sys.executable])
+    code = main(["install", "--json", "--yes", "--dcc-path", str(host), "--python", str(_hython_for(host))])
     result = json.loads(capsys.readouterr().out)
     assert code == 50
     assert result["status"] == "requires_restart"

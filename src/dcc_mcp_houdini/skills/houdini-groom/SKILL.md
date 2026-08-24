@@ -5,7 +5,7 @@ description: >-
   optional guides, and animated skin. Use for insect fuzz, creature fur, and
   deformation-ready hair generation. Not for interactive brush sculpting.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 22.0+, dcc-mcp-core 0.19.70+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 22.0+, dcc-mcp-core 0.19.91+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

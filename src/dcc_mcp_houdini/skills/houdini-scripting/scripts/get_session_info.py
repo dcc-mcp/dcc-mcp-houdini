@@ -2,23 +2,36 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+
+from dcc_mcp_houdini._installer import _host_root, _process_executable_path, _process_start_identity
 
 
 def get_session_info() -> dict:
     """Return Houdini version and Python environment details."""
     try:
+        import dcc_mcp_core  # noqa: PLC0415
         import hou  # noqa: PLC0415
 
         import dcc_mcp_houdini  # noqa: PLC0415
 
+        host_pid = os.getpid()
+        host_executable = _process_executable_path(host_pid)
+
         info = {
             "adapter_version": dcc_mcp_houdini.__version__,
             "adapter_module_path": dcc_mcp_houdini.__file__,
+            "core_module_path": dcc_mcp_core.__file__,
+            "hou_module_path": getattr(hou, "__file__", None),
             "houdini_version": ".".join(str(v) for v in hou.applicationVersion()),
             "houdini_version_string": hou.applicationVersionString(),
+            "host_pid": host_pid,
+            "host_executable": str(host_executable) if host_executable else None,
+            "houdini_root": str(_host_root(host_executable)) if host_executable else None,
+            "process_start_identity": _process_start_identity(host_pid),
             "python_version": sys.version,
             "python_executable": sys.executable,
             "platform": sys.platform,
