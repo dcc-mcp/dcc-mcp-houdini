@@ -3,7 +3,7 @@ name: houdini-object-ops
 description: >-
   Authoring skill — object-level Houdini mutations: rename, duplicate, reparent,
   set display/render/template/bypass flags, hard-lock/unlock, and read/set
-  translate-rotate-scale transforms. Use these typed tools instead of arbitrary
+  pivot and translate-rotate-scale transforms. Use these typed tools instead of arbitrary
   Python for editing existing nodes. Not for creating nodes (use houdini-nodes)
   or scene lifecycle/selection (use houdini-scene-edit).
 license: MIT
@@ -14,9 +14,9 @@ metadata:
     dcc: houdini
     layer: domain
     stage: authoring
-    version: "1.0.0"
-    tags: [houdini, object, transform, rename, parent, flags, authoring]
-    search-hint: "rename node, duplicate node, reparent, move node, set flags, lock node, get transform, set transform, translate rotate scale"
+    version: "1.1.0"
+    tags: [houdini, object, transform, pivot, rename, parent, flags, authoring]
+    search-hint: "rename node, duplicate node, reparent, move node, set flags, lock node, get transform, set transform, set pivot, translate rotate scale"
     tools: tools.yaml
 ---
 
@@ -30,13 +30,13 @@ editing nodes that already exist.
 
 - **`object-edit`:** `rename_node`, `duplicate_node`, `parent_node`,
   `set_node_flags`, `set_node_lock`.
-- **`object-transform`:** `get_transform`, `set_transform` (operate on OBJ-level
-  `t`/`r`/`s` parm tuples).
+- **`object-transform`:** `get_transform`, `set_transform`, `set_pivot` (operate
+  on OBJ-level `t`/`r`/`s` and `p` parm tuples with exact pivot readback).
 
 ## Suggested flow
 
 1. Find/select with `houdini-scene-edit` (`find_nodes` → `set_selection`)
-2. `get_transform` → `set_transform` to position an object
+2. `get_transform` → `set_transform` / `set_pivot` to position an object
 3. `set_node_flags` / `set_node_lock` to control display and freeze state
 
 For creating new nodes use `houdini-nodes`. On failure, load `houdini-scripting`

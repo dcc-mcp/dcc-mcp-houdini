@@ -1,4 +1,37 @@
 tools:
+  - name: set_pivot
+    description: >-
+      Set the local pivot tuple of an OBJ node and verify exact parameter
+      readback, restoring the previous value if verification fails.
+    source_file: scripts/set_pivot.py
+    execution: sync
+    affinity: main
+    group: object-transform
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [node_path, position]
+      properties:
+        node_path: {type: string, minLength: 1}
+        position:
+          type: array
+          items: {type: number, minimum: -1000000, maximum: 1000000}
+          minItems: 3
+          maxItems: 3
+    output_schema:
+      type: object
+      required: [node_path, position, readback]
+      properties:
+        node_path: {type: string}
+        position: {type: array, items: {type: number}}
+        readback: {type: object}
   - name: rename_node
     description: >-
       Rename a node, optionally enforcing a unique name within its parent.
