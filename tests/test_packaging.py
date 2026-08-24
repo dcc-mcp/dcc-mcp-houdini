@@ -454,6 +454,116 @@ assert "port" not in server
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_bootstrap_persists_early_vendor_failure_before_core_is_available(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    root = tmp_path / "dcc_mcp_houdini"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+    bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
+
+    code = r"""
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+os.environ["DCC_MCP_HOUDINI_ROOT"] = str(root)
+spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", root / "scripts/dcc_mcp_houdini_bootstrap.py")
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.bootstrap_and_start()
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code, str(root)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "No bundled wheels" in completed.stderr
+    error_log = root / ".dcc-mcp" / "logs" / "houdini-bootstrap-early.host-errors.log"
+    payload = json.loads(error_log.read_text(encoding="utf-8"))
+    assert payload["phase"] == "vendor-bootstrap"
+    assert payload["error_type"] == "RuntimeError"
+    assert "No bundled wheels" in payload["message"]
+
+
+@pytest.mark.parametrize("replace_succeeds", [True, False])
+def test_bootstrap_vendor_upgrade_is_staged_and_preserves_previous_state_on_failure(
+    tmp_path: Path,
+    replace_succeeds: bool,
+) -> None:
+    pkg = _load_packaging_script()
+    root = tmp_path / "dcc_mcp_houdini"
+    wheels = root / "wheels"
+    vendor = root / "vendor"
+    scripts = root / "scripts"
+    wheels.mkdir(parents=True)
+    (vendor / "dcc_mcp_core").mkdir(parents=True)
+    scripts.mkdir()
+    (vendor / "old.txt").write_text("previous", encoding="utf-8")
+    (vendor / ".dcc_mcp_houdini_wheels").write_text("old", encoding="utf-8")
+    (vendor / "dcc_mcp_core" / "__init__.py").write_text("", encoding="utf-8")
+    (vendor / "dcc_mcp_core" / "install_lifecycle.py").write_text(
+        """from pathlib import Path
+import shutil
+
+def inspect_install_root(path):
+    return {{"success": True, "requires_restart": False, "install_root": str(path)}}
+
+def safe_replace_tree(source, destination):
+    if {replace!r}:
+        shutil.copytree(str(source), str(destination))
+        return {{"success": True, "requires_restart": False}}
+    return {{"success": False, "requires_restart": False, "message": "injected replace failure"}}
+
+def safe_remove_tree(path):
+    shutil.rmtree(str(path), ignore_errors=True)
+    return {{"success": True, "requires_restart": False}}
+""".format(replace=replace_succeeds),
+        encoding="utf-8",
+    )
+    with zipfile.ZipFile(wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl", "w") as zf:
+        zf.writestr("dcc_mcp_houdini/new.txt", "replacement")
+    bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
+
+    code = r"""
+import importlib.util
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", root / "scripts/dcc_mcp_houdini_bootstrap.py")
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.ensure_vendor(root)
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code, str(root)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if replace_succeeds:
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert not (vendor / "old.txt").exists()
+        assert (vendor / "dcc_mcp_houdini" / "new.txt").read_text(encoding="utf-8") == "replacement"
+    else:
+        assert completed.returncode != 0
+        assert "injected replace failure" in completed.stderr
+        assert (vendor / "old.txt").read_text(encoding="utf-8") == "previous"
+        assert not (vendor / "dcc_mcp_houdini" / "new.txt").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
 def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
     pkg = _load_packaging_script()
 
