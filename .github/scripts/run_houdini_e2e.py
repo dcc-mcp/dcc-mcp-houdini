@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import queue
+import textwrap
+import threading
 import time
 import urllib.request
 
@@ -20,7 +23,7 @@ def _post(url, method, params=None):
             "params": params or {},
         }
     ).encode("utf-8")
-    req = urllib.request.Request(
+    request = urllib.request.Request(
         url,
         data=body,
         headers={
@@ -29,8 +32,8 @@ def _post(url, method, params=None):
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read())
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read())
 
 
 def _tool_names(payload):
@@ -47,6 +50,7 @@ def _find_tool(names, suffix):
 
 def _tool_payload(payload):
     result = payload.get("result") or {}
+    assert result.get("isError") is not True, payload
     structured = result.get("structuredContent")
     if isinstance(structured, dict):
         return structured
@@ -62,181 +66,293 @@ def _tool_payload(payload):
     raise AssertionError("Structured tool payload not found in {!r}".format(payload))
 
 
-def main() -> None:
-    print("Houdini:", hou.applicationVersionString())
-    server = dcc_mcp_houdini.start_server(port=0, register_builtins=True, wait_ready=True, readiness_timeout_secs=20)
-    try:
-        url = server.mcp_url
-        init = _post(
-            url,
-            "initialize",
-            {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "houdini-ci", "version": "1"},
-            },
+def _call_tool(url, name, arguments=None):
+    payload = _post(
+        url,
+        "tools/call",
+        {"name": name, "arguments": arguments or {}},
+    )
+    assert "result" in payload, payload
+    return _tool_payload(payload)
+
+
+def _execute_json(url, execute_python, code):
+    payload = _call_tool(
+        url,
+        execute_python,
+        {"code": textwrap.dedent(code)},
+    )
+    context = payload.get("context") or {}
+    result = context.get("result")
+    assert result is not None, payload
+    return json.loads(result)
+
+
+def _serve_with_client_worker(serve_headless, client, join_timeout=5, **serve_kwargs):
+    """Run exactly one HTTP client while the owner thread pumps HOM work."""
+    stop_event = threading.Event()
+    outcomes = queue.Queue(maxsize=1)
+    workers = []
+
+    def run_client(server):
+        try:
+            client(server)
+        except BaseException as exc:  # noqa: BLE001 - rethrow on the owner thread
+            outcomes.put((False, exc, exc.__traceback__))
+        else:
+            outcomes.put((True, None, None))
+        finally:
+            stop_event.set()
+
+    def on_started(server):
+        if workers:
+            raise RuntimeError("serve_headless called on_started more than once")
+        worker = threading.Thread(
+            target=run_client,
+            args=(server,),
+            name="houdini-e2e-http-client",
+            daemon=True,
         )
-        assert init["result"]["serverInfo"]["name"] == "dcc-mcp-houdini", init
+        workers.append(worker)
+        worker.start()
 
-        server.load_skill("houdini-nodes")
-        server.load_skill("houdini-kinefx")
-        tools = _post(url, "tools/list")
-        names = _tool_names(tools)
-        get_session_info = _find_tool(names, "get_session_info")
-        inspect_selection = _find_tool(names, "inspect_selection")
-        create_node = _find_tool(names, "create_node")
-        set_node_parms = _find_tool(names, "set_node_parms")
-        create_rig = _find_tool(names, "create_rig")
-        set_rig_pose = _find_tool(names, "set_rig_pose")
-        delete_node = _find_tool(names, "delete_node")
+    serve_headless(stop_event=stop_event, on_started=on_started, **serve_kwargs)
+    if not workers:
+        raise RuntimeError("serve_headless returned before starting the HTTP client")
+    worker = workers[0]
+    worker.join(timeout=join_timeout)
+    if worker.is_alive():
+        raise RuntimeError("Houdini E2E HTTP client did not stop")
+    try:
+        succeeded, error, traceback = outcomes.get_nowait()
+    except queue.Empty as exc:
+        raise RuntimeError("Houdini E2E HTTP client produced no outcome") from exc
+    if not succeeded:
+        raise error.with_traceback(traceback)
 
-        session = _post(url, "tools/call", {"name": get_session_info, "arguments": {}})
-        assert "result" in session, session
 
-        node_name = "dcc_mcp_ci_geo"
-        existing = hou.node("/obj/" + node_name)
+def _run_client(server):
+    url = server.mcp_url
+    initialized = _post(
+        url,
+        "initialize",
+        {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "houdini-ci", "version": "1"},
+        },
+    )
+    assert initialized["result"]["serverInfo"]["name"] == "dcc-mcp-houdini", initialized
+
+    initial_names = _tool_names(_post(url, "tools/list"))
+    load_skill = _find_tool(initial_names, "load_skill")
+    for skill_name in ("houdini-scripting", "houdini-nodes", "houdini-kinefx"):
+        loaded = _call_tool(url, load_skill, {"skill_name": skill_name})
+        assert loaded.get("context", {}).get("loaded") is not False, loaded
+
+    names = _tool_names(_post(url, "tools/list"))
+    get_session_info = _find_tool(names, "get_session_info")
+    execute_python = _find_tool(names, "execute_python")
+    inspect_selection = _find_tool(names, "inspect_selection")
+    create_node = _find_tool(names, "create_node")
+    set_node_parms = _find_tool(names, "set_node_parms")
+    create_rig = _find_tool(names, "create_rig")
+    set_rig_pose = _find_tool(names, "set_rig_pose")
+    delete_node = _find_tool(names, "delete_node")
+
+    _call_tool(url, get_session_info)
+    node_name = "dcc_mcp_ci_geo"
+    node_path = "/obj/" + node_name
+    mesh_name = "ci_mesh"
+    mesh_path = node_path + "/" + mesh_name
+    rig_path = node_path + "/ci_rig"
+
+    _execute_json(
+        url,
+        execute_python,
+        """
+        import json
+        existing = hou.node({node_path!r})
         if existing is not None:
             existing.destroy()
-        created = _post(
-            url,
-            "tools/call",
-            {
-                "name": create_node,
-                "arguments": {
-                    "parent_path": "/obj",
-                    "node_type": "geo",
-                    "node_name": node_name,
-                },
-            },
-        )
-        assert "result" in created, created
-        assert hou.node("/obj/" + node_name) is not None
+        result = json.dumps({{"absent": hou.node({node_path!r}) is None}})
+        """.format(node_path=node_path),
+    )
 
-        mesh_name = "ci_mesh"
-        mesh_created = _post(
-            url,
-            "tools/call",
-            {
-                "name": create_node,
-                "arguments": {
-                    "parent_path": "/obj/" + node_name,
-                    "node_type": "sphere",
-                    "node_name": mesh_name,
-                },
-            },
-        )
-        assert "result" in mesh_created, mesh_created
-        mesh_path = "/obj/{}/{}".format(node_name, mesh_name)
-        assert hou.node(mesh_path) is not None
-        mesh_configured = _post(
-            url,
-            "tools/call",
-            {
-                "name": set_node_parms,
-                "arguments": {
-                    "node_path": mesh_path,
-                    "parameters": {"type": 1},
-                },
-            },
-        )
-        assert "result" in mesh_configured, mesh_configured
-        mesh = hou.node(mesh_path)
+    _call_tool(
+        url,
+        create_node,
+        {
+            "parent_path": "/obj",
+            "node_type": "geo",
+            "node_name": node_name,
+        },
+    )
+    _call_tool(
+        url,
+        create_node,
+        {
+            "parent_path": node_path,
+            "node_type": "sphere",
+            "node_name": mesh_name,
+        },
+    )
+    _call_tool(
+        url,
+        set_node_parms,
+        {"node_path": mesh_path, "parameters": {"type": 1}},
+    )
+
+    packed = _execute_json(
+        url,
+        execute_python,
+        """
+        import json
+        mesh = hou.node({mesh_path!r})
+        if mesh is None:
+            raise RuntimeError("MCP-created sphere is missing")
         pack = mesh.parent().createNode("pack", "ci_pack")
         pack.setInput(0, mesh)
         pack.setDisplayFlag(True)
         pack.setCurrent(True, clear_all_selected=True)
         pack.cook(force=True)
-        assert pack.geometry().countPrimType("PackedGeometry") == 1
-        inspect_started = time.monotonic()
-        inspected = _post(url, "tools/call", {"name": inspect_selection, "arguments": {}})
-        inspect_elapsed = time.monotonic() - inspect_started
-        inspect_payload = _tool_payload(inspected)
-        inspect_context = inspect_payload["context"]
-        assert inspect_context["selection"][0]["path"] == pack.path(), inspect_payload
-        assert inspect_context["display_node"]["path"] == pack.path(), inspect_payload
-        assert inspect_context["geometry"]["needs_cook"] is False, inspect_payload
-        assert inspect_context["geometry"]["point_count"] == pack.geometry().pointCount(), inspect_payload
-        assert inspect_context["geometry"]["packed_primitive_count"] == 1, inspect_payload
-        assert "P" in inspect_context["geometry"]["key_attributes"]["point"], inspect_payload
-        assert inspect_elapsed <= 60.0, "inspect_selection exceeded 60s: {:.3f}s".format(inspect_elapsed)
-        print(
-            "inspect_selection elapsed_seconds={:.3f} point_count={} packed_count={}".format(
-                inspect_elapsed,
-                inspect_context["geometry"]["point_count"],
-                inspect_context["geometry"]["packed_primitive_count"],
-            )
-        )
+        result = json.dumps({{
+            "path": pack.path(),
+            "point_count": pack.geometry().pointCount(),
+            "packed_count": pack.geometry().countPrimType("PackedGeometry"),
+        }})
+        """.format(mesh_path=mesh_path),
+    )
+    assert packed["packed_count"] == 1, packed
 
-        rigged = _post(
-            url,
-            "tools/call",
-            {
-                "name": create_rig,
-                "arguments": {
-                    "geo_path": "/obj/" + node_name,
-                    "rig_name": "ci_rig",
-                    "joint_chain": [
-                        {"name": "root", "parent_index": -1, "translate": [0, -1, 0]},
-                        {"name": "spine", "parent_index": 0, "translate": [0, 1, 0]},
-                        {"name": "neck", "parent_index": 0, "translate": [1, 0, 0]},
-                    ],
-                    "auto_capture": True,
-                    "capture_mesh": mesh_name,
-                },
-            },
+    inspect_started = time.monotonic()
+    inspected = _call_tool(url, inspect_selection)
+    inspect_elapsed = time.monotonic() - inspect_started
+    inspect_context = inspected["context"]
+    assert inspect_context["selection"][0]["path"] == packed["path"], inspected
+    assert inspect_context["display_node"]["path"] == packed["path"], inspected
+    assert inspect_context["geometry"]["needs_cook"] is False, inspected
+    assert inspect_context["geometry"]["point_count"] == packed["point_count"], inspected
+    assert inspect_context["geometry"]["packed_primitive_count"] == 1, inspected
+    assert "P" in inspect_context["geometry"]["key_attributes"]["point"], inspected
+    assert inspect_elapsed <= 60.0, "inspect_selection exceeded 60s: {:.3f}s".format(inspect_elapsed)
+    print(
+        "inspect_selection elapsed_seconds={:.3f} point_count={} packed_count={}".format(
+            inspect_elapsed,
+            inspect_context["geometry"]["point_count"],
+            inspect_context["geometry"]["packed_primitive_count"],
         )
-        assert "result" in rigged, rigged
-        rig = hou.node("/obj/{}/ci_rig".format(node_name))
-        assert rig is not None
-        assert len(rig.geometry().points()) == 3
-        assert len(rig.geometry().prims()) == 2
-        assert [point.attribValue("name") for point in rig.geometry().points()] == ["root", "spine", "neck"]
-        assert sorted(tuple(point.number() for point in prim.points()) for prim in rig.geometry().prims()) == [
-            (0, 1),
-            (0, 2),
-        ]
-        capture = hou.node("/obj/{}/capture_ci_rig".format(node_name))
-        joint_deform = hou.node("/obj/{}/jointdeform_ci_rig".format(node_name))
-        assert capture is not None and capture.geometry().findPointAttrib("boneCapture") is not None
-        assert joint_deform is not None and not joint_deform.errors()
-        rest_positions = [tuple(point.position()) for point in joint_deform.geometry().points()]
+    )
 
-        posed = _post(
-            url,
-            "tools/call",
-            {
-                "name": set_rig_pose,
-                "arguments": {
-                    "rig_node": rig.path(),
-                    "joint_name": "spine",
-                    "translate": [0.25, 1.0, 0.0],
-                    "rotate": [90.0, 0.0, 0.0],
-                    "scale": [1.0, 2.0, 1.0],
-                },
-            },
-        )
-        assert "result" in posed, posed
+    _call_tool(
+        url,
+        create_rig,
+        {
+            "geo_path": node_path,
+            "rig_name": "ci_rig",
+            "joint_chain": [
+                {"name": "root", "parent_index": -1, "translate": [0, -1, 0]},
+                {"name": "spine", "parent_index": 0, "translate": [0, 1, 0]},
+                {"name": "neck", "parent_index": 0, "translate": [1, 0, 0]},
+            ],
+            "auto_capture": True,
+            "capture_mesh": mesh_name,
+        },
+    )
+    rig_state = _execute_json(
+        url,
+        execute_python,
+        """
+        import json
+        rig = hou.node({rig_path!r})
+        capture = hou.node({capture_path!r})
+        deform = hou.node({deform_path!r})
+        if rig is None or capture is None or deform is None:
+            raise RuntimeError("KineFX capture graph is incomplete")
+        deform.cook(force=True)
+        result = json.dumps({{
+            "names": [point.attribValue("name") for point in rig.geometry().points()],
+            "edges": sorted([list(point.number() for point in prim.points()) for prim in rig.geometry().prims()]),
+            "capture": capture.geometry().findPointAttrib("boneCapture") is not None,
+            "errors": list(deform.errors()),
+            "rest": [list(point.position()) for point in deform.geometry().points()],
+        }})
+        """.format(
+            rig_path=rig_path,
+            capture_path=node_path + "/capture_ci_rig",
+            deform_path=node_path + "/jointdeform_ci_rig",
+        ),
+    )
+    assert rig_state["names"] == ["root", "spine", "neck"], rig_state
+    assert rig_state["edges"] == [[0, 1], [0, 2]], rig_state
+    assert rig_state["capture"] is True, rig_state
+    assert rig_state["errors"] == [], rig_state
+
+    _call_tool(
+        url,
+        set_rig_pose,
+        {
+            "rig_node": rig_path,
+            "joint_name": "spine",
+            "translate": [0.25, 1.0, 0.0],
+            "rotate": [90.0, 0.0, 0.0],
+            "scale": [1.0, 2.0, 1.0],
+        },
+    )
+    posed_state = _execute_json(
+        url,
+        execute_python,
+        """
+        import json
+        rig = hou.node({rig_path!r})
+        deform = hou.node({deform_path!r})
         spine = rig.geometry().points()[1]
-        assert abs(spine.position()[0] - 0.25) < 1e-6
-        expected_transform = hou.Matrix3(
-            hou.hmath.buildTransform({"rotate": (90.0, 0.0, 0.0), "scale": (1.0, 2.0, 1.0)})
-        ).asTuple()
-        assert (
-            max(abs(actual - expected) for actual, expected in zip(spine.attribValue("transform"), expected_transform))
-            < 1e-6
-        )
-        joint_deform.cook(force=True)
-        assert not joint_deform.errors()
-        assert len(joint_deform.geometry().points()) > 0
-        posed_positions = [tuple(point.position()) for point in joint_deform.geometry().points()]
-        assert any(before != after for before, after in zip(rest_positions, posed_positions))
+        expected = hou.Matrix3(hou.hmath.buildTransform({{
+            "rotate": (90.0, 0.0, 0.0),
+            "scale": (1.0, 2.0, 1.0),
+        }})).asTuple()
+        deform.cook(force=True)
+        result = json.dumps({{
+            "spine_x": spine.position()[0],
+            "transform_delta": max(abs(actual - wanted) for actual, wanted in zip(
+                spine.attribValue("transform"), expected
+            )),
+            "errors": list(deform.errors()),
+            "positions": [list(point.position()) for point in deform.geometry().points()],
+        }})
+        """.format(
+            rig_path=rig_path,
+            deform_path=node_path + "/jointdeform_ci_rig",
+        ),
+    )
+    assert abs(posed_state["spine_x"] - 0.25) < 1e-6, posed_state
+    assert posed_state["transform_delta"] < 1e-6, posed_state
+    assert posed_state["errors"] == [], posed_state
+    assert any(before != after for before, after in zip(rig_state["rest"], posed_state["positions"])), posed_state
 
-        deleted = _post(url, "tools/call", {"name": delete_node, "arguments": {"node_path": "/obj/" + node_name}})
-        assert "result" in deleted, deleted
-        assert hou.node("/obj/" + node_name) is None
-        print("Houdini MCP E2E passed:", url)
-    finally:
-        dcc_mcp_houdini.stop_server()
+    _call_tool(url, delete_node, {"node_path": node_path})
+    deleted_state = _execute_json(
+        url,
+        execute_python,
+        """
+        import json
+        result = json.dumps({{"absent": hou.node({node_path!r}) is None}})
+        """.format(node_path=node_path),
+    )
+    assert deleted_state["absent"] is True, deleted_state
+    print("Houdini MCP E2E passed:", url)
+
+
+def main() -> None:
+    print("Houdini:", hou.applicationVersionString())
+    _serve_with_client_worker(
+        dcc_mcp_houdini.serve_headless,
+        _run_client,
+        join_timeout=30,
+        port=0,
+        gateway_port=0,
+        register_builtins=True,
+    )
 
 
 if __name__ == "__main__":
