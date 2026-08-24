@@ -137,7 +137,7 @@ def _real_probe_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     root = tmp_path / "Houdini 20.5.487"
     host = root / "bin" / ("houdini.exe" if sys.platform == "win32" else "houdini")
     hython = root / "bin" / ("hython.exe" if sys.platform == "win32" else "hython")
-    hou_file = root / "python3.12libs" / "hou.py"
+    hou_file = root / "houdini" / "python3.12libs" / "hou.py"
     adapter_root = tmp_path / "site-packages"
     adapter_file = adapter_root / "dcc_mcp_houdini" / "__init__.py"
     core_file = adapter_root / "dcc_mcp_core" / "__init__.py"
@@ -157,6 +157,10 @@ def _real_probe_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "core_file": str(core_file.resolve()),
         "adapter_dist_root": str(adapter_root.resolve()),
         "core_dist_root": str(adapter_root.resolve()),
+        "adapter_record": "dcc_mcp_houdini/__init__.py",
+        "core_record": "dcc_mcp_core/__init__.py",
+        "adapter_direct_url": None,
+        "core_direct_url": None,
     }
     return host, hython, payload
 
@@ -178,6 +182,91 @@ def test_hython_probe_binds_executable_hom_and_distribution_origins(
     Path(payload["adapter_file"]).write_text("# shadow\n", encoding="utf-8")
     with pytest.raises(_installer.LifecycleFailure, match="shadowed"):
         _installer._query_python(hython, host)
+
+
+def test_hython_probe_rejects_same_site_root_modules_not_owned_by_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host, hython, payload = _real_probe_fixture(tmp_path)
+    monkeypatch.setattr(
+        _installer,
+        "_run_bounded_command",
+        lambda *_args, **_kwargs: {"success": True, "stdout": json.dumps(payload), "stderr": ""},
+    )
+
+    payload["adapter_record"] = None
+    with pytest.raises(_installer.LifecycleFailure, match="RECORD|ownership"):
+        _installer._query_python(hython, host)
+
+    payload["adapter_record"] = "dcc_mcp_houdini/__init__.py"
+    payload["core_record"] = "unrelated/core.py"
+    with pytest.raises(_installer.LifecycleFailure, match="RECORD|ownership"):
+        _installer._query_python(hython, host)
+
+
+def test_hython_probe_accepts_only_exact_editable_direct_url_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host, hython, payload = _real_probe_fixture(tmp_path)
+    editable = tmp_path / "adapter-checkout"
+    adapter_file = editable / "src" / "dcc_mcp_houdini" / "__init__.py"
+    adapter_file.parent.mkdir(parents=True)
+    adapter_file.write_text("# editable adapter\n", encoding="utf-8")
+    payload.update(
+        {
+            "adapter_file": str(adapter_file.resolve()),
+            "adapter_record": None,
+            "adapter_direct_url": {"url": editable.resolve().as_uri(), "dir_info": {"editable": True}},
+        }
+    )
+    monkeypatch.setattr(
+        _installer,
+        "_run_bounded_command",
+        lambda *_args, **_kwargs: {"success": True, "stdout": json.dumps(payload), "stderr": ""},
+    )
+
+    assert _installer._query_python(hython, host)["adapter_file"] == str(adapter_file.resolve())
+    payload["adapter_direct_url"] = {
+        "url": (tmp_path / "different-checkout").resolve().as_uri(),
+        "dir_info": {"editable": True},
+    }
+    with pytest.raises(_installer.LifecycleFailure, match="editable ownership"):
+        _installer._query_python(hython, host)
+
+
+def test_hython_probe_rejects_hom_outside_selected_hython_library(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host, hython, payload = _real_probe_fixture(tmp_path)
+    fake_hom = host.parents[1] / "operator" / "hou.py"
+    fake_hom.parent.mkdir()
+    fake_hom.write_text("# unrelated hom\n", encoding="utf-8")
+    payload["hou_file"] = str(fake_hom.resolve())
+    monkeypatch.setattr(
+        _installer,
+        "_run_bounded_command",
+        lambda *_args, **_kwargs: {"success": True, "stdout": json.dumps(payload), "stderr": ""},
+    )
+
+    with pytest.raises(_installer.LifecycleFailure, match="HOM|Hython"):
+        _installer._query_python(hython, host)
+
+
+def test_dcc_path_rejects_hython_but_python_flag_accepts_it(tmp_path: Path) -> None:
+    root = tmp_path / "Houdini 20.5.487"
+    host = root / "bin" / ("houdini.exe" if sys.platform == "win32" else "houdini")
+    hython = root / "bin" / ("hython.exe" if sys.platform == "win32" else "hython")
+    host.parent.mkdir(parents=True)
+    host.write_bytes(b"houdini")
+    hython.write_bytes(b"hython")
+
+    with pytest.raises(_installer.LifecycleFailure, match="interactive Houdini"):
+        _installer._resolve_host(str(hython), {})
+    assert _installer._resolve_host(str(root), {}) == host.resolve()
+    assert _installer._resolve_python(str(hython), host, {}) == (hython.resolve(), "--python")
 
 
 def test_hython_probe_timeout_is_a_stable_preflight_failure(

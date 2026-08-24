@@ -20,6 +20,11 @@ Install the wheel into the exact embedded interpreter, not an unrelated Python:
 <hython> -m pip install --upgrade dcc-mcp-houdini
 ```
 
+`--dcc-path` must name the interactive `houdini`, `houdinifx`, or `hindie`
+executable that a readiness remediation can actually launch. Use the matching
+`hython` executable only with `--python`; Hython is headless and can never
+satisfy the interactive readiness contract.
+
 ## Supported versions
 
 The lifecycle supports Windows, macOS, and Linux. Houdini 18.5+ is the host
