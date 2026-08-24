@@ -1,0 +1,28 @@
+groups:
+  - name: mesh-edit
+    description: Existing lightweight SOP edit operations.
+    default_active: true
+    tools:
+      - transform_geometry
+      - merge_geometry
+      - blast_geometry
+      - group_geometry
+      - add_normals
+      - triangulate_geometry
+      - convert_geometry
+  - name: modeling
+    description: Typed procedural SOP modeling operations with post-condition readback.
+    default_active: false
+    tools:
+      - array_instances
+      - lathe_profile
+      - add_edge_loop
+      - bridge_edges
+      - mirror
+      - auto_uv
+      - uv_project
+      - boolean_op
+      - loft_sections
+      - extrude_faces
+      - bevel_edges
+      - inset

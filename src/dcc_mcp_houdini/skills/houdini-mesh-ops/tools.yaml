@@ -1,4 +1,467 @@
 tools:
+  - name: array_instances
+    description: >-
+      Create a bounded radial point ring and instance an input SOP with native
+      Circle and Copy to Points SOPs, with parameter and cooked readback.
+    source_file: scripts/array_instances.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, count, radius]
+      properties:
+        input_path: {type: string, minLength: 1}
+        count: {type: integer, minimum: 2, maximum: 128}
+        radius: {type: number, exclusiveMinimum: 0, maximum: 1000000}
+        axis: {type: string, enum: [x, y, z], default: y}
+        node_name: {type: string, minLength: 1}
+        points_node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, points_node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        points_node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: uv_project
+    description: >-
+      Project vertex UVs with a native UV Project SOP and verify that the
+      requested UV attribute exists on the cooked result.
+    source_file: scripts/uv_project.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path]
+      properties:
+        input_path: {type: string, minLength: 1}
+        projection: {type: string, enum: [planar, cylindrical, spherical], default: planar}
+        group: {type: string, minLength: 1}
+        uv_attribute: {type: string, pattern: "^[A-Za-z_][A-Za-z0-9_]*$", default: uv}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__list_attributes]
+  - name: auto_uv
+    description: >-
+      Generate vertex UVs with a native UV Unwrap SOP and verify that the
+      requested UV attribute exists on the cooked result.
+    source_file: scripts/auto_uv.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path]
+      properties:
+        input_path: {type: string, minLength: 1}
+        group: {type: string, minLength: 1}
+        uv_attribute: {type: string, pattern: "^[A-Za-z_][A-Za-z0-9_]*$", default: uv}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__list_attributes]
+  - name: mirror
+    description: >-
+      Mirror a polygon SOP across an explicit plane and verify parameter plus
+      cooked geometry readback.
+    source_file: scripts/mirror.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path]
+      properties:
+        input_path: {type: string, minLength: 1}
+        origin:
+          type: array
+          items: {type: number, minimum: -1000000, maximum: 1000000}
+          minItems: 3
+          maxItems: 3
+        direction:
+          type: array
+          items: {type: number, minimum: -1000000, maximum: 1000000}
+          minItems: 3
+          maxItems: 3
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: bridge_edges
+    description: >-
+      Bridge two explicit edge or face selections with a native PolyBridge SOP
+      and verify the requested parameters plus cooked output.
+    source_file: scripts/bridge_edges.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, source_group, destination_group]
+      properties:
+        input_path: {type: string, minLength: 1}
+        source_group: {type: string, minLength: 1}
+        destination_group: {type: string, minLength: 1}
+        divisions: {type: integer, minimum: 1, maximum: 64, default: 1}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: add_edge_loop
+    description: >-
+      Apply an explicit bounded PolySplit location string and verify the cooked
+      topology before success.
+    source_file: scripts/add_edge_loop.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, split_locations]
+      properties:
+        input_path: {type: string, minLength: 1}
+        split_locations: {type: string, minLength: 1, maxLength: 4096}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: lathe_profile
+    description: >-
+      Revolve a profile SOP around a typed axis with bounded segments and
+      verified parameter plus cooked geometry readback.
+    source_file: scripts/lathe_profile.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [profile]
+      properties:
+        profile: {type: string, minLength: 1}
+        axis: {type: string, enum: [x, y, z], default: y}
+        origin:
+          type: array
+          items: {type: number, minimum: -1000000, maximum: 1000000}
+          minItems: 3
+          maxItems: 3
+        segments: {type: integer, minimum: 3, maximum: 256, default: 32}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [profile, node, parameters, readback]
+      properties:
+        profile: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: boolean_op
+    description: >-
+      Combine two polygon SOP streams using a native Boolean SOP. The operation
+      is resolved from Houdini's menu labels and verified before success.
+    source_file: scripts/boolean_op.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_a, input_b, operation]
+      properties:
+        input_a: {type: string, minLength: 1}
+        input_b: {type: string, minLength: 1}
+        operation: {type: string, enum: [union, intersect, subtract]}
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [inputs, node, parameters, readback]
+      properties:
+        inputs: {type: array, items: {type: string}}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: loft_sections
+    description: >-
+      Loft two to sixty-four ordered section SOPs with a Skin SOP, requiring a
+      shared parent network and returning cooked geometry readback.
+    source_file: scripts/loft_sections.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [sections]
+      properties:
+        sections:
+          type: array
+          items: {type: string, minLength: 1}
+          minItems: 2
+          maxItems: 64
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [sections, node, readback]
+      properties:
+        sections: {type: array, items: {type: string}}
+        node: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: inset
+    description: >-
+      Inset a bounded primitive selection through the verified PolyExtrude
+      path, with no raw scripting fallback.
+    source_file: scripts/inset.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, amount]
+      properties:
+        input_path: {type: string, minLength: 1}
+        group: {type: string, minLength: 1}
+        amount:
+          type: number
+          minimum: -1000000
+          maximum: 1000000
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: bevel_edges
+    description: >-
+      Append a PolyBevel SOP for a bounded edge selection and verify the
+      requested bevel parameters plus cooked geometry before reporting success.
+    source_file: scripts/bevel_edges.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, group, distance]
+      properties:
+        input_path: {type: string, minLength: 1}
+        group:
+          type: string
+          minLength: 1
+          description: Edge group name or bounded edge selection pattern.
+        distance:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1000000
+        divisions:
+          type: integer
+          minimum: 1
+          maximum: 64
+          default: 1
+        node_name: {type: string, minLength: 1}
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback: {type: object}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
+  - name: extrude_faces
+    description: >-
+      Append a PolyExtrude SOP for a bounded primitive selection and return
+      parameter plus cooked-geometry readback; fail if Houdini reports no effect.
+    source_file: scripts/extrude_faces.py
+    execution: sync
+    affinity: main
+    group: modeling
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path]
+      properties:
+        input_path:
+          type: string
+          minLength: 1
+          description: Upstream polygon SOP node path.
+        group:
+          type: string
+          description: Optional primitive group name or bounded selection pattern.
+        distance:
+          type: number
+          minimum: -1000000
+          maximum: 1000000
+          default: 0.0
+        inset:
+          type: number
+          minimum: -1000000
+          maximum: 1000000
+          default: 0.0
+        node_name:
+          type: string
+          minLength: 1
+    output_schema:
+      type: object
+      required: [input_path, node, parameters, readback]
+      properties:
+        input_path: {type: string}
+        node: {type: object}
+        parameters: {type: object}
+        readback:
+          type: object
+          required: [verified, point_count, primitive_count, vertex_count]
+          properties:
+            verified: {type: boolean}
+            point_count: {type: integer, minimum: 0}
+            primitive_count: {type: integer, minimum: 0}
+            vertex_count: {type: integer, minimum: 0}
+    next-tools:
+      on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
   - name: transform_geometry
     description: >-
       Append a Transform (xform) SOP downstream of an input SOP and set

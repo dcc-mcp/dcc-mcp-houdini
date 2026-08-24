@@ -19,12 +19,12 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Inspect hip | `houdini_scene__get_scene_info` → `houdini_scene__list_obj_nodes` |
 | Scene lifecycle | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__open_scene` / `houdini_scene_edit__save_scene` |
 | Select & frame | `load_skill("houdini-scene-edit")` → `houdini_scene_edit__find_nodes` → `houdini_scene_edit__set_selection` → `houdini_scene_edit__get_bounding_box` |
-| Edit existing object | `load_skill("houdini-object-ops")` → `houdini_object_ops__get_transform` → `houdini_object_ops__set_transform` → `houdini_object_ops__set_node_flags` |
+| Edit existing object | `load_skill("houdini-object-ops")` → `houdini_object_ops__get_transform` → `houdini_object_ops__set_transform` / `set_pivot` → `houdini_object_ops__set_node_flags` |
 | Build SOP/OBJ network | `load_skill("houdini-nodes")` → `houdini_nodes__create_node` → `houdini_nodes__set_node_parms` → `houdini_nodes__connect_nodes` → choose `cook_node` (short monolithic), `cook_nodes_chunked` (bounded list), or `start_cook_job` + `get_cook_job` (long durable) |
 | Edit parameters & expressions | `load_skill("houdini-parameters")` → `houdini_parameters__list_parms` → `houdini_parameters__set_parms` / `houdini_parameters__set_expression` |
 | Inspect & rewire graph | `load_skill("houdini-node-graph")` → `houdini_node_graph__get_connections` → `houdini_node_graph__connect_input` / `houdini_node_graph__disconnect_input` |
 | Create & inspect geometry | `load_skill("houdini-geometry")` → `houdini_geometry__create_primitive` or bounded `houdini_geometry__create_curve_guides` → `houdini_geometry__get_geometry_info` → `houdini_geometry__list_attributes` / `houdini_geometry__list_groups` |
-| Edit a mesh procedurally | `load_skill("houdini-mesh-ops")` → `houdini_mesh_ops__transform_geometry` / `merge_geometry` / `blast_geometry` / `group_geometry` / `add_normals` / `triangulate_geometry` / `convert_geometry` → `houdini_geometry__get_cook_status` |
+| Model typed SOP geometry | `load_skill("houdini-mesh-ops")` → `loft_sections` / `lathe_profile` / `extrude_faces` / `bevel_edges` / `bridge_edges` / `boolean_op` / `add_edge_loop` / `array_instances` / `mirror` / `auto_uv` / `uv_project` → inspect returned readback → `houdini_geometry__get_cook_status` |
 | Create & debug VEX wrangles | `load_skill("houdini-vex")` → `houdini_vex__validate_vex_syntax` → `houdini_vex__create_wrangle` → `houdini_vex__cook_wrangle` → `houdini_vex__diagnose_wrangle` / `houdini_vex__get_vex_info` |
 | Set up cameras & lights | `load_skill("houdini-camera-light")` → `houdini_camera_light__create_camera` → `houdini_camera_light__create_light` → `houdini_camera_light__frame_view` |
 | Three-point studio lighting | `load_skill("houdini-light-rig")` → `create_three_point_light_rig` → `aim_light_at_object` → `set_light_rig_intensity` → `get_lighting_summary` |
