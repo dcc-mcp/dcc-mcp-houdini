@@ -6,7 +6,7 @@ description: >-
   localization.  Never degrades to arbitrary script execution; all VEX code
   is set via typed node parameters only.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.91+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

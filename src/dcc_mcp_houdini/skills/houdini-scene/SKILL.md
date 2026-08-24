@@ -6,7 +6,7 @@ description: >-
   frame range, hip path, object-level nodes, or node details. Not for creating
   geometry, sims, or exports — use authoring or interchange skills.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.91+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

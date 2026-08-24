@@ -16,6 +16,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  DCC_MCP_CORE_FLOOR: "0.20.14"
+
 jobs:
   lint:
     name: Lint and Skill Metadata
@@ -28,6 +31,7 @@ jobs:
       - name: Install package with dev dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}"
           python -m pip install -e ".[dev]"
       - name: Ruff check
         run: ruff check src/ tests/ tools/ packaging/
@@ -69,6 +73,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
+          python -m pip install "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}"
           python -m pip install -e ".[dev]"
       - name: Run unit tests
         run: python -m pytest
@@ -107,6 +112,27 @@ jobs:
           }
           missing = sorted(required - names)
           assert not missing, missing
+          assert "dcc_mcp_houdini/_install_contract.py" not in names
+          PY
+      - name: Verify installed wheel uses published Core schema
+        run: |
+          python -m venv .wheel-smoke
+          .wheel-smoke/bin/python -m pip install --upgrade pip
+          .wheel-smoke/bin/python -m pip install "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}" dist/*.whl
+          .wheel-smoke/bin/python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          from dcc_mcp_core.deployment import load_install_sop_schema
+          from dcc_mcp_core.deployment import install_sop
+
+          schema_path = Path(install_sop.__file__).resolve().parent.parent / "schemas" / "adapter-install-sop-v1.schema.json"
+          raw = schema_path.read_bytes()
+          assert len(raw) == 4261
+          assert hashlib.sha256(raw).hexdigest() == "3ca25788439917b4d4c0617230a762f9797756b5b54f45c8c4149f975b90f904"
+          assert load_install_sop_schema() == json.loads(raw)
+          import dcc_mcp_houdini._installer
           PY
       - name: Check package
         run: python -m twine check dist/*
@@ -133,13 +159,13 @@ jobs:
       - name: Build wheel
         run: python -m build
       - name: Assemble quickinstall ZIP
-        run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini
+        run: python packaging/assemble_houdini_package.py --platform ${{ matrix.platform }} --dist-dir dist --output-dir dist_houdini --core-version "$DCC_MCP_CORE_FLOOR"
       - name: Verify quickinstall version matrix
         env:
           PLATFORM: ${{ matrix.platform }}
         run: |
           zip_path="$(ls dist_houdini/dcc_mcp_houdini_quickinstall_${PLATFORM}_v*.zip | tail -n 1)"
-          python packaging/assemble_houdini_package.py --platform "$PLATFORM" --verify-zip "$zip_path"
+          python packaging/assemble_houdini_package.py --platform "$PLATFORM" --verify-zip "$zip_path" --expected-core-version "$DCC_MCP_CORE_FLOOR"
       - name: Upload quickinstall artifact
         uses: actions/upload-artifact@v7
         with:

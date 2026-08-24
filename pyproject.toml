@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.19.91 is the first published floor used by the adapter-owned Install SOP.
-    "dcc-mcp-core>=0.19.91,<1.0.0",
+    # 0.20.14 is the first release with the canonical Install SOP schema API.
+    "dcc-mcp-core>=0.20.14,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +47,8 @@ dev = [
     "twine",
     "packaging>=23.0",
     "pyyaml>=6.0",
-    "jsonschema>=4.23",
+    "jsonschema==4.17.3; python_version < '3.8'",
+    "jsonschema>=4.23; python_version >= '3.8'",
 ]
 
 [project.urls]

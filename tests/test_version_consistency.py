@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 PACKAGING_SCRIPT = ROOT / "packaging" / "assemble_houdini_package.py"
 README = ROOT / "README.md"
+RUNBOOK = ROOT / "install.md"
+INSTALLER = ROOT / "src" / "dcc_mcp_houdini" / "_installer.py"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 SKILLS_DIR = ROOT / "src" / "dcc_mcp_houdini" / "skills"
 
 
@@ -47,6 +50,17 @@ def test_pyproject_and_packaging_core_floor_match() -> None:
         f"Mismatch: pyproject.toml requires >= {pyproject_floor}, "
         f"but packaging script pins MIN_CORE_VERSION = {packaging_floor}"
     )
+
+
+def test_published_install_sop_floor_is_projected_everywhere() -> None:
+    expected = "0.20.14"
+    assert _extract_pyproject_core_floor() == expected
+    assert _extract_packaging_min_core_version() == expected
+    assert 'MIN_CORE_VERSION = "{}"'.format(expected) in INSTALLER.read_text(encoding="utf-8")
+    assert "dcc-mcp-core >= {},<1.0.0".format(expected) in RUNBOOK.read_text(encoding="utf-8")
+    ci = CI_WORKFLOW.read_text(encoding="utf-8")
+    assert 'DCC_MCP_CORE_FLOOR: "{}"'.format(expected) in ci
+    assert "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}" in ci
 
 
 def test_readme_core_floor_matches_pyproject() -> None:

@@ -25,9 +25,7 @@ from dcc_mcp_core import (
     safe_replace_tree,
     wait_for_sidecar_ready,
 )
-
-from dcc_mcp_houdini.__version__ import __version__
-from dcc_mcp_houdini._install_contract import (
+from dcc_mcp_core.deployment import (
     INSTALL_EXIT_INSTALL,
     INSTALL_EXIT_OK,
     INSTALL_EXIT_PREFLIGHT,
@@ -36,9 +34,11 @@ from dcc_mcp_houdini._install_contract import (
     INSTALL_SOP_SCHEMA_VERSION,
 )
 
+from dcc_mcp_houdini.__version__ import __version__
+
 DCC_TYPE = "houdini"
 COMMAND = "dcc-mcp-houdini"
-MIN_CORE_VERSION = "0.19.91"
+MIN_CORE_VERSION = "0.20.14"
 MIN_HOUDINI_VERSION = (18, 5, 0)
 LIFECYCLE_COMMANDS = frozenset(("install", "status", "verify", "uninstall", "upgrade"))
 
