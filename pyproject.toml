@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 dependencies = [
-    # 0.19.70: recoverable job strategies and automatic chunk scheduling.
-    "dcc-mcp-core>=0.19.70,<1.0.0",
+    # 0.19.91 is the first published floor used by the adapter-owned Install SOP.
+    "dcc-mcp-core>=0.19.91,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +47,7 @@ dev = [
     "twine",
     "packaging>=23.0",
     "pyyaml>=6.0",
+    "jsonschema>=4.23",
 ]
 
 [project.urls]

@@ -6,7 +6,7 @@ description: >-
   errors. Use these typed tools to query and seed geometry before custom scripts.
   For mesh edit operations use houdini-mesh-ops.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.70+"
+compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.19.91+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:

@@ -35,7 +35,7 @@ from packaging.version import Version
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 CORE_PACKAGE = "dcc-mcp-core"
-MIN_CORE_VERSION = "0.19.70"
+MIN_CORE_VERSION = "0.19.91"
 PLATFORMS = ("win64", "linux", "macos")
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 
@@ -354,7 +354,7 @@ def bootstrap_and_start() -> object:
 
     with capture_bootstrap_errors(
         "houdini",
-        min_core_version="0.19.70",
+        min_core_version="0.19.91",
         phase="quickinstall-bootstrap",
         log_dir=str(root / ".dcc-mcp/logs"),
     ):
@@ -424,7 +424,7 @@ try:
         log_dir = str(Path(root) / ".dcc-mcp/logs") if root else None
         with capture_bootstrap_errors(
             "houdini",
-            min_core_version="0.19.70",
+            min_core_version="0.19.91",
             phase="startup-hook",
             log_dir=log_dir,
         ):
