@@ -2,7 +2,7 @@
 name: houdini-asset-sync
 description: Publish and consume immutable USD revisions through the dcc-mcp-core Asset Sync contract.
 license: MIT
-compatibility: "dcc-mcp-core 0.19.91+ with asset_sync, dcc-mcp-houdini 0.33+, Houdini 20.5+"
+compatibility: "dcc-mcp-core 0.20.14+ with asset_sync, dcc-mcp-houdini 0.33+, Houdini 20.5+"
 metadata:
   dcc-mcp:
     dcc: houdini

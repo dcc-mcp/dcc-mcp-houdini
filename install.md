@@ -8,7 +8,7 @@ entry point is `dcc-mcp-houdini`.
 
 - SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
 - Python 3.7 or newer in that Houdini build.
-- `dcc-mcp-core >= 0.19.91,<1.0.0` and the same `dcc-mcp-houdini` version
+- `dcc-mcp-core >= 0.20.14,<1.0.0` and the same `dcc-mcp-houdini` version
   installed in the selected `hython` environment.
 - Write access to the matching user profile. The installer never edits the
   Houdini application directory.
@@ -62,10 +62,10 @@ All lifecycle verbs accept `--json`, `--yes`, `--dry-run`, `--dcc-path`, and
 requiring a Houdini restart. JSON follows Install SOP schema v1 and every
 recovery action is an argv-array `next_steps[].command`.
 
-The Draft 2020-12 contract currently comes from the exact schema proposed by
-`dcc-mcp/dcc-mcp-core#2320`; the adapter validates a bounded fixture until that
-API is part of a released Core package. The public runtime floor above is a
-real published version and does not claim that the pending Core API exists.
+The Draft 2020-12 contract is loaded from the canonical schema resource
+published by `dcc-mcp-core` 0.20.14 or newer. Source and installed-wheel tests
+validate the exact public loader and resource; the adapter carries no fallback
+copy of the schema.
 
 The installer writes a receipted package JSON and owned startup hooks to the
 matching versioned Houdini profile. `123.py` covers an empty session and

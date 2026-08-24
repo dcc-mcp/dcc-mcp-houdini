@@ -120,11 +120,11 @@ def test_preflight_rejects_empty_host_and_unrelated_python(
 @pytest.mark.parametrize(
     "value",
     [
-        "v0.19.91rc1",
-        "garbage0.19.91suffix",
-        " 0.19.91 ",
+        "v0.20.14rc1",
+        "garbage0.20.14suffix",
+        " 0.20.14 ",
         "0.19",
-        "0.19.91.1",
+        "0.20.14.1",
         "0.019.91",
         "9" * 5000 + ".19.91",
     ],
@@ -525,22 +525,32 @@ def test_public_core_floor_is_a_real_released_version() -> None:
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     runbook = (root / "install.md").read_text(encoding="utf-8")
 
-    assert _installer.MIN_CORE_VERSION == "0.19.91"
-    assert "dcc-mcp-core>=0.19.91,<1.0.0" in pyproject.replace(" ", "")
-    assert "dcc-mcp-core >= 0.19.91,<1.0.0" in runbook
+    assert _installer.MIN_CORE_VERSION == "0.20.14"
+    assert "dcc-mcp-core>=0.20.14,<1.0.0" in pyproject.replace(" ", "")
+    assert "dcc-mcp-core >= 0.20.14,<1.0.0" in runbook
 
 
-def test_all_public_lifecycle_results_validate_core_2320_draft_schema(
+def test_all_public_lifecycle_results_validate_published_core_draft_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    schema_path = Path(__file__).parent / "fixtures" / "adapter-install-sop-v1.schema.json"
-    schema_bytes = schema_path.read_bytes()
-    assert (
-        hashlib.sha256(schema_bytes).hexdigest() == "3ca25788439917b4d4c0617230a762f9797756b5b54f45c8c4149f975b90f904"
+    from dcc_mcp_core.deployment import install_sop as core_install_sop
+    from dcc_mcp_core.deployment import load_install_sop_schema
+
+    root = Path(__file__).resolve().parents[1]
+    schema_path = (
+        Path(core_install_sop.__file__).resolve().parent.parent / "schemas" / "adapter-install-sop-v1.schema.json"
     )
-    schema = json.loads(schema_bytes)
+    schema_bytes = schema_path.read_bytes()
+    assert len(schema_bytes) == 4261
+    assert hashlib.sha256(schema_bytes).hexdigest() == (
+        "3ca25788439917b4d4c0617230a762f9797756b5b54f45c8c4149f975b90f904"
+    )
+    schema = load_install_sop_schema()
+    assert schema == json.loads(schema_bytes)
+    assert not (root / "src" / "dcc_mcp_houdini" / "_install_contract.py").exists()
+    assert not (root / "tests" / "fixtures" / "adapter-install-sop-v1.schema.json").exists()
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
 
