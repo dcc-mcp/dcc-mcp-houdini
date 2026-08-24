@@ -10,6 +10,7 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+from skill_error_assertions import skill_error_detail
 from skill_loader import skill_script_import_context
 
 _SCRIPTS = Path(__file__).parents[1] / "src" / "dcc_mcp_houdini" / "skills" / "houdini-hda" / "scripts"
@@ -239,7 +240,7 @@ def test_save_node_as_hda_refuses_existing_library_without_explicit_overwrite(tm
         )
 
     assert result["success"] is False
-    assert "already exists" in result["error"].lower()
+    assert "already exists" in skill_error_detail(result).lower()
     assert hashlib.sha256(hda_path.read_bytes()).hexdigest() == before_sha256
     node.createDigitalAsset.assert_not_called()
 

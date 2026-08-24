@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 import yaml
+from skill_error_assertions import skill_error_detail
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -821,7 +822,7 @@ class TestGsplatRelightingSkills:
             )
 
         assert result["success"] is False
-        assert "resolution parameters" in result["error"]
+        assert "resolution parameters" in skill_error_detail(result)
         raster.destroy.assert_called_once_with()
         sop_import.destroy.assert_called_once_with()
 

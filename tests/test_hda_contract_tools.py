@@ -10,6 +10,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from skill_error_assertions import skill_error_detail
 from skill_loader import skill_script_import_context
 
 _SCRIPTS = Path(__file__).parents[1] / "src" / "dcc_mcp_houdini" / "skills" / "houdini-hda" / "scripts"
@@ -180,7 +181,7 @@ def test_author_hda_interface_rejects_script_fields() -> None:
         )
 
     assert result["success"] is False
-    assert "not allowed" in str(result["error"])
+    assert "not allowed" in skill_error_detail(result)
 
 
 def test_author_hda_interface_accepts_one_sided_numeric_ranges() -> None:
@@ -283,7 +284,7 @@ def test_publish_hda_library_requires_explicit_overwrite(tmp_path: Path) -> None
         )
 
     assert result["success"] is False
-    assert "already exists" in str(result["error"])
+    assert "already exists" in skill_error_detail(result)
     source_definition.updateFromNode.assert_not_called()
     source_definition.copyToHDAFile.assert_not_called()
 

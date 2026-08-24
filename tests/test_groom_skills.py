@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from skill_error_assertions import skill_error_detail
+
 
 def _load_script():
     path = (
@@ -207,7 +209,7 @@ def test_build_short_fur_groom_rejects_surface_topology_mismatch() -> None:
         )
 
     assert result["success"] is False
-    assert "matching rest/deformed skin topology" in result["error"]
+    assert "matching rest/deformed skin topology" in skill_error_detail(result)
     geo.createNode.assert_not_called()
 
 
