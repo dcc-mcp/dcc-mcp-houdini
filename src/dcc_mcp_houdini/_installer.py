@@ -15,6 +15,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
+from urllib.parse import unquote, urlsplit
 
 import dcc_mcp_core
 from dcc_mcp_core import (
@@ -64,8 +65,6 @@ _HOST_EXECUTABLES = frozenset(
         "houdinifx.exe",
         "hindie",
         "hindie.exe",
-        "hython",
-        "hython.exe",
     )
 )
 _HYTHON_EXECUTABLES = frozenset(("hython", "hython.exe"))
@@ -354,8 +353,6 @@ def _resolve_host(value: Optional[str], environ: Mapping[str, str]) -> Path:
                 "houdinifx",
                 "hindie.exe",
                 "hindie",
-                "hython.exe",
-                "hython",
             )
             nested = [candidate / "bin" / name for name in names]
             nested.extend(candidate / name for name in names)
@@ -365,7 +362,7 @@ def _resolve_host(value: Optional[str], environ: Mapping[str, str]) -> Path:
             elif matches:
                 candidate = next((path for path in matches if path.name.lower().startswith("houdini")), matches[0])
         if candidate.name.lower() not in _HOST_EXECUTABLES:
-            raise LifecycleFailure("host", "--dcc-path must select Houdini or Hython exactly.")
+            raise LifecycleFailure("host", "--dcc-path must select an interactive Houdini executable exactly.")
         if candidate.is_file():
             return _require_nonempty_file(candidate, "host", "Selected Houdini executable")
         raise LifecycleFailure("host", "Houdini executable does not exist: {}".format(candidate))
@@ -406,8 +403,6 @@ def _resolve_python(value: Optional[str], host: Path, environ: Mapping[str, str]
         if not _same_path(_host_root(path), _host_root(host)):
             raise LifecycleFailure("python", "Selected Hython belongs to a different Houdini installation.")
         return path, "--python" if value else _PYTHON_ENV
-    if host.name.lower().startswith("hython"):
-        return _require_nonempty_file(host, "python", "Selected Hython interpreter"), "selected_host"
     executable = "hython.exe" if os.name == "nt" else "hython"
     candidate = _host_root(host) / "bin" / executable
     if candidate.is_file():
@@ -419,18 +414,45 @@ def _resolve_python(value: Optional[str], host: Path, environ: Mapping[str, str]
 
 
 def _query_python(path: Path, host: Path) -> dict[str, str]:
-    script = (
-        "import importlib.metadata as md,json,pathlib,sys; import hou; "
-        "import dcc_mcp_core,dcc_mcp_houdini as adapter; "
-        "ad=md.distribution('dcc-mcp-houdini'); co=md.distribution('dcc-mcp-core'); "
-        "print(json.dumps({'python_version':'.'.join(map(str,sys.version_info[:3])),"
-        "'core_version':dcc_mcp_core.__version__,'core_dist_version':co.version,"
-        "'adapter_version':adapter.__version__,'adapter_dist_version':ad.version,"
-        "'host_version':hou.applicationVersionString(),'executable':sys.executable,"
-        "'hou_file':getattr(hou,'__file__',None),'adapter_file':adapter.__file__,"
-        "'core_file':dcc_mcp_core.__file__,'adapter_dist_root':str(ad.locate_file('')),"
-        "'core_dist_root':str(co.locate_file(''))}))"
-    )
+    script = r"""
+try:
+    import importlib.metadata as md
+except ImportError:
+    import importlib_metadata as md
+import json
+import pathlib
+import sys
+import hou
+import dcc_mcp_core
+import dcc_mcp_houdini as adapter
+
+ad = md.distribution("dcc-mcp-houdini")
+co = md.distribution("dcc-mcp-core")
+af = {str(pathlib.Path(ad.locate_file(item)).resolve()): str(item) for item in tuple(ad.files or ())}
+cf = {str(pathlib.Path(co.locate_file(item)).resolve()): str(item) for item in tuple(co.files or ())}
+au = ad.read_text("direct_url.json")
+cu = co.read_text("direct_url.json")
+ap = str(pathlib.Path(adapter.__file__).resolve())
+cp = str(pathlib.Path(dcc_mcp_core.__file__).resolve())
+print(json.dumps({
+    "python_version": ".".join(map(str, sys.version_info[:3])),
+    "core_version": dcc_mcp_core.__version__,
+    "core_dist_version": co.version,
+    "adapter_version": adapter.__version__,
+    "adapter_dist_version": ad.version,
+    "host_version": hou.applicationVersionString(),
+    "executable": sys.executable,
+    "hou_file": getattr(hou, "__file__", None),
+    "adapter_file": ap,
+    "core_file": cp,
+    "adapter_dist_root": str(pathlib.Path(ad.locate_file("")).resolve()),
+    "core_dist_root": str(pathlib.Path(co.locate_file("")).resolve()),
+    "adapter_record": af.get(ap),
+    "core_record": cf.get(cp),
+    "adapter_direct_url": json.loads(au) if au else None,
+    "core_direct_url": json.loads(cu) if cu else None,
+}))
+""".strip()
     completed = _run_bounded_command([str(path), "-c", script], timeout=20.0)
     if not completed.get("success") or completed.get("truncated"):
         details = str(completed.get("stderr") or completed.get("stdout") or "").strip().splitlines()
@@ -471,27 +493,88 @@ def _query_python(path: Path, host: Path) -> dict[str, str]:
         Path(str(result.get("adapter_file") or "")), "python", "Imported Houdini adapter module"
     )
     core_file = _require_nonempty_file(Path(str(result.get("core_file") or "")), "python", "Imported Core module")
-    if not _path_within(hou_file, _host_root(host)):
-        raise LifecycleFailure("python", "Imported HOM module does not belong to the selected Houdini installation.")
-    adapter_dist_value = str(result.get("adapter_dist_root") or "")
-    core_dist_value = str(result.get("core_dist_root") or "")
-    adapter_dist_root = Path(adapter_dist_value)
-    core_dist_root = Path(core_dist_value)
-    if (
-        not adapter_dist_value
-        or not adapter_dist_root.is_dir()
-        or _is_link_or_junction(adapter_dist_root)
-        or not _path_within(adapter_file, adapter_dist_root)
-    ):
-        raise LifecycleFailure("python", "Imported adapter module is shadowed outside its distribution.")
-    if (
-        not core_dist_value
-        or not core_dist_root.is_dir()
-        or _is_link_or_junction(core_dist_root)
-        or not _path_within(core_file, core_dist_root)
-    ):
-        raise LifecycleFailure("python", "Imported Core module is shadowed outside its distribution.")
+    _require_genuine_hom_origin(hou_file, host, python_version)
+    _require_distribution_origin(
+        adapter_file,
+        result.get("adapter_dist_root"),
+        result.get("adapter_record"),
+        result.get("adapter_direct_url"),
+        distribution="adapter",
+        package="dcc_mcp_houdini",
+    )
+    _require_distribution_origin(
+        core_file,
+        result.get("core_dist_root"),
+        result.get("core_record"),
+        result.get("core_direct_url"),
+        distribution="Core",
+        package="dcc_mcp_core",
+    )
     return {str(key): "" if value is None else str(value) for key, value in result.items()}
+
+
+def _editable_distribution_root(value: object) -> Optional[Path]:
+    if not isinstance(value, dict) or not isinstance(value.get("dir_info"), dict):
+        return None
+    url = value.get("url")
+    if value["dir_info"].get("editable") is not True or not isinstance(url, str) or not 0 < len(url) <= 2048:
+        return None
+    parsed = urlsplit(url)
+    if parsed.scheme != "file" or parsed.query or parsed.fragment:
+        return None
+    raw_path = unquote(parsed.path)
+    if re.fullmatch(r"/[A-Za-z]:/.*", raw_path):
+        raw_path = raw_path[1:]
+    try:
+        root = Path(raw_path).resolve()
+    except (OSError, ValueError):
+        return None
+    return root if root.is_dir() and not _is_link_or_junction(root) else None
+
+
+def _require_distribution_origin(
+    module_file: Path,
+    root_value: object,
+    record_value: object,
+    direct_url: object,
+    *,
+    distribution: str,
+    package: str,
+) -> None:
+    root_text = str(root_value or "")
+    root = Path(root_text)
+    if (
+        not root_text
+        or not root.is_dir()
+        or _is_link_or_junction(root)
+        or module_file.name != "__init__.py"
+        or module_file.parent.name != package
+    ):
+        raise LifecycleFailure(
+            "python", "Imported {} module is shadowed outside its distribution.".format(distribution)
+        )
+    if isinstance(record_value, str) and 0 < len(record_value) <= 1024:
+        record_path = Path(record_value)
+        if record_path.is_absolute() or ".." in record_path.parts:
+            raise LifecycleFailure("python", "Imported {} module has invalid RECORD ownership.".format(distribution))
+        if not _same_path(root / record_path, module_file) or not _path_within(module_file, root):
+            raise LifecycleFailure("python", "Imported {} module is not owned by its RECORD.".format(distribution))
+        return
+    editable = _editable_distribution_root(direct_url)
+    candidates = (
+        () if editable is None else (editable / "src" / package / "__init__.py", editable / package / "__init__.py")
+    )
+    if not any(_same_path(module_file, candidate) for candidate in candidates):
+        raise LifecycleFailure(
+            "python", "Imported {} module has no validated RECORD or editable ownership.".format(distribution)
+        )
+
+
+def _require_genuine_hom_origin(hou_file: Path, host: Path, python_version: tuple[int, ...]) -> None:
+    root = _host_root(host)
+    library = root / "houdini" / "python{}.{}libs".format(python_version[0], python_version[1])
+    if hou_file.parent.resolve() != library.resolve() or hou_file.name.lower() not in ("hou.py", "hou.pyd", "hou.so"):
+        raise LifecycleFailure("python", "Imported HOM module is not from the selected Hython library.")
 
 
 def _profile_paths(host_version: str, environ: Mapping[str, str]) -> tuple[Path, Path]:
