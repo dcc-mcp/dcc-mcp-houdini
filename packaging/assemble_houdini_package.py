@@ -221,10 +221,15 @@ def _bootstrap_py() -> str:
 from __future__ import annotations
 
 import importlib
+import importlib.util
+from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import shutil
 import sys
+import time
+import uuid
 import zipfile
 
 
@@ -239,6 +244,45 @@ def _wheel_marker(wheels) -> str:
     return "\n".join(sorted("{}:{}".format(w.name, w.stat().st_size) for w in wheels))
 
 
+@contextmanager
+def _capture_early_bootstrap_errors(root: Path):
+    try:
+        yield
+    except Exception as exc:
+        log_dir = root / ".dcc-mcp/logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "timestamp_epoch": time.time(),
+            "dcc_type": "houdini",
+            "phase": "vendor-bootstrap",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
+        (log_dir / "houdini-bootstrap-early.host-errors.log").write_text(
+            json.dumps(payload, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        raise
+
+
+def _load_install_lifecycle(vendor_dir: Path):
+    helper = vendor_dir / "dcc_mcp_core/install_lifecycle.py"
+    if not helper.is_file():
+        raise RuntimeError(
+            "Existing vendor has no Core install_lifecycle helper; "
+            "close Houdini and reinstall the quickinstall package"
+        )
+    vendor_str = str(vendor_dir)
+    if vendor_str not in sys.path:
+        sys.path.insert(0, vendor_str)
+    importlib.invalidate_caches()
+    module = importlib.import_module("dcc_mcp_core.install_lifecycle")
+    loaded_from = Path(module.__file__).resolve()
+    if vendor_dir.resolve() not in loaded_from.parents:
+        raise RuntimeError("Core install lifecycle resolved outside the managed vendor: {}".format(loaded_from))
+    return module
+
+
 def ensure_vendor(root: Path) -> Path:
     wheels_dir = root / "wheels"
     vendor_dir = root / "vendor"
@@ -249,51 +293,96 @@ def ensure_vendor(root: Path) -> Path:
     desired = _wheel_marker(wheels)
     if marker.is_file() and marker.read_text(encoding="utf-8") == desired:
         return vendor_dir
-    if vendor_dir.exists():
-        shutil.rmtree(str(vendor_dir))
-    vendor_dir.mkdir(parents=True, exist_ok=True)
-    for wheel in wheels:
-        with zipfile.ZipFile(str(wheel), "r") as zf:
-            zf.extractall(str(vendor_dir))
-    marker.write_text(desired, encoding="utf-8")
-    return vendor_dir
+    token = uuid.uuid4().hex
+    stage = root / (".vendor-stage-" + token)
+    backup = root / (".vendor-backup-" + token)
+    try:
+        stage.mkdir(parents=True)
+        for wheel in wheels:
+            with zipfile.ZipFile(str(wheel), "r") as zf:
+                zf.extractall(str(stage))
+        (stage / ".dcc_mcp_houdini_wheels").write_text(desired, encoding="utf-8")
+        if not vendor_dir.exists():
+            os.replace(str(stage), str(vendor_dir))
+            return vendor_dir
+
+        lifecycle = _load_install_lifecycle(vendor_dir)
+        inspection = lifecycle.inspect_install_root(vendor_dir)
+        if inspection.get("requires_restart"):
+            raise RuntimeError(
+                "requires_restart: close Houdini before replacing loaded vendor artifact {}".format(
+                    inspection.get("locked_path")
+                )
+            )
+        os.replace(str(vendor_dir), str(backup))
+        replaced = lifecycle.safe_replace_tree(stage, vendor_dir)
+        if not replaced.get("success"):
+            os.replace(str(backup), str(vendor_dir))
+            raise RuntimeError(replaced.get("message") or "Core staged vendor replace failed")
+        lifecycle.safe_remove_tree(stage)
+        cleanup = lifecycle.safe_remove_tree(backup)
+        if not cleanup.get("success"):
+            print("dcc-mcp-houdini: previous vendor cleanup deferred: {}".format(cleanup))
+        return vendor_dir
+    except Exception:
+        if stage.exists():
+            shutil.rmtree(str(stage), ignore_errors=True)
+        if backup.exists() and not vendor_dir.exists():
+            os.replace(str(backup), str(vendor_dir))
+        raise
 
 
 def bootstrap_and_start() -> object:
     if os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1":
         return None
     root = _package_root()
-    vendor = ensure_vendor(root)
+    with _capture_early_bootstrap_errors(root):
+        vendor = ensure_vendor(root)
     vendor_str = str(vendor)
     if vendor_str not in sys.path:
         sys.path.insert(0, vendor_str)
     importlib.invalidate_caches()
 
-    if os.environ.get("DCC_MCP_HOUDINI_AUTOSTART", "1").strip().lower() in {"0", "false", "no", "off"}:
-        return None
-
-    import dcc_mcp_houdini
-
     try:
-        import hou
-
-        if not hou.isUIAvailable():
-            print(
-                "dcc-mcp-houdini: headless startup hook skipped; "
-                "run `hython -m dcc_mcp_houdini` for the foreground main-thread pump"
-            )
-            return None
+        from dcc_mcp_core import capture_bootstrap_errors
     except ImportError:
-        pass
+        # Preserve compatibility with minimal development wheels. Release
+        # quickinstalls always bundle Core and therefore use real capture.
+        @contextmanager
+        def capture_bootstrap_errors(*_args, **_kwargs):
+            yield
 
-    gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
-    gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
-    registry_dir = os.environ.get("DCC_MCP_REGISTRY_DIR") or None
-    return dcc_mcp_houdini.start_server(
-        gateway_port=gateway_port,
-        registry_dir=registry_dir,
-        wait_ready=False,
-    )
+    with capture_bootstrap_errors(
+        "houdini",
+        min_core_version="0.19.70",
+        phase="quickinstall-bootstrap",
+        log_dir=str(root / ".dcc-mcp/logs"),
+    ):
+        if os.environ.get("DCC_MCP_HOUDINI_AUTOSTART", "1").strip().lower() in {"0", "false", "no", "off"}:
+            return None
+
+        import dcc_mcp_houdini
+
+        try:
+            import hou
+
+            if not hou.isUIAvailable():
+                print(
+                    "dcc-mcp-houdini: headless startup hook skipped; "
+                    "run `hython -m dcc_mcp_houdini` for the foreground main-thread pump"
+                )
+                return None
+        except ImportError:
+            pass
+
+        gateway_raw = os.environ.get("DCC_MCP_GATEWAY_PORT")
+        gateway_port = int(gateway_raw) if gateway_raw and gateway_raw.isdigit() else None
+        registry_dir = os.environ.get("DCC_MCP_REGISTRY_DIR") or None
+        return dcc_mcp_houdini.start_server(
+            gateway_port=gateway_port,
+            registry_dir=registry_dir,
+            wait_ready=False,
+        )
 '''
 
 
@@ -325,7 +414,21 @@ def _load_bootstrap():
 
 
 try:
-    server = _load_bootstrap().bootstrap_and_start()
+    bootstrap = _load_bootstrap()
+    try:
+        from dcc_mcp_core import capture_bootstrap_errors
+    except ImportError:
+        server = bootstrap.bootstrap_and_start()
+    else:
+        root = os.environ.get("DCC_MCP_HOUDINI_ROOT")
+        log_dir = str(Path(root) / ".dcc-mcp/logs") if root else None
+        with capture_bootstrap_errors(
+            "houdini",
+            min_core_version="0.19.70",
+            phase="startup-hook",
+            log_dir=log_dir,
+        ):
+            server = bootstrap.bootstrap_and_start()
     if server is not None:
         print("dcc-mcp-houdini MCP server started: {}".format(server.mcp_url))
 except Exception as exc:

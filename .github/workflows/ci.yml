@@ -72,6 +72,8 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Run unit tests
         run: python -m pytest
+      - name: Install lifecycle smoke
+        run: python -m pytest tests/test_install_lifecycle.py
 
   build:
     name: Build Wheel and Sdist

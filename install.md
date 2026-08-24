@@ -1,93 +1,156 @@
-# dcc-mcp-houdini Agent Install
+# Install dcc-mcp-houdini
 
-Use this page when an agent is asked to install or configure
-`dcc-mcp/dcc-mcp-houdini` for SideFX Houdini.
+This is the adapter-owned runbook for installing, verifying, upgrading, and
+removing DCC-MCP from a versioned SideFX Houdini profile. The machine-readable
+entry point is `dcc-mcp-houdini`.
 
-## Agent Instruction
+## Requirements
 
-If the user says "帮我参考 dcc-mcp/dcc-mcp-houdini/install.md 去安装",
-do this:
+- SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
+- Python 3.7 or newer in that Houdini build.
+- `dcc-mcp-core >= 0.19.70,<1.0.0` and the same `dcc-mcp-houdini` version
+  installed in the selected `hython` environment.
+- Write access to the matching user profile. The installer never edits the
+  Houdini application directory.
 
-1. Read `skills/dcc-mcp-houdini-setup/SKILL.md`.
-2. Run the setup script from the repository root.
-3. Help the user install the Houdini package so `123.py` autostarts the server.
-4. Configure the MCP host with the generated Streamable HTTP JSON.
-5. Run the smoke prompt to prove the connection works.
+Install the wheel into the exact embedded interpreter, not an unrelated Python:
 
-## One Command
-
-From the repository root:
-
-```bash
-python skills/dcc-mcp-houdini-setup/scripts/setup_dcc_mcp_houdini.py
+```text
+<hython> -m ensurepip --upgrade
+<hython> -m pip install --upgrade dcc-mcp-houdini
 ```
 
-For an end-user install from PyPI instead of this checkout:
+## Supported versions
 
-```bash
-python skills/dcc-mcp-houdini-setup/scripts/setup_dcc_mcp_houdini.py --source pypi
-```
+The lifecycle supports Windows, macOS, and Linux. Houdini 18.5+ is the host
+floor; the selected build must provide Python 3.7+. SideFX changes the bundled
+Python minor between Houdini releases, so preflight executes the chosen
+interpreter and, when `hou` is available, checks its reported Houdini version
+against `--dcc-path`. It does not guess a Python compatibility row from a
+different Houdini installation.
 
-If `hython` is not auto-detected:
-
-```bash
-python skills/dcc-mcp-houdini-setup/scripts/setup_dcc_mcp_houdini.py --hython "C:\Program Files\Side Effects Software\Houdini 20.5.487\bin\hython.exe"
-```
-
-`hython` ships with Houdini. Typical locations:
+Typical interpreter locations are:
 
 - Windows: `C:\Program Files\Side Effects Software\Houdini X.Y.ZZZ\bin\hython.exe`
 - macOS: `/Applications/Houdini/HoudiniX.Y.ZZZ/.../Resources/bin/hython`
 - Linux: `/opt/hfsX.Y.ZZZ/bin/hython`
 
-## Houdini Autostart Step
+## Agent quick path
 
-After the script finishes, the user must make the server start with Houdini.
-The recommended path is the bundled Houdini package:
-
-1. Install the Houdini package (quickinstall ZIP `install.ps1` / `install.sh`,
-   or a `dcc_mcp_houdini.json` package file pointing at the package root).
-2. The package adds `scripts/` to `HOUDINI_PATH`; on startup `123.py` extracts
-   bundled wheels into `vendor/` and starts the MCP server unless
-   `DCC_MCP_HOUDINI_AUTOSTART=0`.
-3. Start Houdini and watch the console for the exact OS-assigned instance URL.
-
-Agents should connect through the stable local gateway:
+Planning is the default and performs no writes:
 
 ```text
-http://127.0.0.1:9765/mcp
+dcc-mcp-houdini install --json --dry-run --dcc-path <houdini> --python <hython>
 ```
 
-Multi-instance auto-gateway mode (`DCC_MCP_GATEWAY_PORT=9765`) uses:
+Review the JSON plan, then execute it:
 
 ```text
-http://127.0.0.1:9765/mcp
+dcc-mcp-houdini install --json --yes --dcc-path <houdini> --python <hython>
 ```
 
-You can also start the server manually from an `hython` session:
+All lifecycle verbs accept `--json`, `--yes`, `--dry-run`, `--dcc-path`, and
+`--python`. Stable exits are `0` success/plan, `10` preflight, `20` acquire,
+`30` install or rollback, `40` verify, and `50` a Core-proven loaded-file lock
+requiring a Houdini restart. JSON follows Install SOP schema v1 and every
+recovery action is an argv-array `next_steps[].command`.
 
-```python
-import dcc_mcp_houdini
-server = dcc_mcp_houdini.start_server()
-print(server.mcp_url)  # Exact direct endpoint selected by the OS
+The installer writes a receipted package JSON and owned startup hooks to the
+matching versioned Houdini profile. `123.py` covers an empty session and
+`456.py` covers a loaded scene. Both preserve the existing one-pump,
+main-thread execution contract and capture bootstrap errors before a server is
+available.
+
+## Manual path
+
+The release quickinstall ZIP remains available for offline-style installation.
+Its wheels are immutable release assets, and the bootstrap stages vendor
+updates before Core performs lock-aware replacement.
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -HoudiniVersion 20.5
 ```
 
-## MCP Config
+macOS or Linux:
 
-Use this JSON for Cursor, Claude Desktop, or any MCP Streamable HTTP host:
-
-```json
-{
-  "mcpServers": {
-    "houdini": {
-      "url": "http://127.0.0.1:9765/mcp"
-    }
-  }
-}
+```bash
+chmod +x install.sh
+./install.sh 20.5
 ```
 
-The setup script also writes config snippets and a smoke prompt under:
+Set `DCC_MCP_HOUDINI_PACKAGES_DIR` (or Windows `-PackagesDir`) to select an
+isolated package directory. Keep the extracted quickinstall directory in place
+while its package JSON references it. Quickinstall is a release path; for the
+receipt-driven lifecycle, use the wheel-first commands above.
+
+## Verify
+
+Inspect files without starting Houdini:
 
 ```text
-.dcc-mcp/agent-setup/
+dcc-mcp-houdini status --json --dcc-path <houdini> --python <hython>
 ```
+
+Then start the selected Houdini build and run:
+
+```text
+dcc-mcp-houdini verify --json --dcc-path <houdini> --python <hython>
+```
+
+Verification checks receipt/file digests, the exact target interpreter import,
+captured bootstrap errors, one live Houdini registry entry, and the typed
+read-only `houdini_scripting__get_session_info` main-thread probe. A copied
+package or healthy transport alone is not `directly_usable: true`. Headless
+`hython` uses `hython -m dcc_mcp_houdini`; it does not prove GUI readiness.
+
+## Upgrade
+
+Upgrade the exact interpreter first, close Houdini when native files are
+loaded, review the plan, and execute:
+
+```text
+<hython> -m pip install --upgrade dcc-mcp-houdini
+dcc-mcp-houdini upgrade --json --dry-run --dcc-path <houdini> --python <hython>
+dcc-mcp-houdini upgrade --json --yes --dcc-path <houdini> --python <hython>
+```
+
+The adapter stages a complete replacement, preserves the prior package and
+receipt, and restores them if commit fails.
+
+## Uninstall
+
+Close Houdini, preview receipt-owned removal, then execute it:
+
+```text
+dcc-mcp-houdini uninstall --json --dry-run --dcc-path <houdini> --python <hython>
+dcc-mcp-houdini uninstall --json --yes --dcc-path <houdini> --python <hython>
+<hython> -m pip uninstall dcc-mcp-houdini
+```
+
+Uninstall consumes the receipt and refuses to delete modified or ambiguous
+unreceipted files. A second uninstall is safe. For a legacy quickinstall,
+remove `dcc_mcp_houdini.json` from the matching profile before deleting the
+extracted directory; the legacy installer predates receipts.
+
+## Troubleshooting
+
+- `host` or `host_version`: pass the exact `houdini` executable or application
+  with `--dcc-path`; do not point at another installed version.
+- `python`: pass that build's exact `hython` with `--python`, and install the
+  wheel into that interpreter.
+- `partial`: preserve the reported unreceipted files. Reconcile or remove the
+  legacy package registration explicitly before retrying.
+- `bootstrap`: inspect the reported `.host-errors.log` under the versioned
+  profile `.dcc-mcp/logs` directory; the original exception also remains in
+  the Houdini console.
+- `readiness`: start Houdini, confirm `DCC_MCP_HOUDINI_AUTOSTART` is not `0`,
+  and use `dcc-mcp-cli list` to confirm exactly one live Houdini instance.
+- Exit `50`: close every Houdini process using the reported locked artifact and
+  repeat the exact command. The installer never terminates Houdini itself.
+- Background renders set `DCC_MCP_BACKGROUND_RENDER=1`; their startup hooks
+  intentionally do not launch another adapter.
+
+The catalog target for this runbook is:
+`https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-houdini/main/install.md`.
