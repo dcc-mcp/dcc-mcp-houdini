@@ -131,16 +131,28 @@ def select_core_version(core_version: Optional[str] = None) -> str:
     return resolve_core_version()
 
 
-def _wheel_matches_platform(filename: str, platform: str) -> bool:
-    if not filename.endswith(".whl"):
-        return False
-    if platform == "win64":
-        return "win_amd64" in filename
-    if platform == "linux":
-        return "linux" in filename and ("x86_64" in filename or "aarch64" in filename)
-    if platform == "macos":
-        return "macosx" in filename
+def _platform_tag_matches_target(platform_tag: str, target: str) -> bool:
+    if target == "win64":
+        return platform_tag == "win_amd64"
+    if target == "linux":
+        return (
+            re.fullmatch(
+                r"(?:linux|manylinux(?:_[0-9]+_[0-9]+|[0-9]{4}))_(?:x86_64|aarch64)",
+                platform_tag,
+            )
+            is not None
+        )
+    if target == "macos":
+        return re.fullmatch(r"macosx_[0-9]+_[0-9]+_(?:x86_64|arm64|universal2)", platform_tag) is not None
     return False
+
+
+def _wheel_matches_platform(filename: str, platform: str) -> bool:
+    try:
+        _name, _version, _build, tags = parse_wheel_filename(filename)
+    except InvalidWheelFilename:
+        return False
+    return any(_platform_tag_matches_target(tag.platform, platform) for tag in tags)
 
 
 def _wheel_rank(filename: str) -> tuple:
@@ -259,6 +271,7 @@ import json
 import os
 import platform
 from pathlib import Path
+import re
 import shutil
 import sys
 import time
@@ -284,21 +297,35 @@ def _wheel_tags(wheel: Path):
     return parts[1], parts[2], parts[3]
 
 
+def _normalized_machine(machine: str):
+    return {
+        "amd64": "x86_64",
+        "x86_64": "x86_64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+    }.get(machine.lower())
+
+
 def _platform_tag_matches_runtime(platform_tag: str, platform_name: str, machine: str) -> bool:
-    normalized_machine = machine.lower().replace("amd64", "x86_64").replace("aarch64", "arm64")
-    if platform_name == "darwin":
-        return "macosx" in platform_tag and (
-            "universal2" in platform_tag
-            or (normalized_machine == "x86_64" and "x86_64" in platform_tag)
-            or (normalized_machine == "arm64" and "arm64" in platform_tag)
-        )
-    if platform_name.startswith("win"):
-        return normalized_machine == "x86_64" and "win_amd64" in platform_tag
-    if platform_name.startswith("linux"):
-        return ("linux" in platform_tag or "manylinux" in platform_tag) and (
-            (normalized_machine == "x86_64" and "x86_64" in platform_tag)
-            or (normalized_machine == "arm64" and "aarch64" in platform_tag)
-        )
+    normalized_machine = _normalized_machine(machine)
+    if normalized_machine is None:
+        return False
+    for tag in platform_tag.split("."):
+        if platform_name == "darwin":
+            match = re.fullmatch(r"macosx_[0-9]+_[0-9]+_(x86_64|arm64|universal2)", tag)
+            if match and (match.group(1) == normalized_machine or match.group(1) == "universal2"):
+                return True
+        elif platform_name.startswith("win"):
+            if normalized_machine == "x86_64" and tag == "win_amd64":
+                return True
+        elif platform_name.startswith("linux"):
+            match = re.fullmatch(
+                r"(?:linux|manylinux(?:_[0-9]+_[0-9]+|[0-9]{4}))_(x86_64|aarch64)",
+                tag,
+            )
+            expected_arch = "x86_64" if normalized_machine == "x86_64" else "aarch64"
+            if match and match.group(1) == expected_arch:
+                return True
     return False
 
 
