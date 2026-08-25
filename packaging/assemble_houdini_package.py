@@ -88,7 +88,7 @@ def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
         and v < Version("1.0.0")
         and all(
             any(
-                "abi3" in str(item.get("filename", ""))
+                _wheel_has_abi3(str(item.get("filename", "")))
                 for item in pick_core_wheel_files(data["releases"][str(v)], platform)
             )
             and bool(
@@ -179,20 +179,53 @@ def _wheel_rank(filename: str) -> tuple:
     return (priority, filename)
 
 
+def _interpreter_version(interpreter: str) -> Optional[Tuple[int, int]]:
+    match = re.fullmatch(r"cp(?P<major>[0-9])(?P<minor>[0-9]+)", interpreter)
+    if not match:
+        return None
+    version = int(match.group("major")), int(match.group("minor"))
+    return version if version[0] == 3 and version >= (3, 7) else None
+
+
+def _abi_matches_interpreter(interpreter: str, abi: str) -> bool:
+    version = _interpreter_version(interpreter)
+    if version is None:
+        return False
+    if abi == "abi3":
+        return version >= (3, 8)
+    expected = interpreter + "m" if version <= (3, 7) else interpreter
+    return abi == expected
+
+
+def _wheel_has_supported_native_abi(filename: str) -> bool:
+    try:
+        _name, _version, _build, tags = parse_wheel_filename(filename)
+    except InvalidWheelFilename:
+        return False
+    return bool(tags) and all(tag.abi != "none" and _abi_matches_interpreter(tag.interpreter, tag.abi) for tag in tags)
+
+
+def _wheel_has_abi3(filename: str) -> bool:
+    try:
+        _name, _version, _build, tags = parse_wheel_filename(filename)
+    except InvalidWheelFilename:
+        return False
+    return any(tag.abi == "abi3" for tag in tags)
+
+
 def _wheel_supports_python(filename: str, python_version: Tuple[int, int]) -> bool:
     try:
         _name, _version, _build, tags = parse_wheel_filename(filename)
     except InvalidWheelFilename:
         return False
-    runtime_major, runtime_minor = python_version
+    runtime_major = python_version[0]
     for tag in tags:
-        match = re.fullmatch(r"cp(?P<major>[0-9])(?P<minor>[0-9]+)", tag.interpreter)
-        if not match or tag.abi == "none":
+        tag_version = _interpreter_version(tag.interpreter)
+        if tag_version is None or not _abi_matches_interpreter(tag.interpreter, tag.abi):
             continue
-        tag_version = (int(match.group("major")), int(match.group("minor")))
         if tag.abi == "abi3" and runtime_major == tag_version[0] and python_version >= tag_version:
             return True
-        if python_version == tag_version and tag.abi.startswith(tag.interpreter):
+        if python_version == tag_version:
             return True
     return False
 
@@ -202,7 +235,12 @@ def pick_core_wheel_files(
     platform: str,
     python_version: Optional[Tuple[int, int]] = None,
 ) -> List[Dict[str, object]]:
-    candidates = [f for f in release_files if _wheel_matches_platform(str(f.get("filename", "")), platform)]
+    candidates = [
+        f
+        for f in release_files
+        if _wheel_matches_platform(str(f.get("filename", "")), platform)
+        and _wheel_has_supported_native_abi(str(f.get("filename", "")))
+    ]
     if python_version is not None:
         candidates = [f for f in candidates if _wheel_supports_python(str(f.get("filename", "")), python_version)]
     candidates.sort(key=lambda f: _wheel_rank(str(f["filename"])))
@@ -306,6 +344,57 @@ def _normalized_machine(machine: str):
     }.get(machine.lower())
 
 
+def _interpreter_version(interpreter: str):
+    match = re.fullmatch(r"cp([0-9])([0-9]+)", interpreter)
+    if not match:
+        return None
+    version = int(match.group(1)), int(match.group(2))
+    return version if version[0] == 3 and version >= (3, 7) else None
+
+
+def _abi_matches_interpreter(interpreter: str, abi: str) -> bool:
+    version = _interpreter_version(interpreter)
+    if version is None:
+        return False
+    if abi == "abi3":
+        return version >= (3, 8)
+    expected = interpreter + "m" if version <= (3, 7) else interpreter
+    return abi == expected
+
+
+def _wheel_has_supported_native_abi(wheel: Path) -> bool:
+    tags = _wheel_tags(wheel)
+    if tags is None:
+        return False
+    python_tag, abi_tag, platform_tag = tags
+    interpreters = python_tag.split(".")
+    abis = abi_tag.split(".")
+    return (
+        bool(interpreters and abis)
+        and all(
+            _abi_matches_interpreter(interpreter, abi)
+            for interpreter in interpreters
+            for abi in abis
+        )
+        and _platform_tag_is_supported(platform_tag)
+    )
+
+
+def _platform_tag_is_supported(platform_tag: str) -> bool:
+    tags = platform_tag.split(".")
+    return bool(tags) and all(
+        tag == "win_amd64"
+        or re.fullmatch(r"macosx_[0-9]+_[0-9]+_(x86_64|arm64|universal2)", tag)
+        is not None
+        or re.fullmatch(
+            r"(?:linux|manylinux(?:_[0-9]+_[0-9]+|[0-9]{4}))_(x86_64|aarch64)",
+            tag,
+        )
+        is not None
+        for tag in tags
+    )
+
+
 def _platform_tag_matches_runtime(platform_tag: str, platform_name: str, machine: str) -> bool:
     normalized_machine = _normalized_machine(machine)
     if normalized_machine is None:
@@ -331,20 +420,22 @@ def _platform_tag_matches_runtime(platform_tag: str, platform_name: str, machine
 
 def _native_wheel_supports_runtime(wheel: Path, python_version, platform_name: str, machine: str) -> bool:
     tags = _wheel_tags(wheel)
-    if tags is None:
+    if tags is None or not _wheel_has_supported_native_abi(wheel):
         return False
     python_tag, abi_tag, platform_tag = tags
-    if abi_tag == "none" or not _platform_tag_matches_runtime(platform_tag, platform_name, machine):
+    if not _platform_tag_matches_runtime(platform_tag, platform_name, machine):
         return False
     runtime = tuple(int(part) for part in python_version[:2])
     for interpreter in python_tag.split("."):
-        if not interpreter.startswith("cp") or not interpreter[2:].isdigit() or len(interpreter[2:]) < 2:
+        minimum = _interpreter_version(interpreter)
+        if minimum is None:
             continue
-        encoded = interpreter[2:]
-        minimum = (int(encoded[0]), int(encoded[1:]))
-        if abi_tag == "abi3" and runtime[0] == minimum[0] and runtime >= minimum:
+        abis = abi_tag.split(".")
+        if "abi3" in abis and runtime[0] == minimum[0] and runtime >= minimum:
             return True
-        if runtime == minimum and any(abi.startswith(interpreter) for abi in abi_tag.split(".")):
+        if runtime == minimum and any(
+            _abi_matches_interpreter(interpreter, abi) for abi in abis
+        ):
             return True
     return False
 
@@ -359,19 +450,102 @@ def _require_compatible_core_wheel(
     platform_name = platform_name or sys.platform
     machine = machine or platform.machine()
     core_wheels = [wheel for wheel in wheels if wheel.name.startswith("dcc_mcp_core-")]
+    unsupported = [wheel for wheel in core_wheels if not _wheel_has_supported_native_abi(wheel)]
+    if unsupported:
+        raise RuntimeError(
+            "Bundled Core wheels contain unsupported interpreter/ABI or platform tags: {}".format(
+                ", ".join(wheel.name for wheel in unsupported)
+            )
+        )
     compatible = [
         wheel
         for wheel in core_wheels
         if _native_wheel_supports_runtime(wheel, python_version, platform_name, machine)
     ]
-    if compatible:
+    if len(compatible) == 1:
         return compatible
+    if len(compatible) > 1:
+        raise RuntimeError(
+            "Multiple bundled Core wheels match this runtime; refusing ambiguous extraction: {}".format(
+                ", ".join(wheel.name for wheel in compatible)
+            )
+        )
     label = "macOS" if platform_name == "darwin" else platform_name
     floor = "3.8" if platform_name == "darwin" else "3.7"
     raise RuntimeError(
         "Bundled Core native wheels for {} require Python {} or newer; "
         "no wheel matches Python {}.{}.".format(label, floor, python_version[0], python_version[1])
     )
+
+
+def _validate_wheel_members(wheels) -> None:
+    members = {}
+    for wheel in wheels:
+        with zipfile.ZipFile(str(wheel), "r") as archive:
+            for info in archive.infolist():
+                raw_name = info.filename.replace("\\", "/")
+                trimmed = raw_name.rstrip("/")
+                if not trimmed:
+                    continue
+                parts = trimmed.split("/")
+                if (
+                    raw_name.startswith("/")
+                    or any(part in ("", ".", "..") for part in parts)
+                    or ":" in parts[0]
+                ):
+                    raise RuntimeError(
+                        "unsafe wheel member in {}: {}".format(wheel.name, info.filename)
+                    )
+                normalized = "/".join(parts).casefold()
+                if normalized == ".dcc_mcp_houdini_wheels":
+                    raise RuntimeError(
+                        "wheel member collides with the managed vendor marker: {}".format(
+                            wheel.name
+                        )
+                    )
+                is_directory = info.is_dir() or raw_name.endswith("/")
+                previous = members.get(normalized)
+                if previous is not None and (not is_directory or not previous[1]):
+                    raise RuntimeError(
+                        "overlapping wheel member {} in {} and {}".format(
+                            info.filename,
+                            previous[0],
+                            wheel.name,
+                        )
+                    )
+                if previous is None:
+                    members[normalized] = (wheel.name, is_directory)
+
+    all_members = sorted(members)
+    file_members = sorted(member for member, (_wheel, is_directory) in members.items() if not is_directory)
+    for member in file_members:
+        prefix = member + "/"
+        if any(candidate.startswith(prefix) for candidate in all_members):
+            raise RuntimeError("overlapping wheel member path: {}".format(member))
+
+
+def _select_vendor_wheels(wheels):
+    selected_core_wheels = _require_compatible_core_wheel(wheels)
+    adapter_wheels = [wheel for wheel in wheels if wheel.name.startswith("dcc_mcp_houdini-")]
+    unexpected = [
+        wheel
+        for wheel in wheels
+        if not wheel.name.startswith("dcc_mcp_core-")
+        and not wheel.name.startswith("dcc_mcp_houdini-")
+    ]
+    if unexpected or len(adapter_wheels) != 1:
+        raise RuntimeError(
+            "Invalid vendor wheel set; expected one adapter and selected Core wheel only: {}".format(
+                ", ".join(wheel.name for wheel in wheels)
+            )
+        )
+    if _wheel_tags(adapter_wheels[0]) != ("py3", "none", "any"):
+        raise RuntimeError(
+            "Invalid vendor wheel set; adapter wheel must use py3-none-any: {}".format(
+                adapter_wheels[0].name
+            )
+        )
+    return sorted(adapter_wheels + selected_core_wheels)
 
 
 @contextmanager
@@ -419,9 +593,10 @@ def ensure_vendor(root: Path) -> Path:
     wheels = sorted(wheels_dir.glob("*.whl"))
     if not wheels:
         raise RuntimeError("No bundled wheels found under {}".format(wheels_dir))
-    _require_compatible_core_wheel(wheels)
+    selected_wheels = _select_vendor_wheels(wheels)
+    _validate_wheel_members(selected_wheels)
     marker = vendor_dir / ".dcc_mcp_houdini_wheels"
-    desired = _wheel_marker(wheels)
+    desired = _wheel_marker(selected_wheels)
     if marker.is_file() and marker.read_text(encoding="utf-8") == desired:
         return vendor_dir
     token = uuid.uuid4().hex
@@ -429,7 +604,7 @@ def ensure_vendor(root: Path) -> Path:
     backup = root / (".vendor-backup-" + token)
     try:
         stage.mkdir(parents=True)
-        for wheel in wheels:
+        for wheel in selected_wheels:
             with zipfile.ZipFile(str(wheel), "r") as zf:
                 zf.extractall(str(stage))
         (stage / ".dcc_mcp_houdini_wheels").write_text(desired, encoding="utf-8")
@@ -886,6 +1061,16 @@ def verify_quickinstall_zip(
 
     adapter_versions = sorted({str(_wheel_version(name, "dcc_mcp_houdini")) for name in adapter_wheels})
     core_versions = sorted({str(_wheel_version(name, "dcc_mcp_core")) for name in core_wheels})
+    expected_adapter = "dcc_mcp_houdini-{}-py3-none-any.whl".format(adapter_version)
+    unexpected_wheels = [
+        name
+        for name in wheel_names
+        if not _wheel_version(name, "dcc_mcp_houdini") and not _wheel_version(name, "dcc_mcp_core")
+    ]
+    if adapter_wheels != [expected_adapter] or unexpected_wheels:
+        raise RuntimeError(
+            "Invalid vendor wheel set; expected one adapter and Core wheels only: {}".format(", ".join(wheel_names))
+        )
     if adapter_versions != [adapter_version]:
         raise RuntimeError(
             "Adapter wheel drift: expected dcc-mcp-houdini {}, found {}".format(
@@ -904,7 +1089,12 @@ def verify_quickinstall_zip(
     wrong_platform = [name for name in core_wheels if not _wheel_matches_platform(name, platform)]
     if wrong_platform:
         raise RuntimeError("Core wheels do not match platform {}: {}".format(platform, ", ".join(wrong_platform)))
-    if not any("abi3" in name for name in core_wheels):
+    unsupported_abi = [name for name in core_wheels if not _wheel_has_supported_native_abi(name)]
+    if unsupported_abi:
+        raise RuntimeError(
+            "Core wheels contain unsupported interpreter/ABI tags: {}".format(", ".join(unsupported_abi))
+        )
+    if not any(_wheel_has_abi3(name) for name in core_wheels):
         raise RuntimeError(
             "Core wheels for {} require an abi3 build for supported Houdini Python versions: {}".format(
                 platform,
