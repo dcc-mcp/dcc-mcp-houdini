@@ -297,14 +297,17 @@ def _package_json_template() -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
-def _bootstrap_py() -> str:
-    return r'''"""Bootstrap bundled dcc-mcp-houdini wheels inside Houdini."""
+def _bootstrap_py(expected_adapter_version: Optional[str] = None) -> str:
+    if expected_adapter_version is None:
+        expected_adapter_version = get_package_version()
+    source = r'''"""Bootstrap bundled dcc-mcp-houdini wheels inside Houdini."""
 
 from __future__ import annotations
 
 import importlib
 import importlib.util
 from contextlib import contextmanager
+from email.parser import Parser
 import json
 import os
 import platform
@@ -315,6 +318,9 @@ import sys
 import time
 import uuid
 import zipfile
+
+_EXPECTED_ADAPTER_VERSION = __DCC_MCP_EXPECTED_ADAPTER_VERSION__
+_EXPECTED_ADAPTER_DISTRIBUTION = "dcc_mcp_houdini"
 
 
 def _package_root() -> Path:
@@ -478,6 +484,22 @@ def _require_compatible_core_wheel(
     )
 
 
+def _windows_component_key(component: str) -> str:
+    sanitized = re.sub(r'[<>:"|?*]', "_", component).rstrip(" .")
+    if not sanitized:
+        raise RuntimeError("unsafe wheel member component")
+    device_stem = sanitized.split(".", 1)[0].rstrip(" .").casefold()
+    if device_stem in {"con", "prn", "aux", "nul"} or re.fullmatch(
+        r"(?:com|lpt)[1-9]", device_stem
+    ):
+        raise RuntimeError("unsafe wheel member component")
+    return sanitized.casefold()
+
+
+def _portable_member_key(parts) -> str:
+    return "/".join(_windows_component_key(part) for part in parts)
+
+
 def _validate_wheel_members(wheels) -> None:
     members = {}
     for wheel in wheels:
@@ -496,7 +518,12 @@ def _validate_wheel_members(wheels) -> None:
                     raise RuntimeError(
                         "unsafe wheel member in {}: {}".format(wheel.name, info.filename)
                     )
-                normalized = "/".join(parts).casefold()
+                try:
+                    normalized = _portable_member_key(parts)
+                except RuntimeError as exc:
+                    raise RuntimeError(
+                        "unsafe wheel member in {}: {}".format(wheel.name, info.filename)
+                    ) from exc
                 if normalized == ".dcc_mcp_houdini_wheels":
                     raise RuntimeError(
                         "wheel member collides with the managed vendor marker: {}".format(
@@ -524,27 +551,78 @@ def _validate_wheel_members(wheels) -> None:
             raise RuntimeError("overlapping wheel member path: {}".format(member))
 
 
+def _validate_adapter_wheel_identity(wheel: Path) -> None:
+    expected_name = "{}-{}-py3-none-any.whl".format(
+        _EXPECTED_ADAPTER_DISTRIBUTION,
+        _EXPECTED_ADAPTER_VERSION,
+    )
+    expected_dist_info = "{}-{}.dist-info".format(
+        _EXPECTED_ADAPTER_DISTRIBUTION,
+        _EXPECTED_ADAPTER_VERSION,
+    )
+    if wheel.name != expected_name:
+        raise RuntimeError(
+            "Invalid vendor wheel set; adapter wheel identity does not match the packaged adapter"
+        )
+    with zipfile.ZipFile(str(wheel), "r") as archive:
+        infos = archive.infolist()
+        dist_infos = sorted(
+            {
+                info.filename.replace("\\", "/").strip("/").split("/", 1)[0]
+                for info in infos
+                if ".dist-info/" in info.filename.replace("\\", "/")
+            }
+        )
+        metadata_infos = [
+            info for info in infos if info.filename == expected_dist_info + "/METADATA"
+        ]
+        try:
+            metadata = (
+                Parser().parsestr(archive.read(metadata_infos[0]).decode("utf-8"))
+                if len(metadata_infos) == 1
+                else None
+            )
+        except (KeyError, UnicodeDecodeError):
+            metadata = None
+    normalized_metadata_name = re.sub(
+        r"[-_.]+",
+        "_",
+        metadata.get("Name", "") if metadata is not None else "",
+    ).casefold()
+    metadata_version = metadata.get("Version") if metadata is not None else None
+    if (
+        dist_infos != [expected_dist_info]
+        or normalized_metadata_name != _EXPECTED_ADAPTER_DISTRIBUTION
+        or metadata_version != _EXPECTED_ADAPTER_VERSION
+    ):
+        raise RuntimeError(
+            "Invalid vendor wheel set; adapter wheel identity does not match its dist-info"
+        )
+
+
 def _select_vendor_wheels(wheels):
     selected_core_wheels = _require_compatible_core_wheel(wheels)
-    adapter_wheels = [wheel for wheel in wheels if wheel.name.startswith("dcc_mcp_houdini-")]
+    expected_adapter_name = "{}-{}-py3-none-any.whl".format(
+        _EXPECTED_ADAPTER_DISTRIBUTION,
+        _EXPECTED_ADAPTER_VERSION,
+    )
+    adapter_candidates = [
+        wheel for wheel in wheels if wheel.name.startswith(_EXPECTED_ADAPTER_DISTRIBUTION)
+    ]
+    adapter_wheels = [wheel for wheel in adapter_candidates if wheel.name == expected_adapter_name]
     unexpected = [
         wheel
         for wheel in wheels
         if not wheel.name.startswith("dcc_mcp_core-")
-        and not wheel.name.startswith("dcc_mcp_houdini-")
+        and wheel not in adapter_wheels
     ]
-    if unexpected or len(adapter_wheels) != 1:
+    if unexpected or len(adapter_candidates) != 1 or len(adapter_wheels) != 1:
         raise RuntimeError(
-            "Invalid vendor wheel set; expected one adapter and selected Core wheel only: {}".format(
+            "Invalid vendor wheel set; adapter wheel identity must match the packaged adapter: {}".format(
                 ", ".join(wheel.name for wheel in wheels)
             )
         )
-    if _wheel_tags(adapter_wheels[0]) != ("py3", "none", "any"):
-        raise RuntimeError(
-            "Invalid vendor wheel set; adapter wheel must use py3-none-any: {}".format(
-                adapter_wheels[0].name
-            )
-        )
+    _validate_adapter_wheel_identity(adapter_wheels[0])
     return sorted(adapter_wheels + selected_core_wheels)
 
 
@@ -690,6 +768,10 @@ def bootstrap_and_start() -> object:
             wait_ready=False,
         )
 '''
+    return source.replace(
+        "__DCC_MCP_EXPECTED_ADAPTER_VERSION__",
+        repr(str(expected_adapter_version)),
+    )
 
 
 def _startup_py() -> str:
@@ -1165,7 +1247,10 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path, core_version: Opti
             shutil.copy2(str(core_wheel), str(wheels_dir / core_wheel.name))
 
         (packages_dir / "dcc_mcp_houdini.json.template").write_text(_package_json_template(), encoding="utf-8")
-        (scripts_dir / "dcc_mcp_houdini_bootstrap.py").write_text(_bootstrap_py(), encoding="utf-8")
+        (scripts_dir / "dcc_mcp_houdini_bootstrap.py").write_text(
+            _bootstrap_py(version),
+            encoding="utf-8",
+        )
         startup = _startup_py()
         for hook in ("123.py", "456.py"):
             (scripts_dir / hook).write_text(startup, encoding="utf-8")

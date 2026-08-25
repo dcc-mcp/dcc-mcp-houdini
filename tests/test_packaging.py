@@ -51,6 +51,13 @@ def _runtime_core_wheel_name() -> str:
     )
 
 
+def _write_adapter_dist_info(archive: zipfile.ZipFile, version: str) -> None:
+    archive.writestr(
+        "dcc_mcp_houdini-{}.dist-info/METADATA".format(version),
+        "Name: dcc-mcp-houdini\nVersion: {}\n".format(version),
+    )
+
+
 def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hook: bool = True) -> None:
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
@@ -124,6 +131,7 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
     assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
+    assert "_EXPECTED_ADAPTER_VERSION = {!r}".format(version) in bootstrap
     assert "_require_compatible_core_wheel(wheels)" in bootstrap
     assert "not hou.isUIAvailable()" in bootstrap
     assert "hython -m dcc_mcp_houdini" in bootstrap
@@ -474,6 +482,7 @@ def test_bootstrap_refreshes_cached_missing_vendor_path(tmp_path: Path) -> None:
     wheels.mkdir(parents=True)
     scripts.mkdir()
     with zipfile.ZipFile(wheels / "dcc_mcp_houdini-1.0.0-py3-none-any.whl", "w") as zf:
+        _write_adapter_dist_info(zf, "1.0.0")
         zf.writestr(
             "dcc_mcp_houdini/__init__.py",
             "def start_server(**kwargs):\n    return kwargs\n",
@@ -481,7 +490,7 @@ def test_bootstrap_refreshes_cached_missing_vendor_path(tmp_path: Path) -> None:
     with zipfile.ZipFile(wheels / _runtime_core_wheel_name(), "w"):
         pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
-    bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    bootstrap.write_text(pkg._bootstrap_py("1.0.0"), encoding="utf-8")
 
     code = r"""
 import importlib.util
@@ -594,11 +603,12 @@ def safe_remove_tree(path):
         encoding="utf-8",
     )
     with zipfile.ZipFile(wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl", "w") as zf:
+        _write_adapter_dist_info(zf, "2.0.0")
         zf.writestr("dcc_mcp_houdini/new.txt", "replacement")
     with zipfile.ZipFile(wheels / _runtime_core_wheel_name(), "w"):
         pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
-    bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    bootstrap.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
 
     code = r"""
 import importlib.util
@@ -733,7 +743,7 @@ def test_generated_bootstrap_extracts_only_runtime_selected_core_wheel(
 ) -> None:
     pkg = _load_packaging_script()
     bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
-    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
     spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -745,6 +755,7 @@ def test_generated_bootstrap_extracts_only_runtime_selected_core_wheel(
     compatible = wheels / ("dcc_mcp_core-0.20.14-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl")
     incompatible = wheels / ("dcc_mcp_core-0.20.14-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl")
     with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
         archive.writestr("dcc_mcp_houdini/adapter.txt", "adapter")
     with zipfile.ZipFile(compatible, "w") as archive:
         archive.writestr("dcc_mcp_core/selected-x86_64.txt", "selected")
@@ -768,7 +779,7 @@ def test_generated_bootstrap_rejects_overlapping_wheel_members_before_extraction
 ) -> None:
     pkg = _load_packaging_script()
     bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
-    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
     spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -779,6 +790,7 @@ def test_generated_bootstrap_rejects_overlapping_wheel_members_before_extraction
     adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
     core = wheels / _runtime_core_wheel_name()
     with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
         archive.writestr("shared/owned.txt", "adapter")
     with zipfile.ZipFile(core, "w") as archive:
         archive.writestr("shared/owned.txt", "core")
@@ -797,7 +809,7 @@ def test_generated_bootstrap_rejects_unsafe_wheel_members_before_extraction(
 ) -> None:
     pkg = _load_packaging_script()
     bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
-    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
     spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -808,6 +820,7 @@ def test_generated_bootstrap_rejects_unsafe_wheel_members_before_extraction(
     adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
     core = wheels / _runtime_core_wheel_name()
     with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
         archive.writestr(member, "must-not-extract")
     with zipfile.ZipFile(core, "w"):
         pass
@@ -916,6 +929,134 @@ def test_generated_bootstrap_rejects_unselected_or_duplicate_adapter_wheels(
 
     assert not (root / "vendor").exists()
     assert not list(root.glob(".vendor-stage-*"))
+
+
+@pytest.mark.parametrize(
+    ("adapter_wheel_name", "dist_info_name", "metadata"),
+    [
+        (
+            "dcc_mcp_houdini-evil-2.0.0-py3-none-any.whl",
+            "dcc_mcp_houdini-2.0.0.dist-info",
+            "Name: dcc-mcp-houdini\nVersion: 2.0.0\n",
+        ),
+        (
+            "dcc_mcp_houdini-9.9.9-py3-none-any.whl",
+            "dcc_mcp_houdini-9.9.9.dist-info",
+            "Name: dcc-mcp-houdini\nVersion: 9.9.9\n",
+        ),
+        (
+            "dcc_mcp_houdini-2.0.0-py3-none-any.whl",
+            "dcc_mcp_houdini-9.9.9.dist-info",
+            "Name: dcc-mcp-houdini\nVersion: 9.9.9\n",
+        ),
+        (
+            "dcc_mcp_houdini-2.0.0-py3-none-any.whl",
+            "dcc_mcp_houdini-2.0.0.dist-info",
+            "Name: dcc-mcp-houdini-evil\nVersion: 9.9.9\n",
+        ),
+    ],
+)
+def test_generated_bootstrap_binds_exact_adapter_wheel_identity_before_extraction(
+    tmp_path: Path,
+    adapter_wheel_name: str,
+    dist_info_name: str,
+    metadata: str,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / adapter_wheel_name
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        archive.writestr("dcc_mcp_houdini/must-not-extract.txt", "wrong adapter identity")
+        archive.writestr(dist_info_name + "/METADATA", metadata)
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="adapter wheel identity"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        ("pkg/name:alias.py", "pkg/name_alias.py"),
+        ("pkg/config./payload.py", "pkg/config/payload.py"),
+        ("pkg/cache /payload.py", "pkg/cache/payload.py"),
+        ("pkg/name:alias", "pkg/name_alias/child.py"),
+    ],
+)
+def test_generated_bootstrap_rejects_windows_normalized_member_collisions_before_extraction(
+    tmp_path: Path,
+    members: tuple[str, str],
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
+        for index, member in enumerate(members):
+            archive.writestr(member, "collision-{}".format(index))
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="overlapping wheel member"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
+@pytest.mark.parametrize("member", ["pkg/CON.txt", "pkg/aux ", "pkg/LPT9.py"])
+def test_generated_bootstrap_rejects_windows_device_members_before_extraction(
+    tmp_path: Path,
+    member: str,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
+        archive.writestr(member, "reserved")
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="unsafe wheel member"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
 
 
 @pytest.mark.parametrize(
