@@ -485,6 +485,8 @@ def _require_compatible_core_wheel(
 
 
 def _windows_component_key(component: str) -> str:
+    if any(ord(character) < 32 for character in component):
+        raise RuntimeError("unsafe wheel member component")
     sanitized = re.sub(r'[<>:"|?*]', "_", component).rstrip(" .")
     if not sanitized:
         raise RuntimeError("unsafe wheel member component")
@@ -566,34 +568,57 @@ def _validate_adapter_wheel_identity(wheel: Path) -> None:
         )
     with zipfile.ZipFile(str(wheel), "r") as archive:
         infos = archive.infolist()
-        dist_infos = sorted(
-            {
-                info.filename.replace("\\", "/").strip("/").split("/", 1)[0]
-                for info in infos
-                if ".dist-info/" in info.filename.replace("\\", "/")
-            }
-        )
-        metadata_infos = [
-            info for info in infos if info.filename == expected_dist_info + "/METADATA"
-        ]
+        expected_dist_info_key = _portable_member_key([expected_dist_info])
+        expected_metadata = expected_dist_info + "/METADATA"
+        expected_metadata_key = _portable_member_key([expected_dist_info, "METADATA"])
+        dist_info_roots = set()
+        dist_info_root_keys = set()
+        metadata_infos = []
+        for info in infos:
+            raw_name = info.filename.replace("\\", "/").strip("/")
+            if not raw_name:
+                continue
+            parts = raw_name.split("/")
+            try:
+                root_key = _portable_member_key([parts[0]])
+                member_key = _portable_member_key(parts)
+            except RuntimeError:
+                continue
+            if root_key.endswith(".dist-info"):
+                dist_info_roots.add(parts[0])
+                dist_info_root_keys.add(root_key)
+            if member_key == expected_metadata_key:
+                metadata_infos.append(info)
         try:
             metadata = (
                 Parser().parsestr(archive.read(metadata_infos[0]).decode("utf-8"))
-                if len(metadata_infos) == 1
+                if (
+                    len(metadata_infos) == 1
+                    and metadata_infos[0].filename.replace("\\", "/").strip("/")
+                    == expected_metadata
+                )
                 else None
             )
         except (KeyError, UnicodeDecodeError):
             metadata = None
+    metadata_names = metadata.get_all("Name", []) if metadata is not None else []
+    metadata_versions = metadata.get_all("Version", []) if metadata is not None else []
+    metadata_name = metadata_names[0].strip() if len(metadata_names) == 1 else ""
+    metadata_version = metadata_versions[0].strip() if len(metadata_versions) == 1 else ""
     normalized_metadata_name = re.sub(
         r"[-_.]+",
         "_",
-        metadata.get("Name", "") if metadata is not None else "",
+        metadata_name,
     ).casefold()
-    metadata_version = metadata.get("Version") if metadata is not None else None
     if (
-        dist_infos != [expected_dist_info]
+        dist_info_roots != {expected_dist_info}
+        or dist_info_root_keys != {expected_dist_info_key}
         or normalized_metadata_name != _EXPECTED_ADAPTER_DISTRIBUTION
         or metadata_version != _EXPECTED_ADAPTER_VERSION
+        or re.fullmatch(r"[A-Za-z0-9]+(?:[-_.]+[A-Za-z0-9]+)*", metadata_name)
+        is None
+        or re.fullmatch(r"[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9._+-]*)", metadata_version)
+        is None
     ):
         raise RuntimeError(
             "Invalid vendor wheel set; adapter wheel identity does not match its dist-info"

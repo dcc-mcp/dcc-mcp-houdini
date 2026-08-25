@@ -988,6 +988,76 @@ def test_generated_bootstrap_binds_exact_adapter_wheel_identity_before_extractio
     assert not list(root.glob(".vendor-backup-*"))
 
 
+def test_generated_bootstrap_rejects_every_additional_dist_info_root_before_extraction(
+    tmp_path: Path,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
+        archive.writestr(
+            "evil_payload-9.9.9.DIST-INFO/METADATA",
+            "Name: evil-payload\nVersion: 9.9.9\n",
+        )
+        archive.writestr("dcc_mcp_houdini/must-not-extract.txt", "unexpected dist-info")
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="adapter wheel identity"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "Name: dcc-mcp-houdini\nName: evil-payload\nVersion: 2.0.0\n",
+        "Name: dcc-mcp-houdini\nVersion: 2.0.0\nVersion: 9.9.9\n",
+    ],
+)
+def test_generated_bootstrap_rejects_duplicate_identity_headers_before_extraction(
+    tmp_path: Path,
+    metadata: str,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        archive.writestr("dcc_mcp_houdini-2.0.0.dist-info/METADATA", metadata)
+        archive.writestr("dcc_mcp_houdini/must-not-extract.txt", "duplicate metadata")
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="adapter wheel identity"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
 @pytest.mark.parametrize(
     "members",
     [
@@ -1048,6 +1118,37 @@ def test_generated_bootstrap_rejects_windows_device_members_before_extraction(
     with zipfile.ZipFile(adapter, "w") as archive:
         _write_adapter_dist_info(archive, "2.0.0")
         archive.writestr(member, "reserved")
+    with zipfile.ZipFile(core, "w"):
+        pass
+
+    with pytest.raises(RuntimeError, match="unsafe wheel member"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+    assert not list(root.glob(".vendor-backup-*"))
+
+
+@pytest.mark.parametrize("member", ["pkg/bad\u0001.py", "pkg/bad\u001f.py"])
+def test_generated_bootstrap_rejects_control_character_members_before_staging(
+    tmp_path: Path,
+    member: str,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py("2.0.0"), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    adapter = wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl"
+    core = wheels / _runtime_core_wheel_name()
+    with zipfile.ZipFile(adapter, "w") as archive:
+        _write_adapter_dist_info(archive, "2.0.0")
+        archive.writestr(member, "control character")
     with zipfile.ZipFile(core, "w"):
         pass
 
