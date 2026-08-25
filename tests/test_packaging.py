@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import platform as runtime_platform
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -35,6 +36,19 @@ def _write_windows_installer_fixture(pkg, tmp_path: Path) -> Path:
 
 def _windows_powershell() -> Path:
     return Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+
+
+def _runtime_core_wheel_name() -> str:
+    machine = runtime_platform.machine().lower()
+    if sys.platform == "win32":
+        return "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl"
+    if sys.platform == "darwin":
+        return "dcc_mcp_core-0.20.14-cp38-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl"
+    architecture = "aarch64" if machine in {"aarch64", "arm64"} else "x86_64"
+    return "dcc_mcp_core-0.20.14-cp38-abi3-manylinux_2_17_{}.manylinux2014_{}.whl".format(
+        architecture,
+        architecture,
+    )
 
 
 def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hook: bool = True) -> None:
@@ -421,7 +435,7 @@ def test_bootstrap_refreshes_cached_missing_vendor_path(tmp_path: Path) -> None:
             "dcc_mcp_houdini/__init__.py",
             "def start_server(**kwargs):\n    return kwargs\n",
         )
-    with zipfile.ZipFile(wheels / "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl", "w"):
+    with zipfile.ZipFile(wheels / _runtime_core_wheel_name(), "w"):
         pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
     bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
@@ -538,7 +552,7 @@ def safe_remove_tree(path):
     )
     with zipfile.ZipFile(wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl", "w") as zf:
         zf.writestr("dcc_mcp_houdini/new.txt", "replacement")
-    with zipfile.ZipFile(wheels / "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl", "w"):
+    with zipfile.ZipFile(wheels / _runtime_core_wheel_name(), "w"):
         pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
     bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
