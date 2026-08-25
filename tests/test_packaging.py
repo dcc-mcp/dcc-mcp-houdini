@@ -655,6 +655,86 @@ def test_generated_bootstrap_fails_closed_before_extracting_unsupported_core_tag
     ) == [mac_wheel]
 
 
+@pytest.mark.parametrize("machine", ["ppc64", "riscv64"])
+def test_generated_bootstrap_rejects_universal2_on_unsupported_macos_machine_before_extraction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    machine: str,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = tmp_path / "quickinstall"
+    wheels = root / "wheels"
+    wheels.mkdir(parents=True)
+    wheel = wheels / "dcc_mcp_core-0.20.14-cp38-abi3-macosx_10_12_universal2.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("must-not-extract.txt", "unsupported")
+    monkeypatch.setattr(module.sys, "platform", "darwin")
+    monkeypatch.setattr(module.platform, "machine", lambda: machine)
+
+    with pytest.raises(RuntimeError, match=r"no wheel matches Python"):
+        module.ensure_vendor(root)
+
+    assert not (root / "vendor").exists()
+    assert not list(root.glob(".vendor-stage-*"))
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "machine", "platform_tag", "expected"),
+    [
+        ("darwin", "x86_64", "macosx_10_12_universal2", True),
+        ("darwin", "arm64", "macosx_11_0_universal2", True),
+        ("darwin", "ppc64", "macosx_10_12_universal2", False),
+        ("darwin", "riscv64", "macosx_10_12_universal2", False),
+        ("darwin", "arm64", "notmacosx_11_0_universal2", False),
+        ("darwin", "arm64", "macosx_broken_universal2", False),
+        ("win32", "AMD64", "win_amd64", True),
+        ("win32", "AMD64", "notwin_amd64", False),
+        ("linux", "x86_64", "manylinux_2_17_x86_64", True),
+        ("linux", "aarch64", "manylinux2014_aarch64", True),
+        ("linux", "x86_64", "linux_x86_64", True),
+        ("linux", "x86_64", "notmanylinux_2_17_x86_64", False),
+        ("linux", "aarch64", "manylinux_broken_aarch64", False),
+    ],
+)
+def test_generated_bootstrap_strictly_parses_platform_and_machine_tags(
+    tmp_path: Path,
+    platform_name: str,
+    machine: str,
+    platform_tag: str,
+    expected: bool,
+) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    wheel = tmp_path / "dcc_mcp_core-0.20.14-cp38-abi3-{}.whl".format(platform_tag)
+
+    assert module._native_wheel_supports_runtime(wheel, (3, 8), platform_name, machine) is expected
+
+
+@pytest.mark.parametrize(
+    ("target", "filename"),
+    [
+        ("macos", "dcc_mcp_core-0.20.14-cp38-abi3-notmacosx_11_0_universal2.whl"),
+        ("win64", "dcc_mcp_core-0.20.14-cp38-abi3-notwin_amd64.whl"),
+        ("linux", "dcc_mcp_core-0.20.14-cp38-abi3-notmanylinux_2_17_x86_64.whl"),
+    ],
+)
+def test_package_assembly_rejects_platform_substring_counterexamples(target: str, filename: str) -> None:
+    pkg = _load_packaging_script()
+
+    assert pkg.pick_core_wheel_files([{"filename": filename}], target, python_version=(3, 8)) == []
+
+
 def test_resolve_core_version_skips_release_without_cross_platform_abi3(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
