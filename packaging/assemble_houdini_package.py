@@ -28,8 +28,9 @@ import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
+from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import Version
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +38,7 @@ PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 CORE_PACKAGE = "dcc-mcp-core"
 MIN_CORE_VERSION = "0.20.14"
 PLATFORMS = ("win64", "linux", "macos")
+QUICKINSTALL_PYTHON_FLOORS = {"win64": (3, 7), "linux": (3, 7), "macos": (3, 8)}
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 
 
@@ -87,8 +89,14 @@ def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
         and all(
             any(
                 "abi3" in str(item.get("filename", ""))
-                and _wheel_matches_platform(str(item.get("filename", "")), platform)
-                for item in data["releases"][str(v)]
+                for item in pick_core_wheel_files(data["releases"][str(v)], platform)
+            )
+            and bool(
+                pick_core_wheel_files(
+                    data["releases"][str(v)],
+                    platform,
+                    python_version=QUICKINSTALL_PYTHON_FLOORS[platform],
+                )
             )
             for platform in PLATFORMS
         )
@@ -159,8 +167,32 @@ def _wheel_rank(filename: str) -> tuple:
     return (priority, filename)
 
 
-def pick_core_wheel_files(release_files: List[Dict[str, object]], platform: str) -> List[Dict[str, object]]:
+def _wheel_supports_python(filename: str, python_version: Tuple[int, int]) -> bool:
+    try:
+        _name, _version, _build, tags = parse_wheel_filename(filename)
+    except InvalidWheelFilename:
+        return False
+    runtime_major, runtime_minor = python_version
+    for tag in tags:
+        match = re.fullmatch(r"cp(?P<major>[0-9])(?P<minor>[0-9]+)", tag.interpreter)
+        if not match or tag.abi == "none":
+            continue
+        tag_version = (int(match.group("major")), int(match.group("minor")))
+        if tag.abi == "abi3" and runtime_major == tag_version[0] and python_version >= tag_version:
+            return True
+        if python_version == tag_version and tag.abi.startswith(tag.interpreter):
+            return True
+    return False
+
+
+def pick_core_wheel_files(
+    release_files: List[Dict[str, object]],
+    platform: str,
+    python_version: Optional[Tuple[int, int]] = None,
+) -> List[Dict[str, object]]:
     candidates = [f for f in release_files if _wheel_matches_platform(str(f.get("filename", "")), platform)]
+    if python_version is not None:
+        candidates = [f for f in candidates if _wheel_supports_python(str(f.get("filename", "")), python_version)]
     candidates.sort(key=lambda f: _wheel_rank(str(f["filename"])))
     return candidates
 
@@ -225,6 +257,7 @@ import importlib.util
 from contextlib import contextmanager
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import sys
@@ -242,6 +275,76 @@ def _package_root() -> Path:
 
 def _wheel_marker(wheels) -> str:
     return "\n".join(sorted("{}:{}".format(w.name, w.stat().st_size) for w in wheels))
+
+
+def _wheel_tags(wheel: Path):
+    parts = wheel.name[:-4].rsplit("-", 3) if wheel.name.endswith(".whl") else []
+    if len(parts) != 4:
+        return None
+    return parts[1], parts[2], parts[3]
+
+
+def _platform_tag_matches_runtime(platform_tag: str, platform_name: str, machine: str) -> bool:
+    normalized_machine = machine.lower().replace("amd64", "x86_64").replace("aarch64", "arm64")
+    if platform_name == "darwin":
+        return "macosx" in platform_tag and (
+            "universal2" in platform_tag
+            or (normalized_machine == "x86_64" and "x86_64" in platform_tag)
+            or (normalized_machine == "arm64" and "arm64" in platform_tag)
+        )
+    if platform_name.startswith("win"):
+        return normalized_machine == "x86_64" and "win_amd64" in platform_tag
+    if platform_name.startswith("linux"):
+        return ("linux" in platform_tag or "manylinux" in platform_tag) and (
+            (normalized_machine == "x86_64" and "x86_64" in platform_tag)
+            or (normalized_machine == "arm64" and "aarch64" in platform_tag)
+        )
+    return False
+
+
+def _native_wheel_supports_runtime(wheel: Path, python_version, platform_name: str, machine: str) -> bool:
+    tags = _wheel_tags(wheel)
+    if tags is None:
+        return False
+    python_tag, abi_tag, platform_tag = tags
+    if abi_tag == "none" or not _platform_tag_matches_runtime(platform_tag, platform_name, machine):
+        return False
+    runtime = tuple(int(part) for part in python_version[:2])
+    for interpreter in python_tag.split("."):
+        if not interpreter.startswith("cp") or not interpreter[2:].isdigit() or len(interpreter[2:]) < 2:
+            continue
+        encoded = interpreter[2:]
+        minimum = (int(encoded[0]), int(encoded[1:]))
+        if abi_tag == "abi3" and runtime[0] == minimum[0] and runtime >= minimum:
+            return True
+        if runtime == minimum and any(abi.startswith(interpreter) for abi in abi_tag.split(".")):
+            return True
+    return False
+
+
+def _require_compatible_core_wheel(
+    wheels,
+    python_version=None,
+    platform_name=None,
+    machine=None,
+):
+    python_version = tuple(python_version or sys.version_info[:2])
+    platform_name = platform_name or sys.platform
+    machine = machine or platform.machine()
+    core_wheels = [wheel for wheel in wheels if wheel.name.startswith("dcc_mcp_core-")]
+    compatible = [
+        wheel
+        for wheel in core_wheels
+        if _native_wheel_supports_runtime(wheel, python_version, platform_name, machine)
+    ]
+    if compatible:
+        return compatible
+    label = "macOS" if platform_name == "darwin" else platform_name
+    floor = "3.8" if platform_name == "darwin" else "3.7"
+    raise RuntimeError(
+        "Bundled Core native wheels for {} require Python {} or newer; "
+        "no wheel matches Python {}.{}.".format(label, floor, python_version[0], python_version[1])
+    )
 
 
 @contextmanager
@@ -289,6 +392,7 @@ def ensure_vendor(root: Path) -> Path:
     wheels = sorted(wheels_dir.glob("*.whl"))
     if not wheels:
         raise RuntimeError("No bundled wheels found under {}".format(wheels_dir))
+    _require_compatible_core_wheel(wheels)
     marker = vendor_dir / ".dcc_mcp_houdini_wheels"
     desired = _wheel_marker(wheels)
     if marker.is_file() and marker.read_text(encoding="utf-8") == desired:
@@ -648,7 +752,13 @@ set -eu
 HOUDINI_VERSION="${1:-20.5}"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PACKAGE_ROOT="${PACKAGE_ROOT:-$SCRIPT_DIR}"
-PACKAGES_DIR="${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}"
+if [ -n "${DCC_MCP_HOUDINI_PACKAGES_DIR:-}" ]; then
+  PACKAGES_DIR="$DCC_MCP_HOUDINI_PACKAGES_DIR"
+elif [ "$(uname -s)" = "Darwin" ]; then
+  PACKAGES_DIR="$HOME/Library/Preferences/houdini/$HOUDINI_VERSION/packages"
+else
+  PACKAGES_DIR="$HOME/houdini$HOUDINI_VERSION/packages"
+fi
 
 mkdir -p "$PACKAGES_DIR"
 ROOT_ESCAPED="$(cd "$PACKAGE_ROOT" && pwd)"
@@ -670,6 +780,7 @@ def _readme(version: str, core_version: str, platform: str, explicit_core_versio
             "latest non-prerelease dcc-mcp-core >= {},<1.0.0 with abi3 wheels "
             "for every release platform at assembly time."
         ).format(MIN_CORE_VERSION)
+    python_floor = ".".join(str(part) for part in QUICKINSTALL_PYTHON_FLOORS[platform])
     return """dcc-mcp-houdini quick install package
 ======================================
 
@@ -677,6 +788,7 @@ Version: {version}
 dcc-mcp-core wheels: {core_version}
 Platform: {platform}
 Core bundle policy: {core_policy}
+Bundled Core Python compatibility: {python_floor} or newer on {platform}.
 Old-core pin: none.
 
 Install on Windows:
@@ -701,7 +813,13 @@ Background render children set DCC_MCP_BACKGROUND_RENDER=1; startup hooks must
 not start another MCP adapter when this child-only marker is present.
 Instance ports are assigned by the operating system. Connect through the stable
 gateway at http://127.0.0.1:9765/mcp or discover exact URLs with dcc-mcp-cli.
-""".format(version=version, core_version=core_version, platform=platform, core_policy=core_policy)
+""".format(
+        version=version,
+        core_version=core_version,
+        platform=platform,
+        core_policy=core_policy,
+        python_floor=python_floor,
+    )
 
 
 def verify_quickinstall_zip(
@@ -766,6 +884,16 @@ def verify_quickinstall_zip(
                 ", ".join(core_wheels),
             )
         )
+    python_floor = QUICKINSTALL_PYTHON_FLOORS[platform]
+    if not any(_wheel_supports_python(name, python_floor) for name in core_wheels):
+        raise RuntimeError(
+            "Core wheels for {} do not support the declared Python {}.{} floor: {}".format(
+                platform,
+                python_floor[0],
+                python_floor[1],
+                ", ".join(core_wheels),
+            )
+        )
 
     return {
         "platform": platform,
@@ -774,6 +902,7 @@ def verify_quickinstall_zip(
         "server": adapter_version,
         "cli": adapter_version,
         "core_wheels": sorted(core_wheels),
+        "python_min": "{}.{}".format(python_floor[0], python_floor[1]),
     }
 
 
@@ -784,6 +913,7 @@ def print_version_matrix(matrix: Dict[str, object]) -> None:
     print("  core: dcc-mcp-core {}".format(matrix["core"]))
     print("  server: dcc-mcp-houdini {}".format(matrix["server"]))
     print("  CLI: dcc-mcp-houdini {}".format(matrix["cli"]))
+    print("  bundled Core Python floor: {}".format(matrix["python_min"]))
     print("  core wheels:")
     for wheel in matrix["core_wheels"]:
         print("    - {}".format(wheel))

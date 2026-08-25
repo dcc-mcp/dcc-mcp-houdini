@@ -339,7 +339,7 @@ def test_uninstall_rejects_managed_tree_links(
     assert link.is_symlink()
 
 
-def test_failed_upgrade_readiness_restores_prior_receipt(
+def test_upgrade_readiness_is_deferred_without_rolling_back_static_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -349,10 +349,42 @@ def test_failed_upgrade_readiness_restores_prior_receipt(
     previous = receipt_path.read_bytes()
     monkeypatch.setattr(_installer, "wait_for_sidecar_ready", lambda *_args, **_kwargs: {"success": False})
 
-    assert main(["upgrade", *common, "--yes"]) == 40
-    failed = json.loads(capsys.readouterr().out)
-    assert failed["previous_restored"] is True
-    assert receipt_path.read_bytes() == previous
+    assert main(["upgrade", *common, "--yes"]) == 0
+    upgraded = json.loads(capsys.readouterr().out)
+    assert upgraded["status"] == "ok"
+    assert upgraded["steps"][-1] == {"id": "verify", "status": "pending"}
+    assert upgraded["verify"]["failure_stage"] == "readiness"
+    assert "previous_restored" not in upgraded
+    assert receipt_path.is_file()
+    assert receipt_path.read_bytes() != previous
+
+
+def test_macos_profile_app_bundle_and_hython_discovery_are_consistent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    applications = tmp_path / "Applications" / "Houdini"
+    app = applications / "Houdini20.5.487.app"
+    host = app / "Contents" / "MacOS" / "houdini"
+    hython = app / "Contents" / "Resources" / "bin" / "hython"
+    hou_file = app / "Contents" / "Resources" / "houdini" / "python3.11libs" / "hou.py"
+    for path in (host, hython, hou_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"official-sidefx-file")
+    monkeypatch.setattr(_installer.sys, "platform", "darwin")
+    monkeypatch.setattr(_installer.Path, "home", classmethod(lambda _cls: home))
+    monkeypatch.setattr(_installer, "_MACOS_APPLICATIONS_ROOT", applications, raising=False)
+
+    profile, packages = _installer._profile_paths("20.5.487", {})
+    assert profile == (home / "Library" / "Preferences" / "houdini" / "20.5").resolve()
+    assert packages == (profile / "packages").resolve()
+    assert _installer._host_candidates({}) == (host.resolve(),)
+    assert _installer._resolve_host(str(app), {}) == host.resolve()
+    assert _installer._host_version(host.resolve()) == ("20.5.487", "path")
+    assert _installer._resolve_python(None, host.resolve(), {}) == (hython.resolve(), "host_install")
+    assert _installer._resolve_python(str(hython), host.resolve(), {}) == (hython.resolve(), "--python")
+    _installer._require_genuine_hom_origin(hou_file.resolve(), host.resolve(), (3, 11, 9))
 
 
 def test_upgrade_staging_failure_never_moves_prior_install(
