@@ -77,6 +77,7 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
         bootstrap = zf.read("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py").decode("utf-8")
         install_ps1 = zf.read("dcc_mcp_houdini/install.ps1").decode("utf-8")
         install_sh = zf.read("dcc_mcp_houdini/install.sh").decode("utf-8")
+        readme = zf.read("dcc_mcp_houdini/README.txt").decode("utf-8")
         startup = zf.read("dcc_mcp_houdini/scripts/123.py")
         scene_load = zf.read("dcc_mcp_houdini/scripts/456.py")
     assert "dcc_mcp_houdini/wheels/{}".format(adapter_wheel.name) in names
@@ -109,11 +110,15 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert 'os.environ.get("DCC_MCP_REGISTRY_DIR")' in bootstrap
     assert "registry_dir=registry_dir" in bootstrap
     assert 'os.environ.get("DCC_MCP_BACKGROUND_RENDER") == "1"' in bootstrap
+    assert "_require_compatible_core_wheel(wheels)" in bootstrap
     assert "not hou.isUIAvailable()" in bootstrap
     assert "hython -m dcc_mcp_houdini" in bootstrap
     assert '[string]$PackagesDir = ""' in install_ps1
     assert "$env:DCC_MCP_HOUDINI_PACKAGES_DIR" in install_ps1
-    assert "${DCC_MCP_HOUDINI_PACKAGES_DIR:-$HOME/houdini$HOUDINI_VERSION/packages}" in install_sh
+    assert '"$(uname -s)" = "Darwin"' in install_sh
+    assert "$HOME/Library/Preferences/houdini/$HOUDINI_VERSION/packages" in install_sh
+    assert "$HOME/houdini$HOUDINI_VERSION/packages" in install_sh
+    assert "Bundled Core Python compatibility: 3.7 or newer on win64." in readme
     assert "get_server" in shelf_xml
     assert "setStatusMessage" in shelf_xml
     assert "displayMessage" in shelf_xml
@@ -231,6 +236,7 @@ def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
     _write_quickinstall_zip(
         zip_path,
         "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.20.14-cp37-cp37m-win_amd64.whl",
         "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl",
     )
 
@@ -240,6 +246,7 @@ def test_verify_quickinstall_zip_prints_version_matrix(tmp_path: Path) -> None:
     assert matrix["core"] == "0.20.14"
     assert matrix["server"] == pkg.get_package_version()
     assert matrix["cli"] == pkg.get_package_version()
+    assert matrix["python_min"] == "3.7"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell 5.1")
@@ -414,6 +421,8 @@ def test_bootstrap_refreshes_cached_missing_vendor_path(tmp_path: Path) -> None:
             "dcc_mcp_houdini/__init__.py",
             "def start_server(**kwargs):\n    return kwargs\n",
         )
+    with zipfile.ZipFile(wheels / "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl", "w"):
+        pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
     bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
 
@@ -529,6 +538,8 @@ def safe_remove_tree(path):
     )
     with zipfile.ZipFile(wheels / "dcc_mcp_houdini-2.0.0-py3-none-any.whl", "w") as zf:
         zf.writestr("dcc_mcp_houdini/new.txt", "replacement")
+    with zipfile.ZipFile(wheels / "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl", "w"):
+        pass
     bootstrap = scripts / "dcc_mcp_houdini_bootstrap.py"
     bootstrap.write_text(pkg._bootstrap_py(), encoding="utf-8")
 
@@ -564,21 +575,70 @@ module.ensure_vendor(root)
     assert not list(root.glob(".vendor-backup-*"))
 
 
-def test_pick_core_wheels_includes_py37_and_abi3_for_platform() -> None:
+def test_pick_core_wheels_selects_only_runtime_compatible_native_tags() -> None:
     pkg = _load_packaging_script()
 
     files = [
-        {"filename": "dcc_mcp_core-0.18.2-cp311-cp311-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl"},
-        {"filename": "dcc_mcp_core-0.18.2-cp38-abi3-manylinux_x86_64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-cp37-cp37m-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-py3-none-any.whl"},
     ]
-    picked = pkg.pick_core_wheel_files(files, "win64")
-    assert [item["filename"] for item in picked] == [
-        "dcc_mcp_core-0.18.2-cp38-abi3-win_amd64.whl",
-        "dcc_mcp_core-0.18.2-cp311-cp311-win_amd64.whl",
-        "dcc_mcp_core-0.18.2-cp37-cp37m-win_amd64.whl",
+
+    py37 = pkg.pick_core_wheel_files(files, "win64", python_version=(3, 7))
+    py312 = pkg.pick_core_wheel_files(files, "win64", python_version=(3, 12))
+
+    assert [item["filename"] for item in py37] == ["dcc_mcp_core-0.20.14-cp37-cp37m-win_amd64.whl"]
+    assert [item["filename"] for item in py312] == ["dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl"]
+
+
+def test_core_02014_wheel_matrix_rejects_macos_python37_and_accepts_declared_floors() -> None:
+    pkg = _load_packaging_script()
+    files = [
+        {"filename": "dcc_mcp_core-0.20.14-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-cp37-cp37m-win_amd64.whl"},
+        {
+            "filename": (
+                "dcc_mcp_core-0.20.14-cp38-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl"
+            )
+        },
+        {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-manylinux_2_17_x86_64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl"},
+        {"filename": "dcc_mcp_core-0.20.14-py3-none-any.whl"},
     ]
+
+    assert pkg.pick_core_wheel_files(files, "macos", python_version=(3, 7)) == []
+    assert [item["filename"] for item in pkg.pick_core_wheel_files(files, "macos", python_version=(3, 8))] == [
+        files[2]["filename"]
+    ]
+    assert pkg.pick_core_wheel_files(files, "win64", python_version=(3, 7))
+    assert pkg.pick_core_wheel_files(files, "linux", python_version=(3, 7))
+
+
+def test_generated_bootstrap_fails_closed_before_extracting_unsupported_core_tag(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+    bootstrap_path = tmp_path / "dcc_mcp_houdini_bootstrap.py"
+    bootstrap_path.write_text(pkg._bootstrap_py(), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("generated_houdini_bootstrap", bootstrap_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    mac_wheel = tmp_path / (
+        "dcc_mcp_core-0.20.14-cp38-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl"
+    )
+
+    with pytest.raises(RuntimeError, match=r"macOS.*Python 3\.8 or newer"):
+        module._require_compatible_core_wheel(
+            [mac_wheel],
+            python_version=(3, 7),
+            platform_name="darwin",
+            machine="x86_64",
+        )
+    assert module._require_compatible_core_wheel(
+        [mac_wheel],
+        python_version=(3, 8),
+        platform_name="darwin",
+        machine="arm64",
+    ) == [mac_wheel]
 
 
 def test_resolve_core_version_skips_release_without_cross_platform_abi3(
@@ -587,7 +647,9 @@ def test_resolve_core_version_skips_release_without_cross_platform_abi3(
     pkg = _load_packaging_script()
     releases = {
         "0.20.14": [
+            {"filename": "dcc_mcp_core-0.20.14-cp37-cp37m-win_amd64.whl"},
             {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl"},
+            {"filename": "dcc_mcp_core-0.20.14-cp37-cp37m-manylinux_2_17_x86_64.whl"},
             {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-manylinux_2_17_x86_64.whl"},
             {"filename": "dcc_mcp_core-0.20.14-cp38-abi3-macosx_11_0_universal2.whl"},
         ],

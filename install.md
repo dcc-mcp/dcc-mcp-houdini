@@ -7,7 +7,7 @@ entry point is `dcc-mcp-houdini`.
 ## Requirements
 
 - SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
-- Python 3.7 or newer in that Houdini build.
+- Python 3.7 or newer in that Houdini build for the wheel-first lifecycle.
 - `dcc-mcp-core >= 0.20.14,<1.0.0` and the same `dcc-mcp-houdini` version
   installed in the selected `hython` environment.
 - Write access to the matching user profile. The installer never edits the
@@ -28,7 +28,10 @@ satisfy the interactive readiness contract.
 ## Supported versions
 
 The lifecycle supports Windows, macOS, and Linux. Houdini 18.5+ is the host
-floor; the selected build must provide Python 3.7+. SideFX changes the bundled
+floor; the selected build must provide Python 3.7+. The released quickinstall
+bundles Core 0.20.14 native wheels for Python 3.7+ on Windows/Linux and Python
+3.8+ on macOS; Core 0.20.14 publishes no native macOS CPython 3.7 wheel, so that
+quickinstall combination fails closed before vendor extraction. SideFX changes the bundled
 Python minor between Houdini releases, so preflight executes the chosen
 interpreter and, when `hou` is available, checks its reported Houdini version
 against `--dcc-path`. It does not guess a Python compatibility row from a
@@ -39,7 +42,7 @@ selected Houdini installation and installed distributions.
 Typical interpreter locations are:
 
 - Windows: `C:\Program Files\Side Effects Software\Houdini X.Y.ZZZ\bin\hython.exe`
-- macOS: `/Applications/Houdini/HoudiniX.Y.ZZZ/.../Resources/bin/hython`
+- macOS: `/Applications/Houdini/HoudiniX.Y.ZZZ.app/Contents/Resources/bin/hython`
 - Linux: `/opt/hfsX.Y.ZZZ/bin/hython`
 
 ## Agent quick path
@@ -55,6 +58,14 @@ Review the JSON plan, then execute it:
 ```text
 dcc-mcp-houdini install --json --yes --dcc-path <houdini> --python <hython>
 ```
+
+A cold install does not require Houdini to be running. Once package artifacts
+and the receipt pass static verification, the command exits successfully and
+keeps them installed. If no matching live registry entry exists, the result
+reports `verify.directly_usable: false`, marks the verify step `pending`, and
+returns exact `start_selected_houdini` and `verify_selected_houdini`
+continuations. The separate `verify` command remains fail closed until its
+host-bound typed probe succeeds.
 
 All lifecycle verbs accept `--json`, `--yes`, `--dry-run`, `--dcc-path`, and
 `--python`. Stable exits are `0` success/plan, `10` preflight, `20` acquire,
@@ -97,6 +108,16 @@ isolated package directory. Keep the extracted quickinstall directory in place
 while its package JSON references it. Quickinstall is a release path; for the
 receipt-driven lifecycle, use the wheel-first commands above.
 
+Default package registration directories are:
+
+- Windows: `~/Documents/houdini<version>/packages`
+- Linux: `~/houdini<version>/packages`
+- macOS: `~/Library/Preferences/houdini/<version>/packages`
+
+The Core 0.20.14 quickinstall compatibility matrix is Python 3.7+ on Windows
+and Linux, and Python 3.8+ on macOS. Use a later Core release only when its
+native wheel tags satisfy the same declared platform floor.
+
 ## Verify
 
 Inspect files without starting Houdini:
@@ -129,9 +150,11 @@ dcc-mcp-houdini upgrade --json --dry-run --dcc-path <houdini> --python <hython>
 dcc-mcp-houdini upgrade --json --yes --dcc-path <houdini> --python <hython>
 ```
 
-The adapter stages a complete replacement, preserves the prior package and
-receipt through live verification, and restores the exact prior bytes if
-commit or verification fails.
+The adapter stages a complete replacement and preserves the prior package and
+receipt until artifact, receipt, import, and bootstrap verification succeed.
+It restores the exact prior bytes when those static commit checks fail. Live
+readiness is a separate continuation and never discards an otherwise valid
+upgrade merely because Houdini is not running.
 
 ## Uninstall
 

@@ -7,6 +7,7 @@ import runpy
 import sys
 from pathlib import Path
 
+from dcc_mcp_houdini import _installer
 from dcc_mcp_houdini.cli import main
 
 
@@ -111,6 +112,45 @@ def test_install_dry_run_emits_contract_without_mutation(
     }
     assert not packages_dir.exists()
     assert not Path(payload["receipt_path"]).exists()
+
+
+def test_cold_install_without_live_registry_commits_and_returns_continuation(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    host = _synthetic_host(tmp_path, monkeypatch)
+    packages = tmp_path / "profile" / "packages"
+    monkeypatch.setenv("DCC_MCP_HOUDINI_PACKAGES_DIR", str(packages))
+    monkeypatch.setenv("DCC_MCP_REGISTRY_DIR", str(tmp_path / "empty-registry"))
+    monkeypatch.setattr(_installer, "query_runtime_state", lambda *_args, **_kwargs: {"entries": []})
+    monkeypatch.setattr(
+        _installer,
+        "wait_for_sidecar_ready",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no live entry must not be probed")),
+    )
+    common = ["--json", "--dcc-path", str(host), "--python", str(_hython_for(host))]
+
+    assert main(["install", *common, "--yes"]) == 0
+    installed = json.loads(capsys.readouterr().out)
+
+    assert installed["status"] == "ok"
+    assert installed["verify"]["directly_usable"] is False
+    assert installed["verify"]["failure_stage"] == "readiness"
+    assert installed["steps"][-1] == {"id": "verify", "status": "pending"}
+    assert [step["id"] for step in installed["next_steps"]] == [
+        "start_selected_houdini",
+        "verify_selected_houdini",
+    ]
+    assert Path(installed["receipt_path"]).is_file()
+    assert Path(installed["plan"]["install_root"]).is_dir()
+    assert (packages / "dcc_mcp_houdini.json").is_file()
+
+    assert main(["verify", *common]) == 40
+    verify = json.loads(capsys.readouterr().out)
+    assert verify["status"] == "failed"
+    assert verify["verify"]["failure_stage"] == "readiness"
+    assert Path(installed["receipt_path"]).is_file()
 
 
 def test_receipt_round_trip_is_idempotent_and_uninstall_is_receipt_driven(
@@ -343,5 +383,9 @@ def test_runbook_and_ci_cover_standard_lifecycle() -> None:
         assert platform_name in runbook
     for verb in ("install", "status", "verify", "upgrade", "uninstall"):
         assert "dcc-mcp-houdini {}".format(verb) in runbook
+    assert "Python 3.7+ on Windows/Linux and Python" in runbook
+    assert "3.8+ on macOS" in runbook
+    assert "~/Library/Preferences/houdini/<version>/packages" in runbook
+    assert "marks the verify step `pending`" in runbook
     assert "Install lifecycle smoke" in workflow
     assert "python -m pytest tests/test_install_lifecycle.py" in workflow

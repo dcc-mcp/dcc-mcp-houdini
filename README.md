@@ -215,6 +215,12 @@ The package writes a Houdini package JSON into the user preferences folder.
 scene; both reuse one bootstrap that extracts bundled wheels into `vendor/` and
 starts the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
 
+For Core 0.20.14, quickinstall supports Python 3.7+ on Windows/Linux and Python
+3.8+ on macOS. The macOS archive fails closed before extraction on Python 3.7
+because that Core release has no native `cp37` macOS wheel. Default macOS
+registration is `~/Library/Preferences/houdini/<version>/packages`; the
+environment override remains authoritative.
+
 Isolated background ROP workers receive `DCC_MCP_BACKGROUND_RENDER=1` in their
 child environment. Package and custom `123.py`/`456.py` startup hooks must skip
 MCP adapter autostart when that marker is present; the parent Houdini environment
@@ -383,6 +389,7 @@ dcc-mcp-houdini/
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
 - `dcc-mcp-core >= 0.20.14`
 - Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.20.14,<1.0.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
+- Bundled Core wheel matrix: Python 3.7+ on Windows/Linux and Python 3.8+ on macOS; unsupported runtime/tag pairs fail before extraction.
 - See `pyproject.toml` for full dependencies
 
 ## License

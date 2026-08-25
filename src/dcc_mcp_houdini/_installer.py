@@ -57,6 +57,8 @@ _MAX_PROBE_OUTPUT_BYTES = 16 * 1024
 _MAX_PUBLIC_ERROR_LENGTH = 512
 _MAX_TRANSACTION_SNAPSHOT_BYTES = 8 * 1024 * 1024
 _MAX_RECEIPT_BYTES = 1024 * 1024
+_MACOS_APPLICATIONS_ROOT = Path("/Applications/Houdini")
+_DEFERRED_READINESS_STAGES = frozenset(("readiness", "readiness_identity"))
 _HOST_EXECUTABLES = frozenset(
     (
         "houdini",
@@ -327,13 +329,13 @@ def _write_text_atomic(path: Path, value: str) -> None:
 
 def _host_candidates(environ: Mapping[str, str]) -> Sequence[Path]:
     candidates = set()
-    if os.name == "nt":
+    if sys.platform == "darwin":
+        candidates.update(_MACOS_APPLICATIONS_ROOT.glob("Houdini*.app/Contents/MacOS/houdini"))
+    elif os.name == "nt":
         for key in ("ProgramFiles", "ProgramW6432"):
             root = environ.get(key, "").strip()
             if root:
                 candidates.update(Path(root).glob("Side Effects Software/Houdini*/bin/houdini.exe"))
-    elif sys.platform == "darwin":
-        candidates.update(Path("/Applications/Houdini").glob("Houdini*.app/Contents/MacOS/houdini"))
     else:
         candidates.update(Path("/opt").glob("hfs*/bin/houdini"))
         discovered = shutil.which("houdini")
@@ -354,7 +356,8 @@ def _resolve_host(value: Optional[str], environ: Mapping[str, str]) -> Path:
                 "hindie.exe",
                 "hindie",
             )
-            nested = [candidate / "bin" / name for name in names]
+            nested = [candidate / "Contents" / "MacOS" / name for name in names] if sys.platform == "darwin" else []
+            nested.extend(candidate / "bin" / name for name in names)
             nested.extend(candidate / name for name in names)
             matches = [path for path in nested if path.is_file()]
             if len(matches) == 1:
@@ -376,13 +379,17 @@ def _resolve_host(value: Optional[str], environ: Mapping[str, str]) -> Path:
 
 def _host_version(path: Path) -> tuple[str, str]:
     for text in (path.name, *(parent.name for parent in tuple(path.parents)[:8])):
-        match = _HOST_VERSION_RE.fullmatch(text)
+        normalized = text[:-4] if text.lower().endswith(".app") else text
+        match = _HOST_VERSION_RE.fullmatch(normalized)
         if match:
             return match.group("version"), "path"
     return "", "unavailable"
 
 
 def _host_root(path: Path) -> Path:
+    for parent in (path, *tuple(path.parents)[:8]):
+        if parent.name.lower().startswith("houdini") and parent.name.lower().endswith(".app"):
+            return parent
     for parent in tuple(path.parents)[:8]:
         if _HOST_VERSION_RE.fullmatch(parent.name):
             return parent
@@ -403,10 +410,16 @@ def _resolve_python(value: Optional[str], host: Path, environ: Mapping[str, str]
         if not _same_path(_host_root(path), _host_root(host)):
             raise LifecycleFailure("python", "Selected Hython belongs to a different Houdini installation.")
         return path, "--python" if value else _PYTHON_ENV
-    executable = "hython.exe" if os.name == "nt" else "hython"
-    candidate = _host_root(host) / "bin" / executable
-    if candidate.is_file():
-        return _require_nonempty_file(candidate, "python", "Houdini Hython interpreter"), "host_install"
+    executable = "hython.exe" if os.name == "nt" and sys.platform != "darwin" else "hython"
+    root = _host_root(host)
+    candidates = (
+        (root / "Contents" / "Resources" / "bin" / executable, root / "bin" / executable)
+        if root.name.lower().endswith(".app")
+        else (root / "bin" / executable,)
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return _require_nonempty_file(candidate, "python", "Houdini Hython interpreter"), "host_install"
     raise LifecycleFailure(
         "python",
         "Houdini's hython interpreter was not found; pass its exact executable with --python.",
@@ -572,7 +585,8 @@ def _require_distribution_origin(
 
 def _require_genuine_hom_origin(hou_file: Path, host: Path, python_version: tuple[int, ...]) -> None:
     root = _host_root(host)
-    library = root / "houdini" / "python{}.{}libs".format(python_version[0], python_version[1])
+    resources = root / "Contents" / "Resources" if root.name.lower().endswith(".app") else root
+    library = resources / "houdini" / "python{}.{}libs".format(python_version[0], python_version[1])
     if hou_file.parent.resolve() != library.resolve() or hou_file.name.lower() not in ("hou.py", "hou.pyd", "hou.so"):
         raise LifecycleFailure("python", "Imported HOM module is not from the selected Hython library.")
 
@@ -587,7 +601,9 @@ def _profile_paths(host_version: str, environ: Mapping[str, str]) -> tuple[Path,
         raise LifecycleFailure("host_version", "The Houdini profile version could not be resolved.")
     short_version = ".".join(str(part) for part in parsed[:2])
     home = Path.home()
-    if os.name == "nt":
+    if sys.platform == "darwin":
+        profile = home / "Library" / "Preferences" / "houdini" / short_version
+    elif os.name == "nt":
         profile = home / "Documents" / "houdini{}".format(short_version)
     else:
         profile = home / "houdini{}".format(short_version)
@@ -1333,7 +1349,8 @@ def _execute_install(
             instance_id=instance_id,
             host_pid=host_pid,
         )
-        if not verify["directly_usable"]:
+        readiness_deferred = not verify["directly_usable"] and verify.get("failure_stage") in _DEFERRED_READINESS_STAGES
+        if not verify["directly_usable"] and not readiness_deferred:
             restored = _restore_install_transaction(
                 ctx,
                 transaction,
@@ -1365,7 +1382,7 @@ def _execute_install(
         if not cleanup.get("success"):
             raise LifecycleFailure(
                 "install",
-                "The verified install is usable, but transaction cleanup failed.",
+                "The statically verified install was committed, but transaction cleanup failed.",
                 INSTALL_EXIT_REQUIRES_RESTART if cleanup.get("requires_restart") else INSTALL_EXIT_INSTALL,
             )
     except BaseException as exc:
@@ -1388,16 +1405,16 @@ def _execute_install(
             _cleanup_transaction(transaction)
         raise exc
 
-    result = _base_result(ctx, "ok" if verify["directly_usable"] else "partial")
+    result = _base_result(ctx, "ok")
     result["steps"] = [
         {"id": "preflight", "status": "ok"},
         {"id": "install", "status": "ok"},
         {"id": "receipt", "status": "ok"},
-        {"id": "verify", "status": "ok" if verify["directly_usable"] else "failed"},
+        {"id": "verify", "status": "ok" if verify["directly_usable"] else "pending"},
     ]
     result["verify"] = verify
     result["next_steps"] = next_steps
-    return LifecycleOutcome(result, INSTALL_EXIT_OK if verify["directly_usable"] else INSTALL_EXIT_VERIFY)
+    return LifecycleOutcome(result, INSTALL_EXIT_OK)
 
 
 def _snapshot_matches(snapshot_root: Path, snapshot_package: Path, receipt: Mapping[str, Any]) -> bool:
