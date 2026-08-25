@@ -21,9 +21,11 @@
 
 ### Features
 
+* add anatomy-aware honeybee KineFX rig ([#261](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/261)) ([ec25dfe](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ec25dfe740b8ee286f465544a96db13d7815daab))
 * add anatomy-region groom profiles ([#262](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/262)) ([2dd1b1f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2dd1b1f6fa6240fcc48a741e7c4aece254f20ce8))
 * add Houdini install lifecycle ([96c8716](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/96c87168775d1028e7a4195a1cc9566dfd6a8276))
 * add revisioned usd asset sync ([f0a6420](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f0a6420d21654e6f868a818cc1f9de4c01f2e6bd))
+* gate GSplat showcase quality ([#260](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/260)) ([50dac71](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/50dac719c62d2878d63f1450dfbe811602379310))
 * validate KineFX ground contacts ([e832c6e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e832c6eafa4f5d1a7337f40a9c0ce0f871839808))
 
 
