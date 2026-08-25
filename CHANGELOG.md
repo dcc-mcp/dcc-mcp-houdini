@@ -16,6 +16,46 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.34.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.2...v0.34.0) (2026-08-25)
+
+
+### Features
+
+* add anatomy-region groom profiles ([#262](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/262)) ([2dd1b1f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2dd1b1f6fa6240fcc48a741e7c4aece254f20ce8))
+* add Houdini install lifecycle ([96c8716](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/96c87168775d1028e7a4195a1cc9566dfd6a8276))
+* add revisioned usd asset sync ([f0a6420](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f0a6420d21654e6f868a818cc1f9de4c01f2e6bd))
+* validate KineFX ground contacts ([e832c6e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e832c6eafa4f5d1a7337f40a9c0ce0f871839808))
+
+
+### Bug Fixes
+
+* avoid headless shutdown drain race ([f6c60c7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f6c60c7d938ce1291617689daee7b4aff996e077))
+* bind release assets to immutable tag ([93f9fe5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/93f9fe52a769ad691d7bd54827efcabe6e4bc538))
+* guard heavy viewport framing ([ea79b13](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/ea79b133441e0c3e63089e47084dbde7c74a9501))
+* harden bundled wheel selection ([081209f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/081209f289c982351ca84302d0dd364fd1df51fb))
+* harden Houdini install lifecycle ([84a5526](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/84a5526602011118fbfd413087a3422bf19d6059))
+* harden Houdini install lifecycle compatibility ([f84b835](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f84b835ba9468bd33874d341959faa53a96590db))
+* harden Houdini runtime ownership ([c8c21c9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c8c21c9d2d8ada6761586d727fd7bb90bf7d9105))
+* harden quickinstall wheel extraction ([e90e00e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e90e00e29f958b4f8fec332bb06a55de1569d027))
+* harden quickinstall wheel metadata validation ([40c21bd](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/40c21bddb0bc7c4077febc1186da4c0b11ea94c6))
+* preserve install schema fixture bytes ([4d9527e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4d9527e00d8054e58d9ed5f879532add36e84680))
+* query existing flipbook jobs synchronously ([2180ec8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2180ec8fd89e7254cd5b0adb220b8398bae62503))
+* reject empty viewport captures ([85e1e0d](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/85e1e0d93981a658a7278fcf4052d23751f4009f))
+* route Solaris LOP renders explicitly ([eafa4fa](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/eafa4fada81f49521bf76270fc115d69def7da42))
+* support bounded detail VEX analysis ([9b20a69](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9b20a692eeb2ba12c3106082a42e8b784c6e3607))
+* support expanded HDA libraries ([3bdb5ce](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/3bdb5ced94b0b38bd6a42bdd4b1be4290e1a3abb))
+* support KineFX GSplat animation validation ([7381b43](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7381b434dee699fa088699e9c89f334696e60d3d))
+* surface Husk procedural render errors ([6e15ed8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6e15ed8f5a53233c3a4c323a069304b19840ea79))
+* use released install SOP contract ([f94be60](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f94be6014df642e3ac9499c47b6d4a8fe272276d))
+* validate quickinstall wheel platform tags ([b1fee4f](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b1fee4f93b15fc456160a93ac90fa489ff8d75cc))
+
+
+### Documentation
+
+* add honeybee scan quality gate ([0be6f6c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0be6f6c0c041c1b172d0f7ffe7552bfa8881350b))
+* add verified Houdini GSplat capture ([9d116d5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9d116d58c79b3f5d62f51c57920261209234783c))
+* publish captured honeybee GSplat validation ([686b0e9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/686b0e9179997cf955613583c73b39ab78db3d65))
+
 ## [0.33.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.1...v0.33.2) (2026-08-13)
 
 
