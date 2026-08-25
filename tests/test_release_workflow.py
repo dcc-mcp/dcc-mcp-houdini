@@ -75,3 +75,86 @@ def test_release_quickinstall_can_pin_validated_core_version() -> None:
     assert verify_steps, "quickinstall job should verify release artifacts"
     assert "--core-version" in assemble_steps[0]["run"]
     assert "--expected-core-version" in verify_steps[0]["run"]
+
+
+def _job_checkout(job: dict) -> dict:
+    matches = [step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _immutable_target_step(job: dict) -> dict:
+    matches = [step for step in job["steps"] if step.get("name") == "Verify immutable release target"]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_release_chain_cannot_be_cancelled_after_tag_creation() -> None:
+    workflow = _release_workflow()
+
+    assert workflow["concurrency"]["cancel-in-progress"] == "false"
+
+
+def test_release_job_resolves_a_validated_tag_to_an_immutable_commit() -> None:
+    workflow = _release_workflow()
+    release = workflow["jobs"]["release-please"]
+
+    assert release["outputs"]["tag_name"] == "${{ steps.target.outputs.tag_name }}"
+    assert release["outputs"]["tag_sha"] == "${{ steps.target.outputs.tag_sha }}"
+    assert release["outputs"]["version"] == "${{ steps.target.outputs.version }}"
+    target_steps = [step for step in release["steps"] if step.get("id") == "target"]
+    assert len(target_steps) == 1
+    target = target_steps[0]
+    script = target["run"]
+    assert "steps.release.outputs.tag_name" in target["env"]["RELEASE_TAG"]
+    assert "inputs.tag_name" in target["env"]["RELEASE_TAG"]
+    assert "git/ref/tags/" in script
+    assert "gh api" in script
+    assert "tag_sha" in script
+    assert "^v[0-9]+\\.[0-9]+\\.[0-9]+$" in script
+
+
+def test_every_release_asset_job_binds_tag_sha_and_version_before_mutation() -> None:
+    workflow = _release_workflow()
+    jobs = workflow["jobs"]
+
+    for name in ("build", "quickinstall", "publish", "attach-release-assets"):
+        job = jobs[name]
+        needs = job["needs"] if isinstance(job["needs"], list) else [job["needs"]]
+        assert "release-please" in needs
+        checkout = _job_checkout(job)
+        assert checkout["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
+        assert checkout["with"]["fetch-depth"] == "0"
+        assert "github.ref" not in checkout["with"]["ref"]
+        assert "inputs.tag_name" not in checkout["with"]["ref"]
+        verify = _immutable_target_step(job)
+        assert verify["env"] == {
+            "EXPECTED_TAG": "${{ needs.release-please.outputs.tag_name }}",
+            "EXPECTED_SHA": "${{ needs.release-please.outputs.tag_sha }}",
+            "EXPECTED_VERSION": "${{ needs.release-please.outputs.version }}",
+        }
+        script = verify["run"]
+        assert "git rev-parse HEAD" in script
+        assert 'git rev-parse "${EXPECTED_TAG}^{commit}"' in script
+        assert ".release-please-manifest.json" in script
+        assert "src/dcc_mcp_houdini/__version__.py" in script
+
+
+def test_publish_uses_oidc_only_and_jobs_keep_least_privilege() -> None:
+    workflow = _release_workflow()
+    release = workflow["jobs"]["release-please"]
+    publish = workflow["jobs"]["publish"]
+    attach = workflow["jobs"]["attach-release-assets"]
+    workflow_text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert release["permissions"] == {"contents": "write", "pull-requests": "write"}
+    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    assert attach["permissions"] == {"contents": "write"}
+    assert "PYPI_API_TOKEN" not in workflow_text
+    assert "secrets.PYPI_API_TOKEN" not in workflow_text
+    publishers = [step for step in publish["steps"] if step.get("uses", "").startswith("pypa/gh-action-pypi-publish@")]
+    assert len(publishers) == 1
+    assert "password" not in publishers[0].get("with", {})
+    attach_step = [step for step in attach["steps"] if step.get("uses", "").startswith("softprops/action-gh-release@")]
+    assert attach_step[0]["with"]["tag_name"] == "${{ needs.release-please.outputs.tag_name }}"

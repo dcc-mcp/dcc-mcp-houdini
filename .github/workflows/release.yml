@@ -21,24 +21,24 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}${{ inputs.tag_name && format('-{0}', inputs.tag_name) || '' }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
-  attestations: write
-  actions: read
+  contents: read
 
 jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name || inputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      tag_name: ${{ steps.target.outputs.tag_name }}
+      tag_sha: ${{ steps.target.outputs.tag_sha }}
+      version: ${{ steps.target.outputs.version }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -46,6 +46,46 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Resolve immutable release target
+        id: target
+        if: steps.release.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && inputs.tag_name != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name || inputs.tag_name }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release target must be a canonical vMAJOR.MINOR.PATCH tag." >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          if [[ -n "$RELEASE_VERSION" && "$RELEASE_VERSION" != "$version" ]]; then
+            echo "Release Please version does not match its tag." >&2
+            exit 1
+          fi
+          object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.type)"
+          object_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          for _ in 1 2 3 4; do
+            if [[ "$object_type" == "commit" ]]; then
+              break
+            fi
+            if [[ "$object_type" != "tag" ]]; then
+              echo "Release tag does not resolve to a commit." >&2
+              exit 1
+            fi
+            tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${object_sha}")"
+            object_type="$(jq -r .object.type <<<"$tag_json")"
+            object_sha="$(jq -r .object.sha <<<"$tag_json")"
+          done
+          if [[ "$object_type" != "commit" || ! "$object_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Release tag commit identity is invalid." >&2
+            exit 1
+          fi
+          echo "tag_name=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "tag_sha=$object_sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build wheel and sdist
@@ -55,7 +95,35 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+      - name: Verify immutable release target
+        env:
+          EXPECTED_TAG: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED_SHA: ${{ needs.release-please.outputs.tag_sha }}
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "${EXPECTED_TAG}^{commit}")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" || "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Checked-out release identity does not match the resolved tag." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          expected = os.environ["EXPECTED_VERSION"]
+          manifest = json.loads(Path(".release-please-manifest.json").read_text(encoding="utf-8"))["."]
+          source = Path("src/dcc_mcp_houdini/__version__.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"', source, re.MULTILINE)
+          if match is None or manifest != expected or match.group(1) != expected:
+              raise SystemExit("Checked-out package version does not match the release target.")
+          PY
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
@@ -103,27 +171,48 @@ jobs:
       name: pypi
       url: https://pypi.org/p/dcc-mcp-houdini
     permissions:
+      contents: read
       id-token: write
-    env:
-      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+      - name: Verify immutable release target
+        env:
+          EXPECTED_TAG: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED_SHA: ${{ needs.release-please.outputs.tag_sha }}
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "${EXPECTED_TAG}^{commit}")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" || "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Checked-out release identity does not match the resolved tag." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          expected = os.environ["EXPECTED_VERSION"]
+          manifest = json.loads(Path(".release-please-manifest.json").read_text(encoding="utf-8"))["."]
+          source = Path("src/dcc_mcp_houdini/__version__.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"', source, re.MULTILINE)
+          if match is None or manifest != expected or match.group(1) != expected:
+              raise SystemExit("Checked-out package version does not match the release target.")
+          PY
       - name: Download dist artifacts
         uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
       - name: Publish to PyPI with trusted publishing
-        if: env.PYPI_API_TOKEN == ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          verbose: true
-          print-hash: true
-      - name: Publish to PyPI with API token
-        if: env.PYPI_API_TOKEN != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           verbose: true
           print-hash: true
 
@@ -139,7 +228,35 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+      - name: Verify immutable release target
+        env:
+          EXPECTED_TAG: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED_SHA: ${{ needs.release-please.outputs.tag_sha }}
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "${EXPECTED_TAG}^{commit}")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" || "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Checked-out release identity does not match the resolved tag." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          expected = os.environ["EXPECTED_VERSION"]
+          manifest = json.loads(Path(".release-please-manifest.json").read_text(encoding="utf-8"))["."]
+          source = Path("src/dcc_mcp_houdini/__version__.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"', source, re.MULTILINE)
+          if match is None or manifest != expected or match.group(1) != expected:
+              raise SystemExit("Checked-out package version does not match the release target.")
+          PY
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
@@ -181,6 +298,37 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+      - name: Verify immutable release target
+        env:
+          EXPECTED_TAG: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED_SHA: ${{ needs.release-please.outputs.tag_sha }}
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "${EXPECTED_TAG}^{commit}")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" || "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Checked-out release identity does not match the resolved tag." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          expected = os.environ["EXPECTED_VERSION"]
+          manifest = json.loads(Path(".release-please-manifest.json").read_text(encoding="utf-8"))["."]
+          source = Path("src/dcc_mcp_houdini/__version__.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"', source, re.MULTILINE)
+          if match is None or manifest != expected or match.group(1) != expected:
+              raise SystemExit("Checked-out package version does not match the release target.")
+          PY
       - name: Download dist artifacts
         uses: actions/download-artifact@v8
         with:
@@ -195,7 +343,7 @@ jobs:
       - name: Attach assets to release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.release-please.outputs.tag_name || inputs.tag_name }}
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
             dist/*
             dist_houdini/*.zip
