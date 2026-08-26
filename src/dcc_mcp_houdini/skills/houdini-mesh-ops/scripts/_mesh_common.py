@@ -14,20 +14,29 @@ def get_node(hou: Any, node_path: str) -> Any:
 
 
 def make_downstream_sop(input_node: Any, optype: str, name: Optional[str] = None) -> Any:
-    """Create *optype* in the input's parent, wired to the input's output 0."""
+    """Create and wire *optype*, transferring ownership only on success."""
     parent = input_node.parent()
     if parent is None:
         raise ValueError("Input node has no parent network: {}".format(input_node.path()))
-    new_node = parent.createNode(optype, node_name=name)
-    new_node.setInput(0, input_node)
-    if hasattr(new_node, "moveToGoodPosition"):
-        try:
-            new_node.moveToGoodPosition()
-        except Exception:  # noqa: BLE001
-            pass
-    if hasattr(new_node, "setDisplayFlag"):
-        new_node.setDisplayFlag(True)
-    return new_node
+    new_node = None
+    try:
+        new_node = parent.createNode(optype, node_name=name)
+        new_node.setInput(0, input_node)
+        if hasattr(new_node, "moveToGoodPosition"):
+            try:
+                new_node.moveToGoodPosition()
+            except Exception:  # noqa: BLE001
+                pass
+        if hasattr(new_node, "setDisplayFlag"):
+            new_node.setDisplayFlag(True)
+        return new_node
+    except BaseException:
+        if new_node is not None:
+            try:
+                new_node.destroy()
+            except BaseException:
+                pass
+        raise
 
 
 def set_parm_if_exists(node: Any, name: str, value: Any) -> bool:
