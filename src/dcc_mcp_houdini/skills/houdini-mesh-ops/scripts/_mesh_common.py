@@ -4,6 +4,88 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+_PUBLIC_EXCEPTION_TYPES = frozenset(
+    (
+        "AttributeError",
+        "KeyError",
+        "LookupError",
+        "OSError",
+        "RuntimeError",
+        "TypeError",
+        "ValueError",
+    )
+)
+
+
+class SopNodeTransaction:
+    """Own created SOP nodes until the caller commits a complete receipt."""
+
+    def __init__(self) -> None:
+        self._owned = []
+        self._committed = False
+
+    def __enter__(self):
+        return self
+
+    def own(self, node: Any) -> Any:
+        """Adopt one successfully created node and return it to the caller."""
+        if self._committed:
+            raise RuntimeError("Cannot adopt a node after transaction commit")
+        if node is None:
+            raise RuntimeError("Cannot adopt an empty SOP node")
+        if any(existing is node for existing in self._owned):
+            raise RuntimeError("SOP node is already owned by this transaction")
+        self._owned.append(node)
+        return node
+
+    def commit(self) -> None:
+        """Transfer all owned nodes to the caller after its receipt is ready."""
+        if self._committed:
+            raise RuntimeError("SOP transaction is already committed")
+        self._committed = True
+
+    def rollback(self) -> None:
+        """Best-effort destroy all still-owned nodes exactly once."""
+        if not self._committed:
+            self._cleanup()
+
+    def _cleanup(self) -> None:
+        for node in reversed(self._owned):
+            try:
+                node.destroy()
+            except BaseException:
+                pass
+        self._owned = []
+
+    def __exit__(self, exc_type, _exc, _traceback) -> bool:
+        if exc_type is not None or not self._committed:
+            self._cleanup()
+        else:
+            self._owned = []
+        if exc_type is None and not self._committed:
+            raise RuntimeError("SOP transaction exited without a complete receipt")
+        return False
+
+
+def sop_node_transaction() -> SopNodeTransaction:
+    """Return a transaction that cleans adopted nodes on every failure path."""
+    return SopNodeTransaction()
+
+
+def sop_transaction_error(message: str, exc: Exception) -> dict:
+    """Return a stable public failure without exception text or traceback."""
+    from dcc_mcp_core.skill import skill_error  # noqa: PLC0415
+
+    exception_type = type(exc).__name__
+    if exception_type not in _PUBLIC_EXCEPTION_TYPES:
+        exception_type = "Exception"
+    return skill_error(
+        message,
+        "Houdini rejected the bounded SOP transaction",
+        error_code="houdini_sop_transaction_failed",
+        error_type=exception_type,
+    )
+
 
 def get_node(hou: Any, node_path: str) -> Any:
     """Return a Houdini node or raise a useful error."""

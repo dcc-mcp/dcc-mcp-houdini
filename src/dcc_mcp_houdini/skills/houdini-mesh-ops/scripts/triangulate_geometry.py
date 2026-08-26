@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from _mesh_common import get_node, make_downstream_sop, node_summary, set_parm_if_exists  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from _mesh_common import (  # noqa: E402
+    get_node,
+    make_downstream_sop,
+    node_summary,
+    set_parm_if_exists,
+    sop_node_transaction,
+    sop_transaction_error,
+)
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def triangulate_geometry(input_path: str, node_name: Optional[str] = None) -> dict:
@@ -15,19 +22,23 @@ def triangulate_geometry(input_path: str, node_name: Optional[str] = None) -> di
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
+    created = None
     try:
         source = get_node(hou, input_path)
-        divide = make_downstream_sop(source, "divide", node_name)
-        # Convex polygons into triangles (max 3 sides).
-        set_parm_if_exists(divide, "convex", 1)
-        set_parm_if_exists(divide, "numsides", 3)
-        return skill_success(
-            "Created triangulate (divide) SOP",
-            input_path=source.path(),
-            node=node_summary(divide),
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "divide", node_name))
+            # Convex polygons into triangles (max 3 sides).
+            set_parm_if_exists(created, "convex", 1)
+            set_parm_if_exists(created, "numsides", 3)
+            result = skill_success(
+                "Created triangulate (divide) SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        return skill_exception(exc, message="Failed to create triangulate SOP")
+        return sop_transaction_error("Failed to create triangulate SOP", exc)
 
 
 @skill_entry

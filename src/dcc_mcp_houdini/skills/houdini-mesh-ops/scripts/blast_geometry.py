@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from _mesh_common import get_node, make_downstream_sop, node_summary, set_parm_if_exists  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from _mesh_common import (  # noqa: E402
+    get_node,
+    make_downstream_sop,
+    node_summary,
+    set_parm_if_exists,
+    sop_node_transaction,
+    sop_transaction_error,
+)
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 # Blast 'grouptype' menu indices (Houdini 18.5+).
 _GROUP_TYPE = {
@@ -32,25 +39,29 @@ def blast_geometry(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
+    created = None
     try:
         source = get_node(hou, input_path)
-        blast = make_downstream_sop(source, "blast", node_name)
-        set_parm_if_exists(blast, "group", group)
-        type_index = _GROUP_TYPE.get(group_type.lower())
-        if type_index is not None:
-            set_parm_if_exists(blast, "grouptype", type_index)
-        # negate=1 keeps the selection and deletes everything else.
-        set_parm_if_exists(blast, "negate", 1 if delete_non_selected else 0)
-        return skill_success(
-            "Created blast SOP",
-            input_path=source.path(),
-            node=node_summary(blast),
-            group=group,
-            group_type=group_type.lower(),
-            delete_non_selected=bool(delete_non_selected),
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "blast", node_name))
+            set_parm_if_exists(created, "group", group)
+            type_index = _GROUP_TYPE.get(group_type.lower())
+            if type_index is not None:
+                set_parm_if_exists(created, "grouptype", type_index)
+            # negate=1 keeps the selection and deletes everything else.
+            set_parm_if_exists(created, "negate", 1 if delete_non_selected else 0)
+            result = skill_success(
+                "Created blast SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+                group=group,
+                group_type=group_type.lower(),
+                delete_non_selected=bool(delete_non_selected),
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        return skill_exception(exc, message="Failed to create blast SOP")
+        return sop_transaction_error("Failed to create blast SOP", exc)
 
 
 @skill_entry

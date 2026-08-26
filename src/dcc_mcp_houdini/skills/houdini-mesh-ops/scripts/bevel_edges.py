@@ -12,8 +12,10 @@ from _mesh_common import (  # noqa: E402
     make_downstream_sop,
     node_summary,
     set_scalar_parm_verified,
+    sop_node_transaction,
+    sop_transaction_error,
 )
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def bevel_edges(
@@ -43,34 +45,31 @@ def bevel_edges(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
     try:
         source = get_node(hou, input_path)
         before = geometry_readback(source)
-        created = make_downstream_sop(source, "polybevel", node_name)
-        requested = {"group": group, "distance": resolved_distance, "divisions": divisions}
-        actual = {
-            "group": str(set_scalar_parm_verified(created, ("group",), group)),
-            "distance": float(set_scalar_parm_verified(created, ("distance",), resolved_distance, ("Distance",))),
-            "divisions": int(set_scalar_parm_verified(created, ("divisions", "divs"), divisions, ("Divisions",))),
-        }
-        if actual != requested:
-            raise RuntimeError("PolyBevel parameter readback did not match the request")
-        readback = cook_readback(created, before=before)
-        return skill_success(
-            "Created and verified PolyBevel SOP",
-            input_path=source.path(),
-            node=node_summary(created),
-            parameters=requested,
-            readback=readback,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "polybevel", node_name))
+            requested = {"group": group, "distance": resolved_distance, "divisions": divisions}
+            actual = {
+                "group": str(set_scalar_parm_verified(created, ("group",), group)),
+                "distance": float(set_scalar_parm_verified(created, ("distance",), resolved_distance, ("Distance",))),
+                "divisions": int(set_scalar_parm_verified(created, ("divisions", "divs"), divisions, ("Divisions",))),
+            }
+            if actual != requested:
+                raise RuntimeError("PolyBevel parameter readback did not match the request")
+            readback = cook_readback(created, before=before)
+            result = skill_success(
+                "Created and verified PolyBevel SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+                parameters=requested,
+                readback=readback,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        if created is not None:
-            try:
-                created.destroy()
-            except Exception:  # noqa: BLE001
-                pass
-        return skill_exception(exc, message="Failed to create verified PolyBevel SOP")
+        return sop_transaction_error("Failed to create verified PolyBevel SOP", exc)
 
 
 @skill_entry

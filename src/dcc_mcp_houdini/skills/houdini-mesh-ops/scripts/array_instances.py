@@ -14,6 +14,8 @@ from _mesh_common import (  # noqa: E402
     set_menu_parm_candidates,
     set_scalar_parm_verified,
     set_tuple_parm_verified,
+    sop_node_transaction,
+    sop_transaction_error,
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
@@ -203,13 +205,14 @@ def array_instances(
     points = None
     orientation = None
     created = None
+    transaction = sop_node_transaction()
     try:
         source = get_node(hou, input_path)
         parent = source.parent()
         if parent is None:
             raise ValueError("Input node has no parent SOP network")
         before = geometry_readback(source)
-        points = parent.createNode("circle", node_name=points_node_name)
+        points = transaction.own(parent.createNode("circle", node_name=points_node_name))
         set_menu_parm_candidates(
             points,
             ("type", "primitivetype"),
@@ -232,7 +235,7 @@ def array_instances(
         set_tuple_parm_verified(points, ("r", "rotate"), rotation, ("Rotate", "Rotation"))
         points_readback = cook_readback(points, require_change=False)
 
-        orientation = make_downstream_sop(points, "attribwrangle")
+        orientation = transaction.own(make_downstream_sop(points, "attribwrangle"))
         set_menu_parm_candidates(
             orientation,
             ("class", "runover"),
@@ -254,13 +257,13 @@ def array_instances(
             source_forward,
         )
 
-        created = make_downstream_sop(source, "copytopoints", node_name)
+        created = transaction.own(make_downstream_sop(source, "copytopoints", node_name))
         created.setInput(1, orientation)
         readback = cook_readback(created, before=before)
         readback["points"] = points_readback
         readback["orientation_cook"] = orientation_readback
         readback["orientation"] = orientation_receipt
-        return skill_success(
+        result = skill_success(
             "Created and verified radial Copy to Points array",
             input_path=source.path(),
             node=node_summary(created),
@@ -276,17 +279,13 @@ def array_instances(
             },
             readback=readback,
         )
-    except Exception:  # noqa: BLE001
-        for node in (created, orientation, points):
-            if node is not None:
-                try:
-                    node.destroy()
-                except Exception:  # noqa: BLE001
-                    pass
-        return skill_error(
-            "Failed to create verified radial instance array",
-            "Houdini rejected the bounded radial-array transaction",
-        )
+        transaction.commit()
+        return result
+    except BaseException as exc:
+        transaction.rollback()
+        if not isinstance(exc, Exception):
+            raise
+        return sop_transaction_error("Failed to create verified radial instance array", exc)
 
 
 @skill_entry
