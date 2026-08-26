@@ -77,6 +77,24 @@ def _artifact_basenames(patterns: Sequence[str], cwd: Path) -> Set[str]:
     return set(basenames)
 
 
+def _align_asset_name(asset_name: str) -> str:
+    """Mirror action-gh-release@3d0d9888's exact ASCII-space alignment."""
+
+    return asset_name.replace(" ", ".")
+
+
+def _upload_match_names(asset_names: Set[str]) -> Set[str]:
+    """Return non-overlapping raw/aligned names matched by action-gh-release."""
+
+    identities: Set[str] = set()
+    for asset_name in sorted(asset_names):
+        current = {asset_name, _align_asset_name(asset_name)}
+        if identities.intersection(current):
+            raise GuardError("duplicate_artifact_identity")
+        identities.update(current)
+    return identities
+
+
 def _github_pages(
     endpoint: str,
     environ: Mapping[str, str],
@@ -118,16 +136,16 @@ def _github_pages(
     return pages
 
 
-def _existing_asset_names(
+def _existing_asset_identities(
     repository: str,
     tag: str,
     environ: Mapping[str, str],
     runner: Callable[..., subprocess.CompletedProcess],
-) -> Set[str]:
+) -> Tuple[Set[str], Set[str]]:
     release_pages = _github_pages("repos/{}/releases?per_page=100".format(repository), environ, runner)
     matching = [item for page in release_pages for item in page if item.get("tag_name") == tag]
     if not matching:
-        return set()
+        return set(), set()
     if len(matching) != 1:
         raise GuardError("github_api_invalid_response")
     release_id = matching[0].get("id")
@@ -138,13 +156,19 @@ def _existing_asset_names(
         "repos/{}/releases/{}/assets?per_page=100".format(repository, release_id), environ, runner
     )
     names: Set[str] = set()
+    labels: Set[str] = set()
     for page in asset_pages:
         for asset in page:
             name = asset.get("name")
             if not isinstance(name, str) or not name:
                 raise GuardError("github_api_invalid_response")
+            label = asset.get("label")
+            if label is not None and not isinstance(label, str):
+                raise GuardError("github_api_invalid_response")
             names.add(name)
-    return names
+            if label is not None:
+                labels.add(label)
+    return names, labels
 
 
 def main(
@@ -160,10 +184,11 @@ def main(
         repository, tag, patterns = _parse_args(list(arguments if arguments is not None else sys.argv[1:]))
         environment = dict(environ if environ is not None else os.environ)
         artifact_names = _artifact_basenames(patterns, cwd if cwd is not None else Path.cwd())
+        upload_match_names = _upload_match_names(artifact_names)
         if not environment.get("GH_TOKEN"):
             raise GuardError("github_token_missing")
-        existing_names = _existing_asset_names(repository, tag, environment, runner)
-        if artifact_names.intersection(existing_names):
+        existing_names, existing_labels = _existing_asset_identities(repository, tag, environment, runner)
+        if upload_match_names.intersection(existing_names) or artifact_names.intersection(existing_labels):
             raise GuardError("asset_name_collision")
     except GuardError as exc:
         sys.stderr.write("release asset guard failed: {}\n".format(exc.code))

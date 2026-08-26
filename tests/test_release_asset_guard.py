@@ -69,6 +69,17 @@ def test_duplicate_local_basenames_fail_before_github_io(tmp_path: Path, capsys:
     assert capsys.readouterr().err == "release asset guard failed: duplicate_artifact_basename\n"
 
 
+def test_local_raw_and_aligned_identity_overlap_fails_before_github_io(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact name.whl").write_bytes(b"first")
+    (tmp_path / "dist" / "artifact.name.whl").write_bytes(b"second")
+    fake = _FakeGh((0, json.dumps([[]]), ""))
+
+    assert _run(tmp_path, fake) == 1
+    assert fake.calls == []
+    assert capsys.readouterr().err == "release asset guard failed: duplicate_artifact_identity\n"
+
+
 def test_missing_release_allows_new_unicode_assets_and_forces_github_host(tmp_path: Path, capsys: Any) -> None:
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "dcc_houdini_资产.zip").write_bytes(b"asset")
@@ -109,12 +120,75 @@ def test_paginated_exact_collision_fails_without_leaking_hostile_values(tmp_path
     assert fake.calls[1][0][-1] == "repos/dcc-mcp/dcc-mcp-houdini/releases/77/assets?per_page=100"
 
 
+def test_remote_aligned_name_collision_is_rejected(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact name.whl").write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "artifact.name.whl", "label": None}]]), ""),
+    )
+
+    assert _run(tmp_path, fake) == 1
+    assert capsys.readouterr().err == "release asset guard failed: asset_name_collision\n"
+
+
+def test_alignment_replaces_each_ascii_space_without_changing_unicode(tmp_path: Path, capsys: Any) -> None:
+    local_name = "资产  build.whl"
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / local_name).write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "资产..build.whl"}]]), ""),
+    )
+
+    assert _run(tmp_path, fake) == 1
+    error = capsys.readouterr().err
+    assert error == "release asset guard failed: asset_name_collision\n"
+    assert local_name not in error
+
+
+def test_remote_label_collision_is_rejected_when_github_rewrote_the_name(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact.whl").write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "rewritten.whl", "label": "artifact.whl"}]]), ""),
+    )
+
+    assert _run(tmp_path, fake) == 1
+    assert capsys.readouterr().err == "release asset guard failed: asset_name_collision\n"
+
+
+def test_remote_label_is_not_over_normalized(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact name.whl").write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "unrelated.whl", "label": "artifact.name.whl"}]]), ""),
+    )
+
+    assert _run(tmp_path, fake) == 0
+    assert capsys.readouterr().err == ""
+
+
 def test_unrelated_existing_assets_allow_upload(tmp_path: Path, capsys: Any) -> None:
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "new.whl").write_bytes(b"wheel")
     fake = _FakeGh(
         (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
         (0, json.dumps([[{"name": "old.whl"}, {"name": "旧.zip"}]]), ""),
+    )
+
+    assert _run(tmp_path, fake) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_already_dotted_local_name_does_not_collide_with_itself(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "already.dotted.whl").write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "unrelated.whl", "label": None}]]), ""),
     )
 
     assert _run(tmp_path, fake) == 0
@@ -141,6 +215,18 @@ def test_empty_pattern_and_malformed_api_payload_fail_closed(tmp_path: Path, cap
     assert capsys.readouterr().err == "release asset guard failed: invalid_artifact_pattern\n"
 
     fake = _FakeGh((0, "{not-json", ""))
+    assert _run(tmp_path, fake) == 1
+    assert capsys.readouterr().err == "release asset guard failed: github_api_invalid_response\n"
+
+
+def test_non_string_remote_label_fails_closed(tmp_path: Path, capsys: Any) -> None:
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact.whl").write_bytes(b"wheel")
+    fake = _FakeGh(
+        (0, json.dumps([[{"id": 77, "tag_name": "v1.2.3"}]]), ""),
+        (0, json.dumps([[{"name": "unrelated.whl", "label": 7}]]), ""),
+    )
+
     assert _run(tmp_path, fake) == 1
     assert capsys.readouterr().err == "release asset guard failed: github_api_invalid_response\n"
 

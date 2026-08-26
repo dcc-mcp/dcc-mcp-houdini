@@ -175,6 +175,7 @@ def test_release_assets_are_guarded_before_immutable_upload() -> None:
     upload = [step for step in steps if step.get("uses", "").startswith("softprops/action-gh-release@")]
     assert len(stage) == len(guard) == len(upload) == 1
     assert steps.index(stage[0]) < steps.index(guard[0]) < steps.index(upload[0])
+    assert upload[0]["uses"] == "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228"
 
     assert 'git show "${GITHUB_SHA}:tools/check_release_assets.py"' in stage[0]["run"]
     assert "$RUNNER_TEMP/check_release_assets.py" in stage[0]["run"]
