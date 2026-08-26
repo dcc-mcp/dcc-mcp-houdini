@@ -16,6 +16,22 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.35.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.34.0...v0.35.0) (2026-08-26)
+
+
+### Features
+
+* add verified Houdini modeling verbs ([2e8671e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/2e8671e802d501b8900ce3dd56afbd6b69824f2c))
+
+
+### Bug Fixes
+
+* align release asset collision checks ([6118ec5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6118ec5c376aae8b29a5ed07cd2de4b5b3e6fee9))
+* clean up unreturned Houdini nodes ([b00078a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b00078a93a7d6e2db05eed9a652e1494e75da46b))
+* own downstream SOP transactions ([09d9d78](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/09d9d78babef321f59df7bcc2150ef33b64a4537))
+* prevent release asset overwrites ([c5090d2](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c5090d287c8c09b363ed8908e7eccd48cde62395))
+* verify Houdini loft and array topology ([c9fab8e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c9fab8e36deefb41bfecd6bfd6db1f2b629c1371))
+
 ## [0.34.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.33.2...v0.34.0) (2026-08-25)
 
 
