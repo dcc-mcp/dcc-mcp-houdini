@@ -295,6 +295,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [release-please, build, quickinstall]
     if: needs.release-please.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && inputs.tag_name != '')
+    concurrency:
+      group: release-assets-${{ github.repository }}-${{ needs.release-please.outputs.tag_name }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -329,6 +332,17 @@ jobs:
           if match is None or manifest != expected or match.group(1) != expected:
               raise SystemExit("Checked-out package version does not match the release target.")
           PY
+      - name: Stage release asset guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          guard_path="$RUNNER_TEMP/check_release_assets.py"
+          if ! git show "${GITHUB_SHA}:tools/check_release_assets.py" > "$guard_path"; then
+            rm -f "$guard_path"
+            echo "Release asset guard source is unavailable." >&2
+            exit 1
+          fi
+          chmod 0500 "$guard_path"
       - name: Download dist artifacts
         uses: actions/download-artifact@v8
         with:
@@ -340,10 +354,25 @@ jobs:
           path: dist_houdini/
           pattern: houdini-quickinstall-*
           merge-multiple: true
+      - name: Guard immutable release assets
+        env:
+          GH_HOST: github.com
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_TAG: ${{ needs.release-please.outputs.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "$RUNNER_TEMP/check_release_assets.py" \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$EXPECTED_TAG" \
+            --pattern "dist/*" \
+            --pattern "dist_houdini/*.zip"
       - name: Attach assets to release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
+          overwrite_files: false
+          fail_on_unmatched_files: true
           files: |
             dist/*
             dist_houdini/*.zip

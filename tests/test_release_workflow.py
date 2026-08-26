@@ -158,3 +158,36 @@ def test_publish_uses_oidc_only_and_jobs_keep_least_privilege() -> None:
     assert "password" not in publishers[0].get("with", {})
     attach_step = [step for step in attach["steps"] if step.get("uses", "").startswith("softprops/action-gh-release@")]
     assert attach_step[0]["with"]["tag_name"] == "${{ needs.release-please.outputs.tag_name }}"
+
+
+def test_release_assets_are_guarded_before_immutable_upload() -> None:
+    workflow = _release_workflow()
+    attach_job = workflow["jobs"]["attach-release-assets"]
+    steps = attach_job["steps"]
+
+    assert attach_job["concurrency"] == {
+        "group": "release-assets-${{ github.repository }}-${{ needs.release-please.outputs.tag_name }}",
+        "cancel-in-progress": "false",
+    }
+
+    stage = [step for step in steps if step.get("name") == "Stage release asset guard"]
+    guard = [step for step in steps if step.get("name") == "Guard immutable release assets"]
+    upload = [step for step in steps if step.get("uses", "").startswith("softprops/action-gh-release@")]
+    assert len(stage) == len(guard) == len(upload) == 1
+    assert steps.index(stage[0]) < steps.index(guard[0]) < steps.index(upload[0])
+
+    assert 'git show "${GITHUB_SHA}:tools/check_release_assets.py"' in stage[0]["run"]
+    assert "$RUNNER_TEMP/check_release_assets.py" in stage[0]["run"]
+    assert guard[0]["env"] == {
+        "GH_HOST": "github.com",
+        "GH_TOKEN": "${{ github.token }}",
+        "EXPECTED_TAG": "${{ needs.release-please.outputs.tag_name }}",
+    }
+    guard_run = guard[0]["run"]
+    assert 'python "$RUNNER_TEMP/check_release_assets.py"' in guard_run
+    assert '--repository "$GITHUB_REPOSITORY"' in guard_run
+    assert '--tag "$EXPECTED_TAG"' in guard_run
+    assert '--pattern "dist/*"' in guard_run
+    assert '--pattern "dist_houdini/*.zip"' in guard_run
+    assert upload[0]["with"]["overwrite_files"] == "false"
+    assert upload[0]["with"]["fail_on_unmatched_files"] == "true"
