@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from _mesh_common import get_node, make_downstream_sop, node_summary, set_parm_if_exists  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from _mesh_common import (  # noqa: E402
+    get_node,
+    make_downstream_sop,
+    node_summary,
+    set_parm_if_exists,
+    sop_node_transaction,
+    sop_transaction_error,
+)
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 # Friendly target type -> convert SOP 'totype' menu token.
 _TO_TYPE = {
@@ -37,18 +44,22 @@ def convert_geometry(
             "to_type must be one of: {}".format(", ".join(sorted(set(_TO_TYPE)))),
             requested=to_type,
         )
+    created = None
     try:
         source = get_node(hou, input_path)
-        convert = make_downstream_sop(source, "convert", node_name)
-        set_parm_if_exists(convert, "totype", token)
-        return skill_success(
-            "Created convert SOP",
-            input_path=source.path(),
-            node=node_summary(convert),
-            to_type=token,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "convert", node_name))
+            set_parm_if_exists(created, "totype", token)
+            result = skill_success(
+                "Created convert SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+                to_type=token,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        return skill_exception(exc, message="Failed to create convert SOP")
+        return sop_transaction_error("Failed to create convert SOP", exc)
 
 
 @skill_entry

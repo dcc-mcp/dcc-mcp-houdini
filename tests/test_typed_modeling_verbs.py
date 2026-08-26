@@ -1081,7 +1081,11 @@ def test_boolean_op_fails_closed_and_removes_partial_node_without_native_menu() 
         result = module.main(input_a=left.path(), input_b=right.path(), operation="subtract")
 
     assert result["success"] is False
-    assert "menu" in result["message"].lower() or "menu" in str(result).lower()
+    assert result["context"] == {
+        "error_code": "houdini_sop_transaction_failed",
+        "error_type": "RuntimeError",
+    }
+    assert "traceback" not in str(result).lower()
     assert parent.created[0].destroyed is True
 
 

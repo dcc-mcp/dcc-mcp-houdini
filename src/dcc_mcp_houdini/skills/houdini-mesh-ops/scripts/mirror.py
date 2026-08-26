@@ -12,8 +12,10 @@ from _mesh_common import (  # noqa: E402
     make_downstream_sop,
     node_summary,
     set_tuple_parm_verified,
+    sop_node_transaction,
+    sop_transaction_error,
 )
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def _vector(value: object, name: str):
@@ -57,33 +59,30 @@ def mirror(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
     try:
         source = get_node(hou, input_path)
         before = geometry_readback(source)
-        created = make_downstream_sop(source, "mirror", node_name)
-        actual_origin = set_tuple_parm_verified(created, ("origin",), resolved_origin, ("Origin",))
-        actual_direction = set_tuple_parm_verified(
-            created,
-            ("dir",),
-            resolved_direction,
-            ("Direction",),
-        )
-        readback = cook_readback(created, before=before)
-        return skill_success(
-            "Created and verified Mirror SOP",
-            input_path=source.path(),
-            node=node_summary(created),
-            parameters={"direction": list(actual_direction), "origin": list(actual_origin)},
-            readback=readback,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "mirror", node_name))
+            actual_origin = set_tuple_parm_verified(created, ("origin",), resolved_origin, ("Origin",))
+            actual_direction = set_tuple_parm_verified(
+                created,
+                ("dir",),
+                resolved_direction,
+                ("Direction",),
+            )
+            readback = cook_readback(created, before=before)
+            result = skill_success(
+                "Created and verified Mirror SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+                parameters={"direction": list(actual_direction), "origin": list(actual_origin)},
+                readback=readback,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        if created is not None:
-            try:
-                created.destroy()
-            except Exception:  # noqa: BLE001
-                pass
-        return skill_exception(exc, message="Failed to create verified Mirror SOP")
+        return sop_transaction_error("Failed to create verified Mirror SOP", exc)
 
 
 @skill_entry

@@ -11,8 +11,10 @@ from _mesh_common import (  # noqa: E402
     make_downstream_sop,
     node_summary,
     set_menu_parm_candidates,
+    sop_node_transaction,
+    sop_transaction_error,
 )
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 _OPERATION_LABELS = {
     "union": ("union",),
@@ -47,36 +49,33 @@ def boolean_op(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
     try:
         left = get_node(hou, input_a)
         right = get_node(hou, input_b)
         if left.parent() is None or right.parent() is not left.parent():
             raise ValueError("Boolean inputs must share one parent SOP network")
         before = geometry_readback(left)
-        created = make_downstream_sop(left, "boolean", node_name)
-        created.setInput(1, right)
-        token = set_menu_parm_candidates(
-            created,
-            ("booleanop", "operation"),
-            _OPERATION_LABELS[operation],
-            ("Operation",),
-        )
-        readback = cook_readback(created, before=before)
-        return skill_success(
-            "Created and verified Boolean SOP",
-            inputs=[left.path(), right.path()],
-            node=node_summary(created),
-            parameters={"operation": operation, "operation_token": token},
-            readback=readback,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(left, "boolean", node_name))
+            created.setInput(1, right)
+            token = set_menu_parm_candidates(
+                created,
+                ("booleanop", "operation"),
+                _OPERATION_LABELS[operation],
+                ("Operation",),
+            )
+            readback = cook_readback(created, before=before)
+            result = skill_success(
+                "Created and verified Boolean SOP",
+                inputs=[left.path(), right.path()],
+                node=node_summary(created),
+                parameters={"operation": operation, "operation_token": token},
+                readback=readback,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        if created is not None:
-            try:
-                created.destroy()
-            except Exception:  # noqa: BLE001
-                pass
-        return skill_exception(exc, message="Failed to create verified Boolean SOP")
+        return sop_transaction_error("Failed to create verified Boolean SOP", exc)
 
 
 @skill_entry

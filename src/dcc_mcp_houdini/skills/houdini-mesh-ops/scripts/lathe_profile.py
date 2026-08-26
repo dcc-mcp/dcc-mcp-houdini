@@ -13,8 +13,10 @@ from _mesh_common import (  # noqa: E402
     node_summary,
     set_scalar_parm_verified,
     set_tuple_parm_verified,
+    sop_node_transaction,
+    sop_transaction_error,
 )
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 _AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
 
@@ -54,34 +56,31 @@ def lathe_profile(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
     try:
         source = get_node(hou, profile)
         before = geometry_readback(source)
-        created = make_downstream_sop(source, "revolve", node_name)
-        origin_values = set_tuple_parm_verified(created, ("origin",), tuple(resolved_origin), ("Origin",))
-        direction_values = set_tuple_parm_verified(created, ("dir",), _AXES[axis], ("Axis Direction",))
-        set_scalar_parm_verified(created, ("divs",), segments, ("Divisions",))
-        readback = cook_readback(created, before=before)
-        return skill_success(
-            "Created and verified Revolve SOP",
-            profile=source.path(),
-            node=node_summary(created),
-            parameters={
-                "axis": axis,
-                "axis_direction": list(direction_values),
-                "origin": list(origin_values),
-                "segments": segments,
-            },
-            readback=readback,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "revolve", node_name))
+            origin_values = set_tuple_parm_verified(created, ("origin",), tuple(resolved_origin), ("Origin",))
+            direction_values = set_tuple_parm_verified(created, ("dir",), _AXES[axis], ("Axis Direction",))
+            set_scalar_parm_verified(created, ("divs",), segments, ("Divisions",))
+            readback = cook_readback(created, before=before)
+            result = skill_success(
+                "Created and verified Revolve SOP",
+                profile=source.path(),
+                node=node_summary(created),
+                parameters={
+                    "axis": axis,
+                    "axis_direction": list(direction_values),
+                    "origin": list(origin_values),
+                    "segments": segments,
+                },
+                readback=readback,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        if created is not None:
-            try:
-                created.destroy()
-            except Exception:  # noqa: BLE001
-                pass
-        return skill_exception(exc, message="Failed to create verified Revolve SOP")
+        return sop_transaction_error("Failed to create verified Revolve SOP", exc)
 
 
 @skill_entry

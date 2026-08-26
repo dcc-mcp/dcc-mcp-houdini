@@ -13,8 +13,10 @@ from _mesh_common import (  # noqa: E402
     node_summary,
     set_menu_parm,
     set_scalar_parm_verified,
+    sop_node_transaction,
+    sop_transaction_error,
 )
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 _ATTRIBUTE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PROJECTION_LABELS = {
@@ -48,39 +50,36 @@ def uv_project(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
     try:
         source = get_node(hou, input_path)
         before = geometry_readback(source)
-        created = make_downstream_sop(source, "uvproject", node_name)
-        set_scalar_parm_verified(created, ("uvattrib",), uv_attribute, ("UV Attribute",))
-        if group is not None:
-            set_scalar_parm_verified(created, ("group",), group, ("Group",))
-        token = set_menu_parm(created, "projection", _PROJECTION_LABELS[projection])
-        readback = cook_readback(created, before=before, require_change=False)
-        geometry = created.geometry()
-        if geometry.findVertexAttrib(uv_attribute) is None:
-            raise RuntimeError("UV Project did not create vertex attribute: {}".format(uv_attribute))
-        readback["uv_attribute"] = uv_attribute
-        return skill_success(
-            "Created and verified UV Project SOP",
-            input_path=source.path(),
-            node=node_summary(created),
-            parameters={
-                "group": group or "",
-                "projection": projection,
-                "projection_token": token,
-                "uv_attribute": uv_attribute,
-            },
-            readback=readback,
-        )
+        with sop_node_transaction() as transaction:
+            created = transaction.own(make_downstream_sop(source, "uvproject", node_name))
+            set_scalar_parm_verified(created, ("uvattrib",), uv_attribute, ("UV Attribute",))
+            if group is not None:
+                set_scalar_parm_verified(created, ("group",), group, ("Group",))
+            token = set_menu_parm(created, "projection", _PROJECTION_LABELS[projection])
+            readback = cook_readback(created, before=before, require_change=False)
+            geometry = created.geometry()
+            if geometry.findVertexAttrib(uv_attribute) is None:
+                raise RuntimeError("UV Project did not create the requested vertex attribute")
+            readback["uv_attribute"] = uv_attribute
+            result = skill_success(
+                "Created and verified UV Project SOP",
+                input_path=source.path(),
+                node=node_summary(created),
+                parameters={
+                    "group": group or "",
+                    "projection": projection,
+                    "projection_token": token,
+                    "uv_attribute": uv_attribute,
+                },
+                readback=readback,
+            )
+            transaction.commit()
+        return result
     except Exception as exc:
-        if created is not None:
-            try:
-                created.destroy()
-            except Exception:  # noqa: BLE001
-                pass
-        return skill_exception(exc, message="Failed to create verified UV Project SOP")
+        return sop_transaction_error("Failed to create verified UV Project SOP", exc)
 
 
 @skill_entry
