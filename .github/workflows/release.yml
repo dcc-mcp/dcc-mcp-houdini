@@ -368,7 +368,7 @@ jobs:
             --pattern "dist/*" \
             --pattern "dist_houdini/*.zip"
       - name: Attach assets to release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           overwrite_files: false
