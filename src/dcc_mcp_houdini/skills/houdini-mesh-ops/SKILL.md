@@ -35,7 +35,8 @@ All tools are `affinity: main` (they call `hou`).
   triangulate/convert tools; `blast_geometry` remains destructive.
 - **`modeling`** (default inactive): `loft_sections`, `lathe_profile`,
   `extrude_faces`, `bevel_edges`, `inset`, `bridge_edges`, `boolean_op`,
-  `add_edge_loop`, `array_instances` (bounded radial Copy to Points), `mirror`,
+  `add_edge_loop`, `array_instances` (bounded radial/tangent `orient` readback
+  before Copy to Points), `mirror`,
   `auto_uv`, and `uv_project`.
 
 ## Tracer-bullet flow

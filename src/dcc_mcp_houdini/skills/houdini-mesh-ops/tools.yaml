@@ -1,8 +1,9 @@
 tools:
   - name: array_instances
     description: >-
-      Create a bounded radial point ring and instance an input SOP with native
-      Circle and Copy to Points SOPs, with parameter and cooked readback.
+      Create a bounded radial point ring, orient every point radially or
+      tangentially from a declared source-forward axis, and instance an input
+      SOP with native Circle, Attribute Wrangle, and Copy to Points SOPs.
     source_file: scripts/array_instances.py
     execution: sync
     affinity: main
@@ -23,15 +24,19 @@ tools:
         count: {type: integer, minimum: 2, maximum: 128}
         radius: {type: number, exclusiveMinimum: 0, maximum: 1000000}
         axis: {type: string, enum: [x, y, z], default: y}
+        start_angle_degrees: {type: number, minimum: -360000, maximum: 360000, default: 0}
+        direction_mode: {type: string, enum: [radial, tangent], default: radial}
+        source_forward: {type: string, enum: ["+x", "-x", "+y", "-y", "+z", "-z"], default: "+x"}
         node_name: {type: string, minLength: 1}
         points_node_name: {type: string, minLength: 1}
     output_schema:
       type: object
-      required: [input_path, node, points_node, parameters, readback]
+      required: [input_path, node, points_node, orientation_node, parameters, readback]
       properties:
         input_path: {type: string}
         node: {type: object}
         points_node: {type: object}
+        orientation_node: {type: object}
         parameters: {type: object}
         readback: {type: object}
     next-tools:
@@ -290,8 +295,8 @@ tools:
       on-failure: [houdini_geometry__get_cook_status, houdini_geometry__get_geometry_info]
   - name: loft_sections
     description: >-
-      Loft two to sixty-four ordered section SOPs with a Skin SOP, requiring a
-      shared parent network and returning cooked geometry readback.
+      Merge two to sixty-four ordered section SOPs into Skin input zero for a
+      linear loft, requiring a shared parent network and cooked readback.
     source_file: scripts/loft_sections.py
     execution: sync
     affinity: main
@@ -316,9 +321,10 @@ tools:
         node_name: {type: string, minLength: 1}
     output_schema:
       type: object
-      required: [sections, node, readback]
+      required: [sections, merge_node, node, readback]
       properties:
         sections: {type: array, items: {type: string}}
+        merge_node: {type: object}
         node: {type: object}
         readback: {type: object}
     next-tools:

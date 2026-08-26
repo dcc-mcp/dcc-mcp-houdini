@@ -8,6 +8,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
+import pytest
 import yaml
 from skill_loader import skill_script_import_context
 
@@ -85,6 +86,14 @@ class _Bounds:
         return tuple(self._maximum[index] - self._minimum[index] for index in range(3))
 
 
+class _Attrib:
+    def __init__(self, size: int) -> None:
+        self._size = size
+
+    def size(self) -> int:
+        return self._size
+
+
 class _Geometry:
     def __init__(
         self,
@@ -94,12 +103,16 @@ class _Geometry:
         minimum,
         maximum,
         attributes=(),
+        point_float_attributes=None,
+        point_int_attributes=None,
     ) -> None:
         self._points = points
         self._primitives = primitives
         self._vertices = vertices
         self._bounds = _Bounds(minimum, maximum)
         self._attributes = set(attributes)
+        self._point_float_attributes = dict(point_float_attributes or {})
+        self._point_int_attributes = dict(point_int_attributes or {})
 
     def pointCount(self) -> int:
         return self._points
@@ -116,9 +129,23 @@ class _Geometry:
     def findVertexAttrib(self, name: str):
         return object() if name in self._attributes else None
 
+    def findPointAttrib(self, name: str):
+        values = self._point_float_attributes.get(name)
+        if values:
+            return _Attrib(len(values[0]))
+        if name in self._point_int_attributes:
+            return _Attrib(1)
+        return None
+
+    def pointFloatAttribValues(self, name: str):
+        return tuple(component for value in self._point_float_attributes[name] for component in value)
+
+    def pointIntAttribValues(self, name: str):
+        return tuple(self._point_int_attributes[name])
+
 
 class _Node:
-    def __init__(self, path: str, type_name: str, geometry: _Geometry) -> None:
+    def __init__(self, path: str, type_name: str, geometry: _Geometry, max_inputs=None) -> None:
         self._path = path
         self._type = _Type(type_name)
         self._geometry = geometry
@@ -128,6 +155,8 @@ class _Node:
         self._parm_tuples = {}
         self.created = []
         self.destroyed = False
+        self._max_inputs = max_inputs
+        self._fail_input_index = None
 
     def path(self) -> str:
         return self._path
@@ -156,6 +185,10 @@ class _Node:
         return node
 
     def setInput(self, index: int, node) -> None:
+        if self._max_inputs is not None and index >= self._max_inputs:
+            raise RuntimeError("Input {} is not available on {}".format(index, self._type.name()))
+        if index == self._fail_input_index:
+            raise RuntimeError("PRIVATE_CONNECTION_DETAIL")
         self._inputs[index] = node
 
     def inputs(self):
@@ -328,6 +361,15 @@ def test_loft_sections_wires_bounded_same_network_inputs_and_reads_back() -> Non
     for section in sections:
         section._parent = parent
     by_path = {section.path(): section for section in sections}
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        node = original_create(type_name, node_name)
+        if type_name == "skin":
+            node._max_inputs = 2
+        return node
+
+    parent.createNode = create_node
 
     class _Hou:
         @staticmethod
@@ -343,8 +385,71 @@ def test_loft_sections_wires_bounded_same_network_inputs_and_reads_back() -> Non
     assert result["success"] is True, result
     assert result["context"]["node"]["type"] == "skin"
     assert result["context"]["node"]["path"] == "/obj/geo1/fuselage_loft"
-    assert parent.created[0].inputs() == tuple(sections)
+    merge, skin = parent.created
+    assert merge.type().name() == "merge"
+    assert merge.inputs() == tuple(sections)
+    assert skin.inputs() == (merge,)
+    assert result["context"]["merge_node"]["path"] == merge.path()
     assert result["context"]["readback"]["verified"] is True
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "expected_created"),
+    (
+        ("merge_create", 0),
+        ("merge_connect", 1),
+        ("skin_create", 1),
+        ("skin_connect", 2),
+    ),
+)
+def test_loft_sections_rolls_back_the_whole_linear_loft_on_failure(
+    failure_stage: str,
+    expected_created: int,
+) -> None:
+    module = _load_script("loft_sections.py")
+    parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
+    sections = [
+        _Node(
+            "/obj/geo1/section{}".format(index),
+            "circle",
+            _Geometry(8, 1, 8, (-1.0, float(index), -1.0), (1.0, float(index), 1.0)),
+        )
+        for index in range(3)
+    ]
+    for section in sections:
+        section._parent = parent
+    by_path = {section.path(): section for section in sections}
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        if failure_stage == "merge_create" and type_name == "merge":
+            raise RuntimeError("PRIVATE_CREATE_DETAIL")
+        if failure_stage == "skin_create" and type_name == "skin":
+            raise RuntimeError("PRIVATE_CREATE_DETAIL")
+        node = original_create(type_name, node_name)
+        if type_name == "merge" and failure_stage == "merge_connect":
+            node._fail_input_index = 1
+        if type_name == "skin":
+            node._max_inputs = 2
+            if failure_stage == "skin_connect":
+                node._fail_input_index = 0
+        return node
+
+    parent.createNode = create_node
+
+    class _Hou:
+        @staticmethod
+        def node(path: str):
+            return by_path.get(path)
+
+    with patch.dict(sys.modules, {"hou": _Hou()}):
+        result = module.main(sections=[section.path() for section in sections])
+
+    assert result["success"] is False
+    assert result["message"] == "Failed to create verified Skin SOP loft"
+    assert "PRIVATE_" not in str(result)
+    assert len(parent.created) == expected_created
+    assert all(node.destroyed for node in parent.created)
 
 
 def test_boolean_op_resolves_native_menu_and_verifies_two_input_result() -> None:
@@ -566,6 +671,18 @@ def test_array_instances_builds_verified_radial_copy_to_points() -> None:
         "minimum": 2,
         "maximum": 128,
     }
+    assert contract["input_schema"]["properties"]["direction_mode"]["enum"] == [
+        "radial",
+        "tangent",
+    ]
+    assert contract["input_schema"]["properties"]["source_forward"]["enum"] == [
+        "+x",
+        "-x",
+        "+y",
+        "-y",
+        "+z",
+        "-z",
+    ]
 
     module = _load_script("array_instances.py")
     parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
@@ -580,6 +697,7 @@ def test_array_instances_builds_verified_radial_copy_to_points() -> None:
     def create_node(type_name: str, node_name=None):
         node = original_create(type_name, node_name)
         if type_name == "circle":
+            node._geometry = _Geometry(4, 1, 4, (-3.5, 0.0, -3.5), (3.5, 0.0, 3.5))
             node._parms["type"] = _Parm(
                 menu_items=("0", "1"),
                 menu_labels=("Polygon", "NURBS Curve"),
@@ -588,6 +706,44 @@ def test_array_instances_builds_verified_radial_copy_to_points() -> None:
                 menu_items=("0", "1", "2"),
                 menu_labels=("XY Plane", "YZ Plane", "ZX Plane"),
             )
+        if type_name == "attribwrangle":
+            orientation_geometry = _Geometry(
+                4,
+                1,
+                4,
+                (-3.5, 0.0, -3.5),
+                (3.5, 0.0, 3.5),
+                point_float_attributes={
+                    "P": (
+                        (0.0, 0.0, 3.5),
+                        (3.5, 0.0, 0.0),
+                        (0.0, 0.0, -3.5),
+                        (-3.5, 0.0, 0.0),
+                    ),
+                    "orient": (
+                        (0.0, 0.0, 0.0, 1.0),
+                        (0.0, 0.70710678, 0.0, 0.70710678),
+                        (0.0, 1.0, 0.0, 0.0),
+                        (0.0, -0.70710678, 0.0, 0.70710678),
+                    ),
+                },
+                point_int_attributes={"dcc_mcp_orientation_valid": (1, 1, 1, 1)},
+            )
+            node._parms["class"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("Points", "Primitives", "Detail"),
+            )
+
+            def verified_geometry():
+                snippet = node.parm("snippet").eval()
+                assert "vector ring_axis = set(0.0, 1.0, 0.0);" in snippet
+                assert "vector source_forward = set(1.0, 0.0, 0.0);" in snippet
+                assert "normalize(cross(ring_axis, radial))" in snippet
+                assert "p@orient = quaternion(dihedral" in snippet
+                assert "i@dcc_mcp_orientation_valid = 1" in snippet
+                return orientation_geometry
+
+            node.geometry = verified_geometry
         return node
 
     parent.createNode = create_node
@@ -603,20 +759,201 @@ def test_array_instances_builds_verified_radial_copy_to_points() -> None:
             count=4,
             radius=3.5,
             axis="y",
+            start_angle_degrees=30.0,
+            direction_mode="tangent",
+            source_forward="+x",
             node_name="main_rotor_array",
         )
 
     assert result["success"] is True, result
     assert result["context"]["node"]["type"] == "copytopoints"
     assert result["context"]["points_node"]["type"] == "circle"
+    assert result["context"]["orientation_node"]["type"] == "attribwrangle"
     assert result["context"]["parameters"] == {
         "axis": "y",
         "count": 4,
+        "direction_mode": "tangent",
         "radius": 3.5,
+        "source_forward": "+x",
+        "start_angle_degrees": 30.0,
     }
-    circle, copy = parent.created
-    assert copy.inputs() == (source, circle)
+    circle, orientation, copy = parent.created
+    assert circle.parmTuple("r").eval() == (0.0, 30.0, 0.0)
+    assert orientation.inputs() == (circle,)
+    assert copy.inputs() == (source, orientation)
+    assert result["context"]["readback"]["orientation"] == {
+        "attribute": "orient",
+        "distinct_count": 4,
+        "point_count": 4,
+        "tuple_size": 4,
+        "valid_count": 4,
+        "verified": True,
+    }
     assert result["context"]["readback"]["verified"] is True
+
+
+@pytest.mark.parametrize(
+    (
+        "axis",
+        "direction_mode",
+        "source_forward",
+        "axis_literal",
+        "forward_literal",
+        "target_literal",
+    ),
+    (
+        (
+            "x",
+            "radial",
+            "-z",
+            "set(1.0, 0.0, 0.0)",
+            "set(0.0, 0.0, -1.0)",
+            "vector target = radial;",
+        ),
+        (
+            "z",
+            "tangent",
+            "+y",
+            "set(0.0, 0.0, 1.0)",
+            "set(0.0, 1.0, 0.0)",
+            "vector target = normalize(cross(ring_axis, radial));",
+        ),
+    ),
+)
+def test_array_instances_emits_axis_and_source_forward_orientation_contract(
+    axis: str,
+    direction_mode: str,
+    source_forward: str,
+    axis_literal: str,
+    forward_literal: str,
+    target_literal: str,
+) -> None:
+    module = _load_script("array_instances.py")
+
+    snippet = module._orientation_vex(axis, direction_mode, source_forward)
+
+    assert "vector ring_axis = {};".format(axis_literal) in snippet
+    assert "vector source_forward = {};".format(forward_literal) in snippet
+    assert target_literal in snippet
+    assert "length2(radial) > 1e-12" in snippet
+    assert "i@dcc_mcp_orientation_valid = 0" in snippet
+
+
+def test_array_instances_rejects_missing_orientation_readback_and_rolls_back() -> None:
+    module = _load_script("array_instances.py")
+    parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
+    source = _Node(
+        "/obj/geo1/rotor_blade",
+        "box",
+        _Geometry(8, 6, 24, (0.0, -0.1, -0.5), (4.0, 0.1, 0.5)),
+    )
+    source._parent = parent
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        node = original_create(type_name, node_name)
+        if type_name == "circle":
+            node._geometry = _Geometry(4, 1, 4, (-2.0, 0.0, -2.0), (2.0, 0.0, 2.0))
+            node._parms["type"] = _Parm(
+                menu_items=("0", "1"),
+                menu_labels=("Polygon", "NURBS Curve"),
+            )
+            node._parms["orient"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("XY Plane", "YZ Plane", "ZX Plane"),
+            )
+        if type_name == "attribwrangle":
+            node._geometry = _Geometry(4, 1, 4, (-2.0, 0.0, -2.0), (2.0, 0.0, 2.0))
+            node._parms["class"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("Points", "Primitives", "Detail"),
+            )
+        return node
+
+    parent.createNode = create_node
+
+    class _Hou:
+        @staticmethod
+        def node(path: str):
+            return source if path == source.path() else None
+
+    with patch.dict(sys.modules, {"hou": _Hou()}):
+        result = module.main(input_path=source.path(), count=4, radius=2.0, axis="y")
+
+    assert result["success"] is False
+    assert result["message"] == "Failed to create verified radial instance array"
+    assert len(parent.created) == 2
+    assert all(node.destroyed for node in parent.created)
+
+
+def test_array_instances_rolls_back_ring_orientation_and_copy_on_connection_failure() -> None:
+    module = _load_script("array_instances.py")
+    parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
+    source = _Node(
+        "/obj/geo1/rotor_blade",
+        "box",
+        _Geometry(8, 6, 24, (0.0, -0.1, -0.5), (4.0, 0.1, 0.5)),
+    )
+    source._parent = parent
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        node = original_create(type_name, node_name)
+        if type_name == "circle":
+            node._geometry = _Geometry(4, 1, 4, (-2.0, 0.0, -2.0), (2.0, 0.0, 2.0))
+            node._parms["type"] = _Parm(
+                menu_items=("0", "1"),
+                menu_labels=("Polygon", "NURBS Curve"),
+            )
+            node._parms["orient"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("XY Plane", "YZ Plane", "ZX Plane"),
+            )
+        if type_name == "attribwrangle":
+            node._geometry = _Geometry(
+                4,
+                1,
+                4,
+                (-2.0, 0.0, -2.0),
+                (2.0, 0.0, 2.0),
+                point_float_attributes={
+                    "P": (
+                        (2.0, 0.0, 0.0),
+                        (0.0, 0.0, -2.0),
+                        (-2.0, 0.0, 0.0),
+                        (0.0, 0.0, 2.0),
+                    ),
+                    "orient": (
+                        (0.0, 0.0, 0.0, 1.0),
+                        (0.0, 0.70710678, 0.0, 0.70710678),
+                        (0.0, 1.0, 0.0, 0.0),
+                        (0.0, -0.70710678, 0.0, 0.70710678),
+                    ),
+                },
+                point_int_attributes={"dcc_mcp_orientation_valid": (1, 1, 1, 1)},
+            )
+            node._parms["class"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("Points", "Primitives", "Detail"),
+            )
+        if type_name == "copytopoints":
+            node._fail_input_index = 1
+        return node
+
+    parent.createNode = create_node
+
+    class _Hou:
+        @staticmethod
+        def node(path: str):
+            return source if path == source.path() else None
+
+    with patch.dict(sys.modules, {"hou": _Hou()}):
+        result = module.main(input_path=source.path(), count=4, radius=2.0, axis="y")
+
+    assert result["success"] is False
+    assert result["message"] == "Failed to create verified radial instance array"
+    assert len(parent.created) == 3
+    assert all(node.destroyed for node in parent.created)
 
 
 def test_boolean_op_fails_closed_and_removes_partial_node_without_native_menu() -> None:

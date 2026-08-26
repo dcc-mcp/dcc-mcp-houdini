@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from _mesh_common import cook_readback, geometry_readback, get_node, node_summary  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
 
 def loft_sections(sections: List[str], node_name: Optional[str] = None) -> dict:
@@ -24,7 +24,7 @@ def loft_sections(sections: List[str], node_name: Optional[str] = None) -> dict:
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
-    created = None
+    created = []
     try:
         sources = [get_node(hou, path) for path in sections]
         parent = sources[0].parent()
@@ -33,27 +33,40 @@ def loft_sections(sections: List[str], node_name: Optional[str] = None) -> dict:
         if any(source.parent() is not parent for source in sources[1:]):
             raise ValueError("All loft sections must share one parent SOP network")
         before = geometry_readback(sources[0])
-        created = parent.createNode("skin", node_name=node_name)
+        merge = parent.createNode("merge")
+        created.append(merge)
         for index, source in enumerate(sources):
-            created.setInput(index, source)
-        if hasattr(created, "moveToGoodPosition"):
-            created.moveToGoodPosition()
-        if hasattr(created, "setDisplayFlag"):
-            created.setDisplayFlag(True)
-        readback = cook_readback(created, before=before)
+            merge.setInput(index, source)
+        if hasattr(merge, "moveToGoodPosition"):
+            merge.moveToGoodPosition()
+        merge_readback = cook_readback(merge, require_change=False)
+
+        skin = parent.createNode("skin", node_name=node_name)
+        created.append(skin)
+        skin.setInput(0, merge)
+        if hasattr(skin, "moveToGoodPosition"):
+            skin.moveToGoodPosition()
+        if hasattr(skin, "setDisplayFlag"):
+            skin.setDisplayFlag(True)
+        readback = cook_readback(skin, before=before)
+        readback["merge"] = merge_readback
         return skill_success(
             "Created and verified Skin SOP loft",
             sections=[source.path() for source in sources],
-            node=node_summary(created),
+            merge_node=node_summary(merge),
+            node=node_summary(skin),
             readback=readback,
         )
-    except Exception as exc:
-        if created is not None:
+    except Exception:  # noqa: BLE001
+        for node in reversed(created):
             try:
-                created.destroy()
+                node.destroy()
             except Exception:  # noqa: BLE001
                 pass
-        return skill_exception(exc, message="Failed to create verified Skin SOP loft")
+        return skill_error(
+            "Failed to create verified Skin SOP loft",
+            "Houdini rejected the bounded loft transaction",
+        )
 
 
 @skill_entry
