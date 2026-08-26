@@ -155,6 +155,7 @@ class _Node:
         self._parm_tuples = {}
         self.created = []
         self.destroyed = False
+        self.destroy_calls = 0
         self._max_inputs = max_inputs
         self._fail_input_index = None
 
@@ -216,6 +217,7 @@ class _Node:
         return None
 
     def destroy(self) -> None:
+        self.destroy_calls += 1
         self.destroyed = True
 
 
@@ -886,7 +888,65 @@ def test_array_instances_rejects_missing_orientation_readback_and_rolls_back() -
     assert all(node.destroyed for node in parent.created)
 
 
-def test_array_instances_rolls_back_ring_orientation_and_copy_on_connection_failure() -> None:
+@pytest.mark.parametrize("failure_stage", ("input_zero", "display_flag"))
+def test_array_instances_rolls_back_unreturned_wrangle_on_pre_return_failure(
+    failure_stage: str,
+) -> None:
+    module = _load_script("array_instances.py")
+    parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
+    source = _Node(
+        "/obj/geo1/rotor_blade",
+        "box",
+        _Geometry(8, 6, 24, (0.0, -0.1, -0.5), (4.0, 0.1, 0.5)),
+    )
+    source._parent = parent
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        node = original_create(type_name, node_name)
+        if type_name == "circle":
+            node._geometry = _Geometry(4, 1, 4, (-2.0, 0.0, -2.0), (2.0, 0.0, 2.0))
+            node._parms["type"] = _Parm(
+                menu_items=("0", "1"),
+                menu_labels=("Polygon", "NURBS Curve"),
+            )
+            node._parms["orient"] = _Parm(
+                menu_items=("0", "1", "2"),
+                menu_labels=("XY Plane", "YZ Plane", "ZX Plane"),
+            )
+        if type_name == "attribwrangle":
+            if failure_stage == "input_zero":
+                node._fail_input_index = 0
+            else:
+
+                def fail_display(_value: bool) -> None:
+                    raise RuntimeError("PRIVATE_DISPLAY_DETAIL")
+
+                node.setDisplayFlag = fail_display
+        return node
+
+    parent.createNode = create_node
+
+    class _Hou:
+        @staticmethod
+        def node(path: str):
+            return source if path == source.path() else None
+
+    with patch.dict(sys.modules, {"hou": _Hou()}):
+        result = module.main(input_path=source.path(), count=4, radius=2.0, axis="y")
+
+    assert result["success"] is False
+    assert result["message"] == "Failed to create verified radial instance array"
+    assert "PRIVATE_" not in str(result)
+    assert len(parent.created) == 2
+    assert all(node.destroyed for node in parent.created)
+    assert [node.destroy_calls for node in parent.created] == [1, 1]
+
+
+@pytest.mark.parametrize("copy_input_index", (0, 1))
+def test_array_instances_rolls_back_ring_orientation_and_copy_on_connection_failure(
+    copy_input_index: int,
+) -> None:
     module = _load_script("array_instances.py")
     parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
     source = _Node(
@@ -937,7 +997,7 @@ def test_array_instances_rolls_back_ring_orientation_and_copy_on_connection_fail
                 menu_labels=("Points", "Primitives", "Detail"),
             )
         if type_name == "copytopoints":
-            node._fail_input_index = 1
+            node._fail_input_index = copy_input_index
         return node
 
     parent.createNode = create_node
@@ -954,6 +1014,45 @@ def test_array_instances_rolls_back_ring_orientation_and_copy_on_connection_fail
     assert result["message"] == "Failed to create verified radial instance array"
     assert len(parent.created) == 3
     assert all(node.destroyed for node in parent.created)
+    assert [node.destroy_calls for node in parent.created] == [1, 1, 1]
+
+
+def test_make_downstream_sop_preserves_display_failure_when_cleanup_raises_base_exception() -> None:
+    module = _load_script("_mesh_common.py")
+    parent = _Node("/obj/geo1", "geo", _Geometry(0, 0, 0, (0, 0, 0), (0, 0, 0)))
+    source = _Node(
+        "/obj/geo1/source",
+        "box",
+        _Geometry(8, 6, 24, (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0)),
+    )
+    source._parent = parent
+    original_failure = KeyboardInterrupt("PRIVATE_DISPLAY_DETAIL")
+    cleanup_failure = SystemExit("PRIVATE_CLEANUP_DETAIL")
+    original_create = parent.createNode
+
+    def create_node(type_name: str, node_name=None):
+        node = original_create(type_name, node_name)
+
+        def fail_display(_value: bool) -> None:
+            raise original_failure
+
+        def fail_cleanup() -> None:
+            node.destroy_calls += 1
+            raise cleanup_failure
+
+        node.setDisplayFlag = fail_display
+        node.destroy = fail_cleanup
+        return node
+
+    parent.createNode = create_node
+
+    with pytest.raises(KeyboardInterrupt) as captured:
+        module.make_downstream_sop(source, "attribwrangle")
+
+    assert captured.value is original_failure
+    assert len(parent.created) == 1
+    assert parent.created[0].inputs() == (source,)
+    assert parent.created[0].destroy_calls == 1
 
 
 def test_boolean_op_fails_closed_and_removes_partial_node_without_native_menu() -> None:
