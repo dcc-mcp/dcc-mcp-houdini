@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.35.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.35.0...v0.35.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* bind texture payload during assignment ([6beb255](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/6beb255df0dbbe3381a40d88383a23625a3892f9))
+* converge texture assignments safely ([7a83791](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7a83791274e19cad3ca60f200bfddeaab2d85c25))
+* harden texture assignment transactions ([4f9d2e1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/4f9d2e1f9f0f706cd895acf3215dd034a2770186))
+* harden texture rollback boundaries ([54b438a](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/54b438ae6540cb02f569a0a3d465338799de0f17))
+* make texture assignment fail closed ([85751b4](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/85751b47b799b28e0834580f3a047badc26ee1e7))
+* preserve texture transaction integrity ([f40cd5e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f40cd5e4adf0f9a087f2d4ce4ab9663715068105))
+
 ## [0.35.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.34.0...v0.35.0) (2026-08-26)
 
 
