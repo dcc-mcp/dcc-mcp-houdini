@@ -76,8 +76,11 @@ presets).
   `mtlximage` and `arnold::image`, or creates the matching image node for an
   exact input on `mtlxstandard_surface` and `arnold::standard_surface`. The
   texture must remain one regular, non-linked local file through every guarded
-  mutation and readback. Owned image nodes are bound to material, node, input,
-  and Houdini session identity; stale or duplicate ownership fails closed.
+  mutation and readback. Digest work is limited to one initial pass, a 256 MiB
+  file ceiling, and a bounded deadline; later main-thread guards recapture only
+  physical identity metadata. Owned image nodes are bound to a durable material
+  identity plus node, input, and Houdini session identity; stale or duplicate
+  ownership fails closed.
   Every touched parameter, input, and newly created node is rolled back if
   mutation or post-mutation verification fails. Other node types and missing
   parameters fail closed without fallback wiring.
