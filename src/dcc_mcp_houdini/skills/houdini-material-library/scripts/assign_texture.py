@@ -26,6 +26,7 @@ _IMAGE_FILE_PARMS = {
 }
 _PARAMETER_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _OWNER_USER_DATA_KEY = "dcc_mcp.assign_texture.owner"
+_MATERIAL_OWNERSHIP_REGISTRY: dict[tuple[int, int], Any] = {}
 
 
 class _TextureFileError(RuntimeError):
@@ -34,6 +35,10 @@ class _TextureFileError(RuntimeError):
 
 class _OwnershipError(RuntimeError):
     """An ambiguous or stale ownership contract."""
+
+
+class _TextureParameterError(RuntimeError):
+    """The host parameter shape is not a supported texture file slot."""
 
 
 @dataclass(frozen=True)
@@ -223,6 +228,7 @@ def _assign_direct_texture(
     texture_ref: _TextureFileRef,
     colorspace: Optional[str],
     undo_label: str,
+    outer_snapshots: list[tuple[Any, Any]],
 ) -> dict:
     node_type = texture_node.type().name()
     if parameter_name not in _IMAGE_FILE_PARMS.get(node_type, ()):
@@ -260,6 +266,7 @@ def _assign_direct_texture(
         if cs_parm is not None:
             _assert_texture_file_current(texture_ref)
             snapshots.append((cs_parm, cs_parm.eval()))
+        outer_snapshots.extend(snapshots)
         _assert_texture_file_current(texture_ref)
         parm.set(texture_path)
         if cs_parm is not None:
@@ -308,7 +315,7 @@ def _destroy_created_node(node: Any) -> bool:
         name = node.name()
         node.destroy()
         return parent.node(name) is not node
-    except Exception:  # noqa: BLE001
+    except BaseException:  # noqa: BLE001
         return False
 
 
@@ -344,6 +351,16 @@ def _parent_children(parent: Any) -> tuple[Any, ...]:
     return tuple(children() if callable(children) else children)
 
 
+def _is_registered_material(material_node: Any, input_index: int) -> bool:
+    registered = _MATERIAL_OWNERSHIP_REGISTRY.get((_node_session_id(material_node), input_index))
+    if registered is None:
+        return False
+    try:
+        return registered is material_node or bool(registered == material_node)
+    except BaseException:  # noqa: BLE001
+        return False
+
+
 def _find_owned_texture(material_node: Any, input_index: int, texture_type: str) -> Optional[Any]:
     material_session = _node_session_id(material_node)
     material_path = material_node.path()
@@ -367,6 +384,11 @@ def _find_owned_texture(material_node: Any, input_index: int, texture_type: str)
             if parts[4] == material_path:
                 raise _OwnershipError("stale material session ownership")
             continue
+        registered_material = _MATERIAL_OWNERSHIP_REGISTRY.get((material_session, input_index))
+        if registered_material is not None and not _is_registered_material(material_node, input_index):
+            raise _OwnershipError("material session identity was reused")
+        if parts[4] != material_path and not _is_registered_material(material_node, input_index):
+            raise _OwnershipError("stale material path ownership")
         if marker_node_session != _node_session_id(node) or node.type().name() != texture_type:
             raise _OwnershipError("stale texture node ownership")
         owned.append(node)
@@ -376,6 +398,7 @@ def _find_owned_texture(material_node: Any, input_index: int, texture_type: str)
 
 
 def _assign_wired_material(
+    hou: Any,
     material_node: Any,
     material_type: str,
     parameter_name: str,
@@ -421,12 +444,6 @@ def _assign_wired_material(
         if created:
             _assert_texture_file_current(texture_ref)
             texture_node = material_node.parent().createNode(texture_type)
-            owner_marker = _owner_marker(material_node, input_index, texture_node)
-            _assert_texture_file_current(texture_ref)
-            texture_node.setUserData(_OWNER_USER_DATA_KEY, owner_marker)
-            _assert_texture_file_current(texture_ref)
-            if texture_node.userData(_OWNER_USER_DATA_KEY) != owner_marker:
-                raise RuntimeError("ownership readback mismatch")
         else:
             texture_node = owned_texture
 
@@ -435,7 +452,20 @@ def _assign_wired_material(
             None,
         )
         if file_parm is None:
-            raise RuntimeError("texture node has no supported file parameter")
+            raise _TextureParameterError("texture node has no supported file parameter")
+        try:
+            file_parm_type = file_parm.parmTemplate().type()
+        except BaseException as exc:  # noqa: BLE001
+            raise _TextureParameterError("texture file parameter type is unreadable") from exc
+        if file_parm_type != hou.parmTemplateType.String:
+            raise _TextureParameterError("texture file parameter is not a string")
+        if created:
+            owner_marker = _owner_marker(material_node, input_index, texture_node)
+            _assert_texture_file_current(texture_ref)
+            texture_node.setUserData(_OWNER_USER_DATA_KEY, owner_marker)
+            _assert_texture_file_current(texture_ref)
+            if texture_node.userData(_OWNER_USER_DATA_KEY) != owner_marker:
+                raise RuntimeError("ownership readback mismatch")
         _assert_texture_file_current(texture_ref)
         snapshots = [(file_parm, file_parm.eval())]
         _assert_texture_file_current(texture_ref)
@@ -455,7 +485,7 @@ def _assign_wired_material(
         texture_summary = node_summary(texture_node)
         _assert_texture_file_current(texture_ref)
         texture_node_path = texture_node.path()
-        return skill_success(
+        result = skill_success(
             "Assigned and wired texture to material",
             material=material_summary,
             parameter=parameter_name,
@@ -471,6 +501,9 @@ def _assign_wired_material(
                 "texture_path": str(texture_readback),
             },
         )
+        material_session = _node_session_id(material_node)
+        _MATERIAL_OWNERSHIP_REGISTRY[(material_session, input_index)] = material_node
+        return result
     except BaseException as exc:  # noqa: BLE001
         rollback_ok = _rollback_parms(snapshots) if snapshots else True
         try:
@@ -489,6 +522,12 @@ def _assign_wired_material(
             )
         if isinstance(exc, _TextureFileError):
             return skill_error("Texture file changed during assignment", "TEXTURE_FILE_CHANGED")
+        if isinstance(exc, _TextureParameterError):
+            return skill_error(
+                "Texture node has no supported string file parameter",
+                "UNSUPPORTED_TEXTURE_PARAMETER",
+                node_type=texture_type,
+            )
         return skill_error("Texture could not be wired to the material input", "TEXTURE_WIRING_FAILED")
 
 
@@ -555,6 +594,7 @@ def assign_texture(
         )
 
     undo_label = "DCC MCP: assign texture {}".format(parameter_name)
+    outer_snapshots: list[tuple[Any, Any]] = []
     try:
         with _undo_group(hou, undo_label):
             if target_type in _PRINCIPLED_SHADER_TYPES:
@@ -575,8 +615,10 @@ def assign_texture(
                     texture_ref,
                     colorspace,
                     undo_label,
+                    outer_snapshots,
                 )
             return _assign_wired_material(
+                hou,
                 target_node,
                 target_type,
                 parameter_name,
@@ -586,6 +628,11 @@ def assign_texture(
                 undo_label,
             )
     except BaseException:  # noqa: BLE001
+        if outer_snapshots and not _rollback_parms(outer_snapshots):
+            return skill_error(
+                "Texture assignment failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
         return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
 
 
