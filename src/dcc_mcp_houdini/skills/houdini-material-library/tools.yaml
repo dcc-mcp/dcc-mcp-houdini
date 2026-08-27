@@ -141,8 +141,10 @@ tools:
       Assign a texture through an explicit Principled Shader, MaterialX, or
       Arnold contract.  Principled Shader uses its built-in texture toggle and
       path; supported image nodes update a string file parameter; supported
-      MaterialX/Arnold surface nodes create and verify a matching image-node
-      connection. Unsupported targets fail without fallback wiring.
+      MaterialX/Arnold surface nodes create and own one matching image-node
+      connection per material input, then reuse it on repeated calls. Existing
+      upstream nodes owned by another target are preserved. Unsupported targets
+      fail without fallback wiring.
     source_file: scripts/assign_texture.py
     execution: sync
     affinity: main
@@ -177,8 +179,10 @@ tools:
           type: string
           minLength: 1
           description: >-
-            OCIO color space for the texture (e.g. Utility - sRGB - Texture,
-            ACES - ACEScg).  Auto-detected from file extension when omitted.
+            Explicit OCIO color space for a direct image node exposing a string
+            colorspace parameter. Principled and wired material targets reject
+            explicit values before mutation. When omitted, extension detection
+            is advisory only and does not change host color-space parameters.
 
   - name: list_images
     description: >-
