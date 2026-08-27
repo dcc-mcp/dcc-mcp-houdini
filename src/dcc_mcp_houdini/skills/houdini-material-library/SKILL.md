@@ -77,7 +77,9 @@ presets).
   exact input on `mtlxstandard_surface` and `arnold::standard_surface`. The
   texture must remain one regular, non-linked local file through every guarded
   mutation and readback. Digest work is limited to one initial pass, a 256 MiB
-  file ceiling, and a bounded deadline; later main-thread guards recapture only
+  file ceiling, and an elapsed-time budget checked before and after every read,
+  including EOF. On Windows, a native read lease denies writes and replacement
+  until mutation, final readback, and undo exit complete; later guards recapture
   physical identity metadata. Owned image nodes are bound to a durable material
   identity plus node, input, and Houdini session identity; stale or duplicate
   ownership fails closed.
