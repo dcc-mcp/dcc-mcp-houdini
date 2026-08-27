@@ -138,9 +138,11 @@ tools:
   # ── Texture Management ─────────────────────────────────────────────
   - name: assign_texture
     description: >-
-      Assign a texture file to a material/shader parameter.  Creates or
-      updates a file-texture VOP node and wires it to the target parameter.
-      Supports principledshader, MaterialX, and Arnold shaders.
+      Assign a texture through an explicit Principled Shader, MaterialX, or
+      Arnold contract.  Principled Shader uses its built-in texture toggle and
+      path; supported image nodes update a string file parameter; supported
+      MaterialX/Arnold surface nodes create and verify a matching image-node
+      connection. Unsupported targets fail without fallback wiring.
     source_file: scripts/assign_texture.py
     execution: sync
     affinity: main
@@ -155,20 +157,25 @@ tools:
     input_schema:
       type: object
       required: [material_path, parameter_name, texture_path]
+      additionalProperties: false
       properties:
         material_path:
           type: string
+          pattern: ^/
           description: Path to the material/shader node.
         parameter_name:
           type: string
+          pattern: ^[A-Za-z][A-Za-z0-9_]*$
           description: >-
             Name of the color/texture parameter to drive
             (e.g. basecolor, baseColor, diffuse, base_color).
         texture_path:
           type: string
+          minLength: 1
           description: File path to the texture image on disk.
         colorspace:
           type: string
+          minLength: 1
           description: >-
             OCIO color space for the texture (e.g. Utility - sRGB - Texture,
             ACES - ACEScg).  Auto-detected from file extension when omitted.
