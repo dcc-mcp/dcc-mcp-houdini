@@ -18,6 +18,7 @@ _WIRED_MATERIAL_NODE_TYPES = {
 }
 _IMAGE_FILE_PARMS = ("filename", "file", "texturefile", "tex0")
 _PARAMETER_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_OWNER_USER_DATA_KEY = "dcc_mcp.assign_texture.owner"
 
 
 def _detect_colorspace(texture_path: str) -> Optional[str]:
@@ -47,9 +48,9 @@ def _rollback_parms(snapshots: list[tuple[Any, Any]]) -> bool:
     try:
         for parm, value in reversed(snapshots):
             parm.set(value)
+        return all(parm.eval() == value for parm, value in snapshots)
     except Exception:  # noqa: BLE001
         return False
-    return True
 
 
 def _assign_principled(
@@ -88,7 +89,7 @@ def _assign_principled(
         material=node_summary(material_node),
         parameter=parameter_name,
         texture_path=texture_path,
-        colorspace=colorspace or _detect_colorspace(texture_path),
+        detected_colorspace=_detect_colorspace(texture_path),
         verified=True,
         undo_label=undo_label,
         readback={"texture_enabled": bool(enabled_readback), "texture_path": str(texture_readback)},
@@ -117,6 +118,16 @@ def _assign_direct_texture(
 
     cs_parm = texture_node.parm("colorspace") if colorspace else None
     try:
+        cs_parm_type = cs_parm.parmTemplate().type() if cs_parm is not None else None
+    except Exception:  # noqa: BLE001
+        cs_parm_type = None
+    if colorspace is not None and cs_parm_type != hou.parmTemplateType.String:
+        return skill_error(
+            "Explicit color space is unsupported for this texture target",
+            "UNSUPPORTED_COLORSPACE",
+            node_type=texture_node.type().name(),
+        )
+    try:
         snapshots = [(parm, parm.eval())]
         if cs_parm is not None:
             snapshots.append((cs_parm, cs_parm.eval()))
@@ -136,24 +147,42 @@ def _assign_direct_texture(
             )
         return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
 
+    readback = {"parameter": parameter_name, "texture_path": str(texture_readback)}
+    context = {"detected_colorspace": _detect_colorspace(texture_path)}
+    if colorspace is not None:
+        readback["colorspace"] = str(cs_parm.eval())
+        context["colorspace_applied"] = colorspace
     return skill_success(
         "Assigned texture to image node parameter",
         material=node_summary(texture_node),
         parameter=parameter_name,
         texture_path=texture_path,
-        colorspace=colorspace or _detect_colorspace(texture_path),
         verified=True,
         undo_label=undo_label,
-        readback={"parameter": parameter_name, "texture_path": str(texture_readback)},
+        readback=readback,
+        **context,
     )
 
 
 def _destroy_created_node(node: Any) -> bool:
     try:
+        parent = node.parent()
+        name = node.name()
         node.destroy()
+        return parent.node(name) is not node
     except Exception:  # noqa: BLE001
         return False
-    return True
+
+
+def _owner_marker(material_node: Any, input_index: int) -> str:
+    return "v1|{}|{}".format(material_node.path(), input_index)
+
+
+def _is_owned_texture(node: Any, texture_type: str, owner_marker: str) -> bool:
+    try:
+        return node.type().name() == texture_type and node.userData(_OWNER_USER_DATA_KEY) == owner_marker
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _assign_wired_material(
@@ -166,17 +195,50 @@ def _assign_wired_material(
 ) -> dict:
     texture_type = _WIRED_MATERIAL_NODE_TYPES[material_type]
     try:
-        texture_node = material_node.parent().createNode(texture_type)
+        input_names = tuple(material_node.inputNames())
     except Exception:  # noqa: BLE001
+        input_names = ()
+    input_index = next(
+        (index for index, name in enumerate(input_names) if name.lower() == parameter_name.lower()),
+        None,
+    )
+    if input_index is None:
         return skill_error(
-            "Required texture node could not be created",
-            "TEXTURE_NODE_CREATION_FAILED",
-            node_type=texture_type,
+            "Unsupported material texture input",
+            "UNSUPPORTED_TEXTURE_PARAMETER",
+            node_type=material_type,
         )
+
+    try:
+        previous_input = material_node.input(input_index)
+    except Exception:  # noqa: BLE001
+        return skill_error("Material input cannot be read safely", "TEXTURE_WIRING_FAILED")
+
+    owner_marker = _owner_marker(material_node, input_index)
+    created = not _is_owned_texture(previous_input, texture_type, owner_marker)
+    if created:
+        try:
+            texture_node = material_node.parent().createNode(texture_type)
+            texture_node.setUserData(_OWNER_USER_DATA_KEY, owner_marker)
+            if texture_node.userData(_OWNER_USER_DATA_KEY) != owner_marker:
+                raise RuntimeError("ownership readback mismatch")
+        except Exception:  # noqa: BLE001
+            if "texture_node" in locals() and not _destroy_created_node(texture_node):
+                return skill_error(
+                    "Texture node creation failed and rollback could not be verified",
+                    "TEXTURE_ROLLBACK_FAILED",
+                )
+            return skill_error(
+                "Required texture node could not be created",
+                "TEXTURE_NODE_CREATION_FAILED",
+                node_type=texture_type,
+            )
+    else:
+        texture_node = previous_input
 
     file_parm = next((texture_node.parm(name) for name in _IMAGE_FILE_PARMS if texture_node.parm(name)), None)
     if file_parm is None:
-        if not _destroy_created_node(texture_node):
+        if created and not _destroy_created_node(texture_node):
             return skill_error(
                 "Texture node validation failed and rollback could not be verified",
                 "TEXTURE_ROLLBACK_FAILED",
@@ -188,52 +250,22 @@ def _assign_wired_material(
         )
 
     try:
-        input_names = tuple(material_node.inputNames())
-    except Exception:  # noqa: BLE001
-        input_names = ()
-    input_index = next(
-        (index for index, name in enumerate(input_names) if name.lower() == parameter_name.lower()),
-        None,
-    )
-    if input_index is None:
-        if not _destroy_created_node(texture_node):
-            return skill_error(
-                "Material input validation failed and rollback could not be verified",
-                "TEXTURE_ROLLBACK_FAILED",
-            )
-        return skill_error(
-            "Unsupported material texture input",
-            "UNSUPPORTED_TEXTURE_PARAMETER",
-            node_type=material_type,
-        )
-
-    try:
-        previous_input = material_node.input(input_index)
-    except Exception:  # noqa: BLE001
-        if not _destroy_created_node(texture_node):
-            return skill_error(
-                "Material input validation failed and rollback could not be verified",
-                "TEXTURE_ROLLBACK_FAILED",
-            )
-        return skill_error("Material input cannot be read safely", "TEXTURE_WIRING_FAILED")
-
-    actual_colorspace = colorspace or _detect_colorspace(texture_path)
-    cs_parm = texture_node.parm("colorspace") if actual_colorspace else None
-    try:
+        snapshots = [(file_parm, file_parm.eval())]
         file_parm.set(texture_path)
-        if cs_parm is not None:
-            cs_parm.set(actual_colorspace)
-        material_node.setInput(input_index, texture_node, 0)
+        if created:
+            material_node.setInput(input_index, texture_node, 0)
         if file_parm.eval() != texture_path or material_node.input(input_index) is not texture_node:
             raise RuntimeError("readback mismatch")
     except Exception:  # noqa: BLE001
-        rollback_ok = True
+        rollback_ok = _rollback_parms(snapshots) if "snapshots" in locals() else False
         try:
-            if material_node.input(input_index) is texture_node:
+            if created and material_node.input(input_index) is texture_node:
                 material_node.setInput(input_index, previous_input, 0)
+            rollback_ok = material_node.input(input_index) is previous_input and rollback_ok
         except Exception:  # noqa: BLE001
             rollback_ok = False
-        rollback_ok = _destroy_created_node(texture_node) and rollback_ok
+        if created:
+            rollback_ok = _destroy_created_node(texture_node) and rollback_ok
         if not rollback_ok:
             return skill_error(
                 "Texture wiring failed and rollback could not be verified",
@@ -247,7 +279,8 @@ def _assign_wired_material(
         parameter=parameter_name,
         texture_node=node_summary(texture_node),
         texture_path=texture_path,
-        colorspace=actual_colorspace,
+        detected_colorspace=_detect_colorspace(texture_path),
+        reused_owned_node=not created,
         verified=True,
         undo_label=undo_label,
         readback={
@@ -297,6 +330,18 @@ def assign_texture(
             "Unsupported texture assignment target",
             "UNSUPPORTED_TEXTURE_TARGET",
             node_type=target_type or "unknown",
+        )
+    if colorspace is not None and target_type in _PRINCIPLED_SHADER_TYPES:
+        return skill_error(
+            "Explicit color space is unsupported for this texture target",
+            "UNSUPPORTED_COLORSPACE",
+            node_type=target_type,
+        )
+    if colorspace is not None and target_type in _WIRED_MATERIAL_NODE_TYPES:
+        return skill_error(
+            "Explicit color space is unsupported for this texture target",
+            "UNSUPPORTED_COLORSPACE",
+            node_type=target_type,
         )
 
     undo_label = "DCC MCP: assign texture {}".format(parameter_name)

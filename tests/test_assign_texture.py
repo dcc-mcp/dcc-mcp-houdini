@@ -68,6 +68,19 @@ class _FailOnValueParm(_FakeParm):
         super().set(value)
 
 
+class _RetainsMutationParm(_FakeParm):
+    def __init__(self, value: object, parm_type: object) -> None:
+        super().__init__(value, parm_type)
+        self._original = value
+        self._mutated = False
+
+    def set(self, value: object) -> None:
+        if self._mutated and value == self._original:
+            return
+        self._mutated = True
+        super().set(value)
+
+
 class _FakeNodeType:
     def __init__(self, name: str) -> None:
         self._name = name
@@ -89,8 +102,9 @@ class _FakeParent:
 
 
 class _FakePrincipledShader:
-    def __init__(self, string_type: object) -> None:
+    def __init__(self, string_type: object, node_type: str = "principledshader::2.0") -> None:
         self._parent = _FakeParent()
+        self._type = node_type
         numeric_type = object()
         self.parms = {
             "basecolor": _FakeParm((1.0, 1.0, 1.0), numeric_type),
@@ -105,7 +119,7 @@ class _FakePrincipledShader:
         return self._parent
 
     def type(self) -> _FakeNodeType:
-        return _FakeNodeType("principledshader::2.0")
+        return _FakeNodeType(self._type)
 
     def path(self) -> str:
         return "/mat/principledshader1"
@@ -139,18 +153,37 @@ class _FakeTextureNode:
         self._parent = parent
         self._type = node_type
         self._file = _FakeParm("", string_type)
+        self._colorspace = None
+        self._user_data: dict[str, str] = {}
+        self._name = "image{}".format(len(parent.children) + 1)
 
     def parm(self, name: str):
-        return self._file if name == "file" else None
+        if name == "file":
+            return self._file
+        if name == "colorspace":
+            return self._colorspace
+        return None
+
+    def enable_colorspace(self, value: str = "auto") -> None:
+        self._colorspace = _FakeParm(value, self._file.parmTemplate().type())
 
     def type(self) -> _FakeNodeType:
         return _FakeNodeType(self._type)
 
+    def parent(self) -> "_FakeWiringParent":
+        return self._parent
+
     def path(self) -> str:
-        return "/mat/image1"
+        return "/mat/{}".format(self._name)
 
     def name(self) -> str:
-        return "image1"
+        return self._name
+
+    def userData(self, key: str):
+        return self._user_data.get(key)
+
+    def setUserData(self, key: str, value: str) -> None:
+        self._user_data[key] = value
 
     def destroy(self) -> None:
         self._parent.children.remove(self)
@@ -169,10 +202,26 @@ class _FakeWiringParent:
     def path(self) -> str:
         return "/mat"
 
+    def node(self, name: str):
+        return next((child for child in self.children if child.name() == name), None)
+
+
+class _FakeRetainedDestroyNode(_FakeTextureNode):
+    def destroy(self) -> None:
+        return None
+
+
+class _FakeRetainedDestroyParent(_FakeWiringParent):
+    def createNode(self, node_type: str) -> _FakeTextureNode:
+        node = _FakeRetainedDestroyNode(self, node_type, self._string_type)
+        self.children.append(node)
+        return node
+
 
 class _FakeWiredMaterial:
-    def __init__(self, string_type: object) -> None:
+    def __init__(self, string_type: object, node_type: str = "mtlxstandard_surface") -> None:
         self._parent = _FakeWiringParent(string_type)
+        self._type = node_type
 
     def parm(self, _name: str):
         return None
@@ -181,7 +230,7 @@ class _FakeWiredMaterial:
         return self._parent
 
     def type(self) -> _FakeNodeType:
-        return _FakeNodeType("mtlxstandard_surface")
+        return _FakeNodeType(self._type)
 
     def path(self) -> str:
         return "/mat/standard_surface1"
@@ -200,8 +249,8 @@ class _FakeWiredMaterial:
 
 
 class _FakeSuccessfulWiredMaterial(_FakeWiredMaterial):
-    def __init__(self, string_type: object) -> None:
-        super().__init__(string_type)
+    def __init__(self, string_type: object, node_type: str = "mtlxstandard_surface") -> None:
+        super().__init__(string_type, node_type)
         self._input = None
 
     def setInput(self, index: int, node: _FakeTextureNode, output: int) -> None:
@@ -212,6 +261,17 @@ class _FakeSuccessfulWiredMaterial(_FakeWiredMaterial):
     def input(self, index: int):
         assert index == 0
         return self._input
+
+
+class _FakeStickyRollbackMaterial(_FakeSuccessfulWiredMaterial):
+    def __init__(self, string_type: object, previous_input: _FakeTextureNode) -> None:
+        super().__init__(string_type)
+        self._input = previous_input
+
+    def setInput(self, index: int, node: _FakeTextureNode, output: int) -> None:
+        if node is self._input:
+            return
+        super().setInput(index, node, output)
 
 
 class _FakeUndoGroup:
@@ -251,6 +311,24 @@ def test_principled_shader_uses_builtin_texture_slot_without_orphan_vop(monkeypa
 
     assert result["success"] is True
     assert material.parms["basecolor_useTexture"].value == 1
+    assert material.parms["basecolor_texture"].value == str(texture)
+    assert material.parent().created_types == []
+
+
+def test_unversioned_principled_shader_uses_builtin_texture_slot(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakePrincipledShader(string_type, "principledshader")
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(material.path(), "basecolor", str(texture))
+
+    assert result["success"] is True
     assert material.parms["basecolor_texture"].value == str(texture)
     assert material.parent().created_types == []
 
@@ -320,6 +398,25 @@ def test_wiring_failure_fails_closed_and_removes_created_texture(monkeypatch, tm
     assert material.parent().children == []
 
 
+def test_nonthrowing_node_destroy_requires_exact_readback(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeWiredMaterial(string_type)
+    material._parent = _FakeRetainedDestroyParent(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ROLLBACK_FAILED"
+    assert len(material.parent().children) == 1
+
+
 def test_principled_partial_write_rolls_back_without_side_effect(monkeypatch, tmp_path: Path) -> None:
     module = _load_script()
     string_type = object()
@@ -342,6 +439,26 @@ def test_principled_partial_write_rolls_back_without_side_effect(monkeypatch, tm
     assert material.parms["basecolor_useTexture"].value == 0
 
 
+def test_nonthrowing_parameter_rollback_requires_exact_readback(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakePrincipledShader(string_type)
+    material.parms["basecolor_texture"] = _RetainsMutationParm("original.png", string_type)
+    material.parms["basecolor_useTexture"] = _FailOnValueParm(0, object(), rejected=1)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(material.path(), "basecolor", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ROLLBACK_FAILED"
+    assert "original.png" not in str(result)
+
+
 def test_principled_missing_builtin_texture_parameter_fails_without_mutation(monkeypatch, tmp_path: Path) -> None:
     module = _load_script()
     string_type = object()
@@ -360,6 +477,25 @@ def test_principled_missing_builtin_texture_parameter_fails_without_mutation(mon
     assert result["error"] == "UNSUPPORTED_TEXTURE_PARAMETER"
     assert material.parms["basecolor_useTexture"].value == 0
     assert material.parent().created_types == []
+
+
+def test_principled_rejects_explicit_colorspace_before_mutation(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakePrincipledShader(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(material.path(), "basecolor", str(texture), colorspace="ACEScg")
+
+    assert result["success"] is False
+    assert result["error"] == "UNSUPPORTED_COLORSPACE"
+    assert material.parms["basecolor_useTexture"].value == 0
+    assert material.parms["basecolor_texture"].value == ""
 
 
 def test_supported_texture_node_returns_verified_file_readback(monkeypatch, tmp_path: Path) -> None:
@@ -383,6 +519,67 @@ def test_supported_texture_node_returns_verified_file_readback(monkeypatch, tmp_
     }
     assert image.parm("file").value == str(texture)
     assert parent.children == []
+
+
+def test_explicit_colorspace_requires_parameter_before_direct_mutation(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    image = _FakeTextureNode(parent, "mtlximage", string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: image if path == image.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(image.path(), "file", str(texture), colorspace="ACEScg")
+
+    assert result["success"] is False
+    assert result["error"] == "UNSUPPORTED_COLORSPACE"
+    assert image.parm("file").value == ""
+
+
+def test_explicit_colorspace_is_applied_and_read_back_on_direct_image(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    image = _FakeTextureNode(parent, "arnold::image", string_type)
+    image.enable_colorspace()
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: image if path == image.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(image.path(), "file", str(texture), colorspace="ACEScg")
+
+    assert result["success"] is True
+    assert result["context"]["colorspace_applied"] == "ACEScg"
+    assert result["context"]["readback"]["colorspace"] == "ACEScg"
+    assert image.parm("colorspace").value == "ACEScg"
+
+
+def test_auto_colorspace_is_advisory_and_not_reported_as_applied(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    image = _FakeTextureNode(parent, "mtlximage", string_type)
+    image.enable_colorspace("host-default")
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: image if path == image.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(image.path(), "file", str(texture))
+
+    assert result["success"] is True
+    assert result["context"]["detected_colorspace"] == "sRGB"
+    assert "colorspace_applied" not in result["context"]
+    assert image.parm("colorspace").value == "host-default"
 
 
 def test_supported_material_wiring_returns_verified_connection_readback(monkeypatch, tmp_path: Path) -> None:
@@ -409,6 +606,136 @@ def test_supported_material_wiring_returns_verified_connection_readback(monkeypa
     assert material.input(0) is image
     assert hou.undos.entered == [result["context"]["undo_label"]]
     assert hou.undos.exited == hou.undos.entered
+
+
+def test_repeated_materialx_assignment_reuses_owned_image_node(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    hou.undos = _FakeUndos()
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    first = module.assign_texture(material.path(), "base_color", str(texture))
+    first_image = material.input(0)
+    second = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert first["success"] is True
+    assert second["success"] is True
+    assert material.input(0) is first_image
+    assert material.parent().children == [first_image]
+
+
+def test_arnold_material_assignment_creates_exact_owned_image_type(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type, "arnold::standard_surface")
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is True
+    assert material.input(0).type().name() == "arnold::image"
+    assert [node.type().name() for node in material.parent().children] == ["arnold::image"]
+
+
+def test_existing_unowned_upstream_node_is_preserved(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    existing = material.parent().createNode("mtlximage")
+    material._input = existing
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is True
+    assert material.input(0) is not existing
+    assert existing in material.parent().children
+    assert len(material.parent().children) == 2
+
+
+def test_foreign_owned_upstream_node_is_preserved(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    existing = material.parent().createNode("mtlximage")
+    existing.setUserData("dcc_mcp.assign_texture.owner", "v1|/mat/other_material|0")
+    material._input = existing
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is True
+    assert material.input(0) is not existing
+    assert existing in material.parent().children
+
+
+def test_wired_material_rejects_explicit_colorspace_before_node_creation(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type, "arnold::standard_surface")
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture), colorspace="ACEScg")
+
+    assert result["success"] is False
+    assert result["error"] == "UNSUPPORTED_COLORSPACE"
+    assert material.parent().children == []
+
+
+def test_wiring_rollback_requires_exact_input_readback(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    existing = parent.createNode("mtlximage")
+    material = _FakeStickyRollbackMaterial(string_type, existing)
+    material._parent = parent
+    original_set_input = material.setInput
+
+    def fail_then_retain(index: int, node: _FakeTextureNode, output: int) -> None:
+        if node is existing:
+            return
+        original_set_input(index, node, output)
+        raise RuntimeError("private wiring failure")
+
+    material.setInput = fail_then_retain
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ROLLBACK_FAILED"
+    assert "private wiring" not in str(result)
 
 
 def test_successful_assignment_uses_one_named_undo_group(monkeypatch, tmp_path: Path) -> None:
