@@ -71,9 +71,11 @@ presets).
   parameters; lookdev presets capture evaluated values only.  Choose the
   library path when sharing across projects; choose lookdev presets for
   quick per-user snapshots.
-- **Texture mapping:** `assign_texture` creates a file texture VOP
-  (`arnold::image` / `mtlximage` / `principledshader` map) or sets a string
-  file-path parameter on the target material node.
+- **Texture mapping:** `assign_texture` uses built-in texture controls on
+  `principledshader` nodes, updates string file parameters on `mtlximage` and
+  `arnold::image`, or creates the matching image node for an exact input on
+  `mtlxstandard_surface` and `arnold::standard_surface`. Other node types and
+  missing parameters fail closed without fallback wiring.
 - **OCIO:** `list_color_spaces` reads from Houdini's active OCIO config;
   `set_color_management` sets the `OCIO` environment variable and triggers a
   Houdini refresh when possible.

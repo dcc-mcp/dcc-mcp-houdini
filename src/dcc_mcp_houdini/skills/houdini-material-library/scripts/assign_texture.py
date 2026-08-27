@@ -1,24 +1,28 @@
-"""Assign a texture file to a material/shader parameter."""
+"""Assign a texture through a bounded, typed Houdini node contract."""
 
 from __future__ import annotations
 
+import re
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from _library_common import get_node, hou_import_error, node_summary  # noqa: E402
-from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+from dcc_mcp_core.skill import skill_entry, skill_error, skill_success
 
-# Map of common parameter names → texture node types to create.
-_TEXTURE_NODE_TYPE_MAP = {
-    "principledshader": "principledtexture",
-    "principledshader::2.0": "principledtexture",
+_PRINCIPLED_SHADER_TYPES = frozenset({"principledshader", "principledshader::2.0"})
+_DIRECT_TEXTURE_NODE_TYPES = frozenset({"arnold::image", "mtlximage"})
+_WIRED_MATERIAL_NODE_TYPES = {
+    "arnold::standard_surface": "arnold::image",
+    "mtlxstandard_surface": "mtlximage",
 }
+_IMAGE_FILE_PARMS = ("filename", "file", "texturefile", "tex0")
+_PARAMETER_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 
 def _detect_colorspace(texture_path: str) -> Optional[str]:
     """Best-effort color space detection from file extension."""
-    ext = Path(texture_path).suffix.lower()
-    mapping = {
+    return {
         ".exr": "linear",
         ".hdr": "linear",
         ".jpg": "sRGB",
@@ -30,8 +34,228 @@ def _detect_colorspace(texture_path: str) -> Optional[str]:
         ".bmp": "sRGB",
         ".tx": "auto",
         ".rat": "auto",
-    }
-    return mapping.get(ext)
+    }.get(Path(texture_path).suffix.lower())
+
+
+def _undo_group(hou: Any, label: str) -> Any:
+    undos = getattr(hou, "undos", None)
+    group = getattr(undos, "group", None)
+    return group(label) if callable(group) else nullcontext()
+
+
+def _rollback_parms(snapshots: list[tuple[Any, Any]]) -> bool:
+    try:
+        for parm, value in reversed(snapshots):
+            parm.set(value)
+    except Exception:  # noqa: BLE001
+        return False
+    return True
+
+
+def _assign_principled(
+    material_node: Any,
+    parameter_name: str,
+    texture_path: str,
+    colorspace: Optional[str],
+    undo_label: str,
+) -> dict:
+    use_texture_parm = material_node.parm("{}_useTexture".format(parameter_name))
+    texture_parm = material_node.parm("{}_texture".format(parameter_name))
+    if use_texture_parm is None or texture_parm is None:
+        return skill_error(
+            "Unsupported Principled Shader texture parameter",
+            "UNSUPPORTED_TEXTURE_PARAMETER",
+        )
+
+    try:
+        snapshots = [(texture_parm, texture_parm.eval()), (use_texture_parm, use_texture_parm.eval())]
+        texture_parm.set(texture_path)
+        use_texture_parm.set(1)
+        texture_readback = texture_parm.eval()
+        enabled_readback = use_texture_parm.eval()
+        if texture_readback != texture_path or not bool(enabled_readback):
+            raise RuntimeError("readback mismatch")
+    except Exception:  # noqa: BLE001
+        if "snapshots" not in locals() or not _rollback_parms(snapshots):
+            return skill_error(
+                "Texture assignment failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
+
+    return skill_success(
+        "Assigned texture to Principled Shader parameter",
+        material=node_summary(material_node),
+        parameter=parameter_name,
+        texture_path=texture_path,
+        colorspace=colorspace or _detect_colorspace(texture_path),
+        verified=True,
+        undo_label=undo_label,
+        readback={"texture_enabled": bool(enabled_readback), "texture_path": str(texture_readback)},
+    )
+
+
+def _assign_direct_texture(
+    hou: Any,
+    texture_node: Any,
+    parameter_name: str,
+    texture_path: str,
+    colorspace: Optional[str],
+    undo_label: str,
+) -> dict:
+    parm = texture_node.parm(parameter_name)
+    try:
+        parm_type = parm.parmTemplate().type() if parm is not None else None
+    except Exception:  # noqa: BLE001
+        parm_type = None
+    if parm_type != hou.parmTemplateType.String:
+        return skill_error(
+            "Unsupported texture file parameter",
+            "UNSUPPORTED_TEXTURE_PARAMETER",
+            node_type=texture_node.type().name(),
+        )
+
+    cs_parm = texture_node.parm("colorspace") if colorspace else None
+    try:
+        snapshots = [(parm, parm.eval())]
+        if cs_parm is not None:
+            snapshots.append((cs_parm, cs_parm.eval()))
+        parm.set(texture_path)
+        if cs_parm is not None:
+            cs_parm.set(colorspace)
+        texture_readback = parm.eval()
+        if texture_readback != texture_path:
+            raise RuntimeError("readback mismatch")
+        if cs_parm is not None and cs_parm.eval() != colorspace:
+            raise RuntimeError("colorspace readback mismatch")
+    except Exception:  # noqa: BLE001
+        if "snapshots" not in locals() or not _rollback_parms(snapshots):
+            return skill_error(
+                "Texture assignment failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
+
+    return skill_success(
+        "Assigned texture to image node parameter",
+        material=node_summary(texture_node),
+        parameter=parameter_name,
+        texture_path=texture_path,
+        colorspace=colorspace or _detect_colorspace(texture_path),
+        verified=True,
+        undo_label=undo_label,
+        readback={"parameter": parameter_name, "texture_path": str(texture_readback)},
+    )
+
+
+def _destroy_created_node(node: Any) -> bool:
+    try:
+        node.destroy()
+    except Exception:  # noqa: BLE001
+        return False
+    return True
+
+
+def _assign_wired_material(
+    material_node: Any,
+    material_type: str,
+    parameter_name: str,
+    texture_path: str,
+    colorspace: Optional[str],
+    undo_label: str,
+) -> dict:
+    texture_type = _WIRED_MATERIAL_NODE_TYPES[material_type]
+    try:
+        texture_node = material_node.parent().createNode(texture_type)
+    except Exception:  # noqa: BLE001
+        return skill_error(
+            "Required texture node could not be created",
+            "TEXTURE_NODE_CREATION_FAILED",
+            node_type=texture_type,
+        )
+
+    file_parm = next((texture_node.parm(name) for name in _IMAGE_FILE_PARMS if texture_node.parm(name)), None)
+    if file_parm is None:
+        if not _destroy_created_node(texture_node):
+            return skill_error(
+                "Texture node validation failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error(
+            "Texture node has no file path parameter",
+            "UNSUPPORTED_TEXTURE_PARAMETER",
+            node_type=texture_node.type().name(),
+        )
+
+    try:
+        input_names = tuple(material_node.inputNames())
+    except Exception:  # noqa: BLE001
+        input_names = ()
+    input_index = next(
+        (index for index, name in enumerate(input_names) if name.lower() == parameter_name.lower()),
+        None,
+    )
+    if input_index is None:
+        if not _destroy_created_node(texture_node):
+            return skill_error(
+                "Material input validation failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error(
+            "Unsupported material texture input",
+            "UNSUPPORTED_TEXTURE_PARAMETER",
+            node_type=material_type,
+        )
+
+    try:
+        previous_input = material_node.input(input_index)
+    except Exception:  # noqa: BLE001
+        if not _destroy_created_node(texture_node):
+            return skill_error(
+                "Material input validation failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error("Material input cannot be read safely", "TEXTURE_WIRING_FAILED")
+
+    actual_colorspace = colorspace or _detect_colorspace(texture_path)
+    cs_parm = texture_node.parm("colorspace") if actual_colorspace else None
+    try:
+        file_parm.set(texture_path)
+        if cs_parm is not None:
+            cs_parm.set(actual_colorspace)
+        material_node.setInput(input_index, texture_node, 0)
+        if file_parm.eval() != texture_path or material_node.input(input_index) is not texture_node:
+            raise RuntimeError("readback mismatch")
+    except Exception:  # noqa: BLE001
+        rollback_ok = True
+        try:
+            if material_node.input(input_index) is texture_node:
+                material_node.setInput(input_index, previous_input, 0)
+        except Exception:  # noqa: BLE001
+            rollback_ok = False
+        rollback_ok = _destroy_created_node(texture_node) and rollback_ok
+        if not rollback_ok:
+            return skill_error(
+                "Texture wiring failed and rollback could not be verified",
+                "TEXTURE_ROLLBACK_FAILED",
+            )
+        return skill_error("Texture could not be wired to the material input", "TEXTURE_WIRING_FAILED")
+
+    return skill_success(
+        "Assigned and wired texture to material",
+        material=node_summary(material_node),
+        parameter=parameter_name,
+        texture_node=node_summary(texture_node),
+        texture_path=texture_path,
+        colorspace=actual_colorspace,
+        verified=True,
+        undo_label=undo_label,
+        readback={
+            "input_index": input_index,
+            "texture_node": texture_node.path(),
+            "texture_path": str(file_parm.eval()),
+        },
+    )
 
 
 def assign_texture(
@@ -40,132 +264,58 @@ def assign_texture(
     texture_path: str,
     colorspace: Optional[str] = None,
 ) -> dict:
-    """Assign a texture file to a material/shader parameter.
-
-    Creates or updates a file-texture VOP node and wires it to the target
-    material parameter.  If the parameter is a string file-path parm (e.g.
-    on an ``arnold::image`` node), the path is set directly.
-
-    Args:
-        material_path: Path to the material/shader node.
-        parameter_name: Name of the color/texture parameter to drive.
-        texture_path: File path to the texture image on disk.
-        colorspace: OCIO color space for the texture.  Auto-detected when omitted.
-
-    Returns:
-        ToolResult dict.
-    """
+    """Assign a texture to one explicitly supported material or image target."""
     try:
         import hou  # noqa: PLC0415
     except ImportError:
         return hou_import_error()
 
-    try:
-        # Validate the texture file exists.
-        tex_path = Path(texture_path)
-        if not tex_path.is_file():
-            return skill_error(
-                "Texture file not found: {}".format(texture_path),
-                "Check the path and try again.",
-            )
-
-        material_node = get_node(hou, material_path)
-        parm = material_node.parm(parameter_name)
-
-        # Case 1: The parameter is a string (file path on an image node).
-        if parm is not None:
-            parm_template = parm.parmTemplate()
-            try:
-                parm_type = parm_template.type()
-            except Exception:  # noqa: BLE001
-                parm_type = None
-
-            if parm_type == hou.parmTemplateType.String:
-                parm.set(str(texture_path))
-                if colorspace:
-                    cs_parm = material_node.parm("colorspace")
-                    if cs_parm is not None:
-                        cs_parm.set(colorspace)
-                return skill_success(
-                    "Assigned texture to material parameter",
-                    material=node_summary(material_node),
-                    parameter=parameter_name,
-                    texture_path=str(texture_path),
-                    colorspace=colorspace or _detect_colorspace(texture_path),
-                )
-
-        # Case 2: Create a file-texture node and wire it.
-        parent = material_node.parent()
-        mat_type = material_node.type().name() if hasattr(material_node.type(), "name") else ""
-
-        # Try known texture node types.
-        tex_node_type = _TEXTURE_NODE_TYPE_MAP.get(mat_type, "principledtexture")
-        tex_node = None
-
-        for candidate in [tex_node_type, "mtlximage", "arnold::image", "file"]:
-            try:
-                tex_node = parent.createNode(candidate)
-                break
-            except Exception:  # noqa: BLE001
-                continue
-
-        if tex_node is None:
-            return skill_error(
-                "Could not create texture node under {}".format(parent.path()),
-                "No supported texture node type found.",
-            )
-
-        # Set the file path on the texture node.
-        file_parm_set = False
-        for file_parm_name in ("filename", "file", "texturefile", "tex0"):
-            fp = tex_node.parm(file_parm_name)
-            if fp is not None:
-                fp.set(str(texture_path))
-                file_parm_set = True
-                break
-
-        if not file_parm_set:
-            return skill_error(
-                "Texture node has no file path parameter",
-                "Node type: {}".format(tex_node.type().name()),
-            )
-
-        # Set color space if available.
-        actual_colorspace = colorspace or _detect_colorspace(texture_path)
-        if actual_colorspace:
-            cs_parm = tex_node.parm("colorspace")
-            if cs_parm is not None:
-                cs_parm.set(actual_colorspace)
-
-        # Wire the texture output to the material input.
-        try:
-            # Find input index for the parameter.
-            input_idx = None
-            for i, name in enumerate(material_node.inputNames()):
-                if parameter_name.lower() in name.lower():
-                    input_idx = i
-                    break
-            if input_idx is None:
-                # Default: use input index 0 or try to set by name.
-                try:
-                    material_node.setNamedInput(parameter_name, tex_node, 0)
-                except Exception:  # noqa: BLE001
-                    material_node.setInput(0, tex_node, 0)
-            else:
-                material_node.setInput(input_idx, tex_node, 0)
-        except Exception:  # noqa: BLE001
-            pass
-
-        return skill_success(
-            "Assigned texture to material",
-            material=node_summary(material_node),
-            parameter=parameter_name,
-            texture_node=node_summary(tex_node),
-            texture_path=str(texture_path),
-            colorspace=actual_colorspace,
+    if not isinstance(material_path, str) or not material_path.startswith("/"):
+        return skill_error("Invalid Houdini material path", "INVALID_MATERIAL_PATH")
+    if not isinstance(parameter_name, str) or not _PARAMETER_NAME_RE.fullmatch(parameter_name):
+        return skill_error("Invalid texture parameter name", "INVALID_PARAMETER_NAME")
+    if not isinstance(texture_path, str) or not texture_path:
+        return skill_error("Invalid texture file path", "INVALID_TEXTURE_PATH")
+    if colorspace is not None and (not isinstance(colorspace, str) or not colorspace):
+        return skill_error("Invalid texture color space", "INVALID_COLORSPACE")
+    if not Path(texture_path).is_file():
+        return skill_error(
+            "Texture file was not found",
+            "TEXTURE_FILE_NOT_FOUND",
+            prompt="Check the texture path and try again.",
         )
-    except Exception as exc:
-        return skill_exception(exc, message="Failed to assign texture")
+
+    try:
+        target_node = get_node(hou, material_path)
+        target_type = target_node.type().name()
+    except Exception:  # noqa: BLE001
+        return skill_error("Material or texture target was not found", "TEXTURE_TARGET_NOT_FOUND")
+
+    supported_types = _PRINCIPLED_SHADER_TYPES | _DIRECT_TEXTURE_NODE_TYPES | frozenset(_WIRED_MATERIAL_NODE_TYPES)
+    if target_type not in supported_types:
+        return skill_error(
+            "Unsupported texture assignment target",
+            "UNSUPPORTED_TEXTURE_TARGET",
+            node_type=target_type or "unknown",
+        )
+
+    undo_label = "DCC MCP: assign texture {}".format(parameter_name)
+    try:
+        with _undo_group(hou, undo_label):
+            if target_type in _PRINCIPLED_SHADER_TYPES:
+                return _assign_principled(target_node, parameter_name, texture_path, colorspace, undo_label)
+            if target_type in _DIRECT_TEXTURE_NODE_TYPES:
+                return _assign_direct_texture(hou, target_node, parameter_name, texture_path, colorspace, undo_label)
+            return _assign_wired_material(
+                target_node,
+                target_type,
+                parameter_name,
+                texture_path,
+                colorspace,
+                undo_label,
+            )
+    except Exception:  # noqa: BLE001
+        return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
 
 
 @skill_entry
