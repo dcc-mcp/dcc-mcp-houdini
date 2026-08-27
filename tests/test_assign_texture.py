@@ -192,6 +192,9 @@ class _FakeTextureNode:
     def setUserData(self, key: str, value: str) -> None:
         self._user_data[key] = value
 
+    def destroyUserData(self, key: str, _must_exist: bool = True) -> None:
+        self._user_data.pop(key, None)
+
     def destroy(self) -> None:
         self._parent.children.remove(self)
 
@@ -243,6 +246,7 @@ class _FakeWiredMaterial:
         self._type = node_type
         self._session_id = 100
         self._path = "/mat/standard_surface1"
+        self._user_data: dict[str, str] = {}
 
     def parm(self, _name: str):
         return None
@@ -261,6 +265,15 @@ class _FakeWiredMaterial:
 
     def sessionId(self) -> int:
         return self._session_id
+
+    def userData(self, key: str):
+        return self._user_data.get(key)
+
+    def setUserData(self, key: str, value: str) -> None:
+        self._user_data[key] = value
+
+    def destroyUserData(self, key: str, _must_exist: bool = True) -> None:
+        self._user_data.pop(key, None)
 
     def inputNames(self) -> tuple[str, ...]:
         return ("base_color",)
@@ -464,6 +477,34 @@ def test_texture_replacement_after_preflight_fails_without_mutation(monkeypatch,
     assert result["error"] == "TEXTURE_FILE_CHANGED"
     assert material.parms["basecolor_useTexture"].value == 0
     assert material.parms["basecolor_texture"].value == ""
+
+
+def test_texture_payload_is_hashed_once_per_assignment(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    image = _FakeTextureNode(parent, "mtlximage", string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: image if path == image.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"x" * (4 * 1024 * 1024))
+    original_read = module.os.read
+    bytes_read = 0
+
+    def measured_read(fd: int, size: int) -> bytes:
+        nonlocal bytes_read
+        chunk = original_read(fd, size)
+        bytes_read += len(chunk)
+        return chunk
+
+    monkeypatch.setattr(module.os, "read", measured_read)
+
+    result = module.assign_texture(image.path(), "file", str(texture))
+
+    assert result["success"] is True, result
+    assert bytes_read == texture.stat().st_size
 
 
 def test_missing_texture_file_returns_stable_redacted_error(monkeypatch, tmp_path: Path) -> None:
@@ -795,6 +836,7 @@ def test_duplicate_owned_texture_nodes_fail_closed_without_mutation(monkeypatch,
     material = _FakeSuccessfulWiredMaterial(string_type)
     first = material.parent().createNode("mtlximage")
     second = material.parent().createNode("mtlximage")
+    material.setUserData(module._MATERIAL_ID_USER_DATA_KEY, "material-identity")
     first.setUserData(module._OWNER_USER_DATA_KEY, module._owner_marker(material, 0, first))
     second.setUserData(module._OWNER_USER_DATA_KEY, module._owner_marker(material, 0, second))
     material._input = first
@@ -888,6 +930,36 @@ def test_reused_material_session_cannot_claim_stale_path_alias(monkeypatch, tmp_
     assert replacement.parent().children == [owned]
 
 
+def test_reloaded_module_rejects_replacement_with_reused_session_and_path(monkeypatch, tmp_path: Path) -> None:
+    first_module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    active_material = material
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: active_material if path == active_material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    first = first_module.assign_texture(material.path(), "base_color", str(texture))
+    owned = material.input(0)
+    replacement = _FakeSuccessfulWiredMaterial(string_type)
+    replacement._parent = material.parent()
+    replacement._input = owned
+    replacement._session_id = material.sessionId()
+    replacement._path = material.path()
+    active_material = replacement
+    reloaded_module = _load_script()
+    second = reloaded_module.assign_texture(replacement.path(), "base_color", str(texture))
+
+    assert first["success"] is True
+    assert second["success"] is False
+    assert second["error"] == "AMBIGUOUS_TEXTURE_OWNERSHIP"
+    assert replacement.input(0) is owned
+    assert replacement.parent().children == [owned]
+
+
 def test_arnold_material_assignment_creates_exact_owned_image_type(monkeypatch, tmp_path: Path) -> None:
     module = _load_script()
     string_type = object()
@@ -933,6 +1005,31 @@ def test_foreign_owned_upstream_node_is_preserved(monkeypatch, tmp_path: Path) -
     material = _FakeSuccessfulWiredMaterial(string_type)
     existing = material.parent().createNode("mtlximage")
     existing.setUserData("dcc_mcp.assign_texture.owner", "v1|/mat/other_material|0")
+    material._input = existing
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is True
+    assert material.input(0) is not existing
+    assert existing in material.parent().children
+
+
+def test_foreign_durable_owned_upstream_node_is_preserved(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    material.setUserData(module._MATERIAL_ID_USER_DATA_KEY, "current-material")
+    existing = material.parent().createNode("mtlximage")
+    existing.setUserData(
+        module._OWNER_USER_DATA_KEY,
+        "v3|foreign-material|999|0|{}|/mat/other_material".format(existing.sessionId()),
+    )
     material._input = existing
     hou = ModuleType("hou")
     hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
@@ -1083,6 +1180,46 @@ def test_undo_group_exit_baseexception_rolls_back_direct_parameter(monkeypatch, 
     assert result["success"] is False
     assert result["error"] == "TEXTURE_ASSIGNMENT_FAILED"
     assert image.parm("file").value == ""
+
+
+def test_undo_group_exit_baseexception_rolls_back_principled_parameters(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakePrincipledShader(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    hou.undos = _ExitBaseExceptionUndos()
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    texture.write_bytes(b"png")
+
+    result = module.assign_texture(material.path(), "basecolor", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ASSIGNMENT_FAILED"
+    assert material.parms["basecolor_useTexture"].value == 0
+    assert material.parms["basecolor_texture"].value == ""
+
+
+def test_undo_group_exit_baseexception_rolls_back_wired_graph(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    hou.undos = _ExitBaseExceptionUndos()
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ASSIGNMENT_FAILED"
+    assert material.input(0) is None
+    assert material.parent().children == []
 
 
 def test_assign_texture_schema_matches_runtime_validation() -> None:

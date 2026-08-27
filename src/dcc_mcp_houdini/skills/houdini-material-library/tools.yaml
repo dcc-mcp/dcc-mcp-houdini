@@ -144,9 +144,10 @@ tools:
       MaterialX/Arnold surface nodes create and own one matching image-node
       connection per material input, then reuse it on repeated calls. Existing
       upstream nodes owned by another target are preserved. Texture files are
-      bound to a regular-file identity and digest through guarded mutation and
-      readback; linked files, stale/duplicate ownership, and unsupported string
-      parameters fail without fallback wiring or partial graph mutation.
+      bound to a regular-file identity and one bounded digest pass (maximum
+      256 MiB) followed by metadata-only guarded mutation and readback; linked
+      files, stale/duplicate ownership, and unsupported string parameters fail
+      without fallback wiring or partial graph mutation.
     source_file: scripts/assign_texture.py
     execution: sync
     affinity: main

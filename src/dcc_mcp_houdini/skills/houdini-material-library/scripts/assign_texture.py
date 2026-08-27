@@ -6,6 +6,8 @@ import hashlib
 import os
 import re
 import stat
+import time
+import uuid
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +28,10 @@ _IMAGE_FILE_PARMS = {
 }
 _PARAMETER_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _OWNER_USER_DATA_KEY = "dcc_mcp.assign_texture.owner"
-_MATERIAL_OWNERSHIP_REGISTRY: dict[tuple[int, int], Any] = {}
+_MATERIAL_ID_USER_DATA_KEY = "dcc_mcp.assign_texture.material_id"
+_MAX_TEXTURE_FILE_BYTES = 256 * 1024 * 1024
+_MAX_TEXTURE_HASH_SECS = 2.0
+_TEXTURE_HASH_CHUNK_BYTES = 1024 * 1024
 
 
 class _TextureFileError(RuntimeError):
@@ -81,16 +86,25 @@ def _capture_texture_file(texture_path: str) -> _TextureFileRef:
             or path_stat.st_nlink != 1
         ):
             raise _TextureFileError("unsafe texture file")
+        if path_stat.st_size > _MAX_TEXTURE_FILE_BYTES:
+            raise _TextureFileError("texture file exceeds bounded validation size")
 
         flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(str(path), flags)
         try:
             opened_before = os.fstat(fd)
             digest = hashlib.sha256()
+            bytes_read = 0
+            deadline = time.monotonic() + _MAX_TEXTURE_HASH_SECS
             while True:
-                chunk = os.read(fd, 1024 * 1024)
+                if time.monotonic() > deadline:
+                    raise _TextureFileError("texture digest deadline exceeded")
+                chunk = os.read(fd, _TEXTURE_HASH_CHUNK_BYTES)
                 if not chunk:
                     break
+                bytes_read += len(chunk)
+                if bytes_read > _MAX_TEXTURE_FILE_BYTES:
+                    raise _TextureFileError("texture digest exceeded bounded work")
                 digest.update(chunk)
             opened_after = os.fstat(fd)
         finally:
@@ -116,20 +130,58 @@ def _capture_texture_file(texture_path: str) -> _TextureFileRef:
         or _is_reparse(path_after)
     ):
         raise _TextureFileError("texture file changed during capture")
+    if bytes_read != opened_after.st_size:
+        raise _TextureFileError("texture file length changed during capture")
     return _TextureFileRef(
         path=str(path),
         resolved_path=str(resolved),
         device=opened_after.st_dev,
         inode=opened_after.st_ino,
         size=opened_after.st_size,
-        mtime_ns=opened_after.st_mtime_ns,
-        ctime_ns=opened_after.st_ctime_ns,
+        mtime_ns=path_after.st_mtime_ns,
+        ctime_ns=path_after.st_ctime_ns,
         digest=digest.hexdigest(),
     )
 
 
 def _assert_texture_file_current(texture_ref: _TextureFileRef) -> None:
-    if _capture_texture_file(texture_ref.path) != texture_ref:
+    path = Path(texture_ref.path)
+    try:
+        resolved = path.resolve(strict=True)
+        if os.path.normcase(os.path.normpath(str(resolved))) != os.path.normcase(texture_ref.resolved_path):
+            raise _TextureFileError("texture path identity changed")
+        for parent in path.parents:
+            if parent.parent == parent:
+                break
+            parent_stat = os.lstat(str(parent))
+            if stat.S_ISLNK(parent_stat.st_mode) or _is_reparse(parent_stat):
+                raise _TextureFileError("unsafe texture path")
+        current = os.lstat(str(path))
+    except _TextureFileError:
+        raise
+    except OSError as exc:
+        raise _TextureFileError("texture file identity could not be recaptured") from exc
+    current_identity = (
+        current.st_dev,
+        current.st_ino,
+        current.st_size,
+        current.st_mtime_ns,
+        current.st_ctime_ns,
+    )
+    expected_identity = (
+        texture_ref.device,
+        texture_ref.inode,
+        texture_ref.size,
+        texture_ref.mtime_ns,
+        texture_ref.ctime_ns,
+    )
+    if (
+        current_identity != expected_identity
+        or not stat.S_ISREG(current.st_mode)
+        or stat.S_ISLNK(current.st_mode)
+        or _is_reparse(current)
+        or current.st_nlink != 1
+    ):
         raise _TextureFileError("texture file identity changed")
 
 
@@ -165,6 +217,34 @@ def _rollback_parms(snapshots: list[tuple[Any, Any]]) -> bool:
         return False
 
 
+def _rollback_mutations(
+    parm_snapshots: list[tuple[Any, Any]],
+    input_snapshots: list[tuple[Any, int, Any]],
+    created_nodes: list[Any],
+    user_data_snapshots: list[tuple[Any, str, Optional[str]]],
+) -> bool:
+    rollback_ok = _rollback_parms(parm_snapshots) if parm_snapshots else True
+    for material_node, input_index, previous_input in reversed(input_snapshots):
+        try:
+            if material_node.input(input_index) is not previous_input:
+                material_node.setInput(input_index, previous_input, 0)
+            rollback_ok = material_node.input(input_index) is previous_input and rollback_ok
+        except BaseException:  # noqa: BLE001
+            rollback_ok = False
+    for node, key, previous_value in reversed(user_data_snapshots):
+        try:
+            if previous_value is None:
+                node.destroyUserData(key, False)
+            else:
+                node.setUserData(key, previous_value)
+            rollback_ok = node.userData(key) == previous_value and rollback_ok
+        except BaseException:  # noqa: BLE001
+            rollback_ok = False
+    for node in reversed(created_nodes):
+        rollback_ok = _destroy_created_node(node) and rollback_ok
+    return rollback_ok
+
+
 def _assign_principled(
     material_node: Any,
     parameter_name: str,
@@ -172,6 +252,7 @@ def _assign_principled(
     texture_ref: _TextureFileRef,
     colorspace: Optional[str],
     undo_label: str,
+    outer_snapshots: list[tuple[Any, Any]],
 ) -> dict:
     use_texture_parm = material_node.parm("{}_useTexture".format(parameter_name))
     texture_parm = material_node.parm("{}_texture".format(parameter_name))
@@ -187,6 +268,7 @@ def _assign_principled(
         _assert_texture_file_current(texture_ref)
         enabled_before = use_texture_parm.eval()
         snapshots = [(texture_parm, texture_before), (use_texture_parm, enabled_before)]
+        outer_snapshots.extend(snapshots)
         _assert_texture_file_current(texture_ref)
         texture_parm.set(texture_path)
         _assert_texture_file_current(texture_ref)
@@ -313,6 +395,8 @@ def _destroy_created_node(node: Any) -> bool:
     try:
         parent = node.parent()
         name = node.name()
+        if parent.node(name) is not node:
+            return True
         node.destroy()
         return parent.node(name) is not node
     except BaseException:  # noqa: BLE001
@@ -326,8 +410,20 @@ def _node_session_id(node: Any) -> int:
     return session_id
 
 
+def _material_identity(material_node: Any) -> Optional[str]:
+    try:
+        identity = material_node.userData(_MATERIAL_ID_USER_DATA_KEY)
+    except BaseException:  # noqa: BLE001
+        return None
+    return identity if isinstance(identity, str) and identity else None
+
+
 def _owner_marker(material_node: Any, input_index: int, texture_node: Any) -> str:
-    return "v2|{}|{}|{}|{}".format(
+    material_identity = _material_identity(material_node)
+    if material_identity is None:
+        raise _OwnershipError("material has no durable identity")
+    return "v3|{}|{}|{}|{}|{}".format(
+        material_identity,
         _node_session_id(material_node),
         input_index,
         _node_session_id(texture_node),
@@ -351,44 +447,38 @@ def _parent_children(parent: Any) -> tuple[Any, ...]:
     return tuple(children() if callable(children) else children)
 
 
-def _is_registered_material(material_node: Any, input_index: int) -> bool:
-    registered = _MATERIAL_OWNERSHIP_REGISTRY.get((_node_session_id(material_node), input_index))
-    if registered is None:
-        return False
-    try:
-        return registered is material_node or bool(registered == material_node)
-    except BaseException:  # noqa: BLE001
-        return False
-
-
 def _find_owned_texture(material_node: Any, input_index: int, texture_type: str) -> Optional[Any]:
     material_session = _node_session_id(material_node)
     material_path = material_node.path()
+    material_identity = _material_identity(material_node)
     owned = []
     for node in _parent_children(material_node.parent()):
         marker = node.userData(_OWNER_USER_DATA_KEY)
-        if not isinstance(marker, str) or not marker.startswith("v2|"):
+        if not isinstance(marker, str):
             continue
-        parts = marker.split("|", 4)
-        if len(parts) != 5:
+        if marker.startswith("v2|"):
+            raise _OwnershipError("legacy ownership has no durable material identity")
+        if not marker.startswith("v3|"):
+            continue
+        parts = marker.split("|", 5)
+        if len(parts) != 6:
             raise _OwnershipError("invalid texture ownership marker")
         try:
-            marker_material_session = int(parts[1])
-            marker_input = int(parts[2])
-            marker_node_session = int(parts[3])
+            marker_material_session = int(parts[2])
+            marker_input = int(parts[3])
+            marker_node_session = int(parts[4])
         except ValueError as exc:
             raise _OwnershipError("invalid texture ownership marker") from exc
         if marker_input != input_index:
             continue
+        if material_identity is None or parts[1] != material_identity:
+            if marker_material_session == material_session or parts[5] == material_path:
+                raise _OwnershipError("durable material identity does not match")
+            continue
         if marker_material_session != material_session:
-            if parts[4] == material_path:
+            if parts[5] == material_path:
                 raise _OwnershipError("stale material session ownership")
             continue
-        registered_material = _MATERIAL_OWNERSHIP_REGISTRY.get((material_session, input_index))
-        if registered_material is not None and not _is_registered_material(material_node, input_index):
-            raise _OwnershipError("material session identity was reused")
-        if parts[4] != material_path and not _is_registered_material(material_node, input_index):
-            raise _OwnershipError("stale material path ownership")
         if marker_node_session != _node_session_id(node) or node.type().name() != texture_type:
             raise _OwnershipError("stale texture node ownership")
         owned.append(node)
@@ -406,6 +496,10 @@ def _assign_wired_material(
     texture_ref: _TextureFileRef,
     colorspace: Optional[str],
     undo_label: str,
+    outer_snapshots: list[tuple[Any, Any]],
+    outer_input_snapshots: list[tuple[Any, int, Any]],
+    outer_created_nodes: list[Any],
+    outer_user_data_snapshots: list[tuple[Any, str, Optional[str]]],
 ) -> dict:
     texture_type = _WIRED_MATERIAL_NODE_TYPES[material_type]
     try:
@@ -426,6 +520,7 @@ def _assign_wired_material(
     try:
         _assert_texture_file_current(texture_ref)
         previous_input = material_node.input(input_index)
+        outer_input_snapshots.append((material_node, input_index, previous_input))
         owned_texture = _find_owned_texture(material_node, input_index, texture_type)
     except _TextureFileError:
         return skill_error("Texture file changed during assignment", "TEXTURE_FILE_CHANGED")
@@ -439,11 +534,13 @@ def _assign_wired_material(
     created = owned_texture is None
     texture_node = None
     snapshots: list[tuple[Any, Any]] = []
+    user_data_snapshots: list[tuple[Any, str, Optional[str]]] = []
 
     try:
         if created:
             _assert_texture_file_current(texture_ref)
             texture_node = material_node.parent().createNode(texture_type)
+            outer_created_nodes.append(texture_node)
         else:
             texture_node = owned_texture
 
@@ -459,15 +556,31 @@ def _assign_wired_material(
             raise _TextureParameterError("texture file parameter type is unreadable") from exc
         if file_parm_type != hou.parmTemplateType.String:
             raise _TextureParameterError("texture file parameter is not a string")
-        if created:
-            owner_marker = _owner_marker(material_node, input_index, texture_node)
+        material_identity = _material_identity(material_node)
+        if material_identity is None:
+            material_identity = uuid.uuid4().hex
+            material_identity_snapshot = (material_node, _MATERIAL_ID_USER_DATA_KEY, None)
+            user_data_snapshots.append(material_identity_snapshot)
+            outer_user_data_snapshots.append(material_identity_snapshot)
             _assert_texture_file_current(texture_ref)
-            texture_node.setUserData(_OWNER_USER_DATA_KEY, owner_marker)
+            material_node.setUserData(_MATERIAL_ID_USER_DATA_KEY, material_identity)
             _assert_texture_file_current(texture_ref)
-            if texture_node.userData(_OWNER_USER_DATA_KEY) != owner_marker:
+            if material_node.userData(_MATERIAL_ID_USER_DATA_KEY) != material_identity:
+                raise RuntimeError("material identity readback mismatch")
+        desired_owner_marker = _owner_marker(material_node, input_index, texture_node)
+        current_owner_marker = texture_node.userData(_OWNER_USER_DATA_KEY)
+        if current_owner_marker != desired_owner_marker:
+            owner_snapshot = (texture_node, _OWNER_USER_DATA_KEY, current_owner_marker)
+            user_data_snapshots.append(owner_snapshot)
+            outer_user_data_snapshots.append(owner_snapshot)
+            _assert_texture_file_current(texture_ref)
+            texture_node.setUserData(_OWNER_USER_DATA_KEY, desired_owner_marker)
+            _assert_texture_file_current(texture_ref)
+            if texture_node.userData(_OWNER_USER_DATA_KEY) != desired_owner_marker:
                 raise RuntimeError("ownership readback mismatch")
         _assert_texture_file_current(texture_ref)
         snapshots = [(file_parm, file_parm.eval())]
+        outer_snapshots.extend(snapshots)
         _assert_texture_file_current(texture_ref)
         file_parm.set(texture_path)
         if created:
@@ -501,20 +614,14 @@ def _assign_wired_material(
                 "texture_path": str(texture_readback),
             },
         )
-        material_session = _node_session_id(material_node)
-        _MATERIAL_OWNERSHIP_REGISTRY[(material_session, input_index)] = material_node
         return result
     except BaseException as exc:  # noqa: BLE001
-        rollback_ok = _rollback_parms(snapshots) if snapshots else True
-        try:
-            current_input = material_node.input(input_index)
-            if current_input is not previous_input:
-                material_node.setInput(input_index, previous_input, 0)
-            rollback_ok = material_node.input(input_index) is previous_input and rollback_ok
-        except BaseException:  # noqa: BLE001
-            rollback_ok = False
-        if created and texture_node is not None:
-            rollback_ok = _destroy_created_node(texture_node) and rollback_ok
+        rollback_ok = _rollback_mutations(
+            snapshots,
+            [(material_node, input_index, previous_input)],
+            [texture_node] if created and texture_node is not None else [],
+            user_data_snapshots,
+        )
         if not rollback_ok:
             return skill_error(
                 "Texture wiring failed and rollback could not be verified",
@@ -595,19 +702,23 @@ def assign_texture(
 
     undo_label = "DCC MCP: assign texture {}".format(parameter_name)
     outer_snapshots: list[tuple[Any, Any]] = []
+    outer_input_snapshots: list[tuple[Any, int, Any]] = []
+    outer_created_nodes: list[Any] = []
+    outer_user_data_snapshots: list[tuple[Any, str, Optional[str]]] = []
     try:
         with _undo_group(hou, undo_label):
             if target_type in _PRINCIPLED_SHADER_TYPES:
-                return _assign_principled(
+                result = _assign_principled(
                     target_node,
                     parameter_name,
                     texture_path,
                     texture_ref,
                     colorspace,
                     undo_label,
+                    outer_snapshots,
                 )
-            if target_type in _DIRECT_TEXTURE_NODE_TYPES:
-                return _assign_direct_texture(
+            elif target_type in _DIRECT_TEXTURE_NODE_TYPES:
+                result = _assign_direct_texture(
                     hou,
                     target_node,
                     parameter_name,
@@ -617,18 +728,29 @@ def assign_texture(
                     undo_label,
                     outer_snapshots,
                 )
-            return _assign_wired_material(
-                hou,
-                target_node,
-                target_type,
-                parameter_name,
-                texture_path,
-                texture_ref,
-                colorspace,
-                undo_label,
-            )
+            else:
+                result = _assign_wired_material(
+                    hou,
+                    target_node,
+                    target_type,
+                    parameter_name,
+                    texture_path,
+                    texture_ref,
+                    colorspace,
+                    undo_label,
+                    outer_snapshots,
+                    outer_input_snapshots,
+                    outer_created_nodes,
+                    outer_user_data_snapshots,
+                )
+        return result
     except BaseException:  # noqa: BLE001
-        if outer_snapshots and not _rollback_parms(outer_snapshots):
+        if not _rollback_mutations(
+            outer_snapshots,
+            outer_input_snapshots,
+            outer_created_nodes,
+            outer_user_data_snapshots,
+        ):
             return skill_error(
                 "Texture assignment failed and rollback could not be verified",
                 "TEXTURE_ROLLBACK_FAILED",
