@@ -72,10 +72,15 @@ presets).
   library path when sharing across projects; choose lookdev presets for
   quick per-user snapshots.
 - **Texture mapping:** `assign_texture` uses built-in texture controls on
-  `principledshader` nodes, updates string file parameters on `mtlximage` and
-  `arnold::image`, or creates the matching image node for an exact input on
-  `mtlxstandard_surface` and `arnold::standard_surface`. Other node types and
-  missing parameters fail closed without fallback wiring.
+  `principledshader` nodes, updates only the typed file-path parameters on
+  `mtlximage` and `arnold::image`, or creates the matching image node for an
+  exact input on `mtlxstandard_surface` and `arnold::standard_surface`. The
+  texture must remain one regular, non-linked local file through every guarded
+  mutation and readback. Owned image nodes are bound to material, node, input,
+  and Houdini session identity; stale or duplicate ownership fails closed.
+  Every touched parameter, input, and newly created node is rolled back if
+  mutation or post-mutation verification fails. Other node types and missing
+  parameters fail closed without fallback wiring.
 - **OCIO:** `list_color_spaces` reads from Houdini's active OCIO config;
   `set_color_management` sets the `OCIO` environment variable and triggers a
   Houdini refresh when possible.
