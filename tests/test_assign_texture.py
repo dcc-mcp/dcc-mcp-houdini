@@ -225,6 +225,18 @@ class _FakeRetainedDestroyParent(_FakeWiringParent):
         return node
 
 
+class _FakeBaseExceptionDestroyNode(_FakeTextureNode):
+    def destroy(self) -> None:
+        raise KeyboardInterrupt("destroy failed")
+
+
+class _FakeBaseExceptionDestroyParent(_FakeWiringParent):
+    def createNode(self, node_type: str) -> _FakeTextureNode:
+        node = _FakeBaseExceptionDestroyNode(self, node_type, self._string_type)
+        self.children.append(node)
+        return node
+
+
 class _FakeWiredMaterial:
     def __init__(self, string_type: object, node_type: str = "mtlxstandard_surface") -> None:
         self._parent = _FakeWiringParent(string_type)
@@ -305,6 +317,17 @@ class _FakeUndos:
 
     def group(self, label: str) -> _FakeUndoGroup:
         return _FakeUndoGroup(self, label)
+
+
+class _ExitBaseExceptionUndoGroup(_FakeUndoGroup):
+    def __exit__(self, _exc_type, _exc, _tb) -> None:
+        super().__exit__(_exc_type, _exc, _tb)
+        raise KeyboardInterrupt("undo close failed")
+
+
+class _ExitBaseExceptionUndos(_FakeUndos):
+    def group(self, label: str) -> _FakeUndoGroup:
+        return _ExitBaseExceptionUndoGroup(self, label)
 
 
 def test_principled_shader_uses_builtin_texture_slot_without_orphan_vop(monkeypatch, tmp_path: Path) -> None:
@@ -493,6 +516,24 @@ def test_nonthrowing_node_destroy_requires_exact_readback(monkeypatch, tmp_path:
     assert result["success"] is False
     assert result["error"] == "TEXTURE_ROLLBACK_FAILED"
     assert len(material.parent().children) == 1
+
+
+def test_destroy_baseexception_is_reported_as_unverified_rollback(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeWiredMaterial(string_type)
+    material._parent = _FakeBaseExceptionDestroyParent(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ROLLBACK_FAILED"
 
 
 def test_principled_partial_write_rolls_back_without_side_effect(monkeypatch, tmp_path: Path) -> None:
@@ -706,6 +747,26 @@ def test_supported_material_wiring_returns_verified_connection_readback(monkeypa
     assert hou.undos.exited == hou.undos.entered
 
 
+def test_wired_image_rejects_non_string_file_host_shape_before_mutation(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    non_string_type = object()
+    material = _FakeSuccessfulWiredMaterial(non_string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(material.path(), "base_color", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "UNSUPPORTED_TEXTURE_PARAMETER"
+    assert material.input(0) is None
+    assert material.parent().children == []
+
+
 def test_repeated_materialx_assignment_reuses_owned_image_node(monkeypatch, tmp_path: Path) -> None:
     module = _load_script()
     string_type = object()
@@ -796,6 +857,35 @@ def test_replaced_material_session_rejects_stale_owned_node(monkeypatch, tmp_pat
     assert second["error"] == "AMBIGUOUS_TEXTURE_OWNERSHIP"
     assert material.input(0) is owned
     assert material.parent().children == [owned]
+
+
+def test_reused_material_session_cannot_claim_stale_path_alias(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakeSuccessfulWiredMaterial(string_type)
+    active_material = material
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: active_material if path == active_material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    first = module.assign_texture(material.path(), "base_color", str(texture))
+    owned = material.input(0)
+    replacement = _FakeSuccessfulWiredMaterial(string_type)
+    replacement._parent = material.parent()
+    replacement._input = owned
+    replacement._session_id = material.sessionId()
+    replacement._path = "/mat/reused_session_alias"
+    active_material = replacement
+    second = module.assign_texture(replacement.path(), "base_color", str(texture))
+
+    assert first["success"] is True
+    assert second["success"] is False
+    assert second["error"] == "AMBIGUOUS_TEXTURE_OWNERSHIP"
+    assert replacement.input(0) is owned
+    assert replacement.parent().children == [owned]
 
 
 def test_arnold_material_assignment_creates_exact_owned_image_type(monkeypatch, tmp_path: Path) -> None:
@@ -965,6 +1055,26 @@ def test_post_mutation_skill_success_failure_rolls_back_direct_parameter(monkeyp
         "skill_success",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(SystemExit("post-mutation failure")),
     )
+    texture = tmp_path / "albedo.exr"
+    texture.write_bytes(b"exr")
+
+    result = module.assign_texture(image.path(), "file", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "TEXTURE_ASSIGNMENT_FAILED"
+    assert image.parm("file").value == ""
+
+
+def test_undo_group_exit_baseexception_rolls_back_direct_parameter(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    parent = _FakeWiringParent(string_type)
+    image = _FakeTextureNode(parent, "mtlximage", string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: image if path == image.path() else None
+    hou.undos = _ExitBaseExceptionUndos()
+    monkeypatch.setitem(sys.modules, "hou", hou)
     texture = tmp_path / "albedo.exr"
     texture.write_bytes(b"exr")
 
