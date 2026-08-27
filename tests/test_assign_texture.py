@@ -479,6 +479,47 @@ def test_texture_replacement_after_preflight_fails_without_mutation(monkeypatch,
     assert material.parms["basecolor_texture"].value == ""
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows write-denying lease contract")
+def test_equal_length_in_place_overwrite_cannot_replace_hashed_payload(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    string_type = object()
+    material = _FakePrincipledShader(string_type)
+    hou = ModuleType("hou")
+    hou.parmTemplateType = type("ParmTemplateType", (), {"String": string_type})
+    hou.node = lambda path: material if path == material.path() else None
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "albedo.png"
+    original_payload = b"first!"
+    replacement_payload = b"second"
+    texture.write_bytes(original_payload)
+    original_stat = texture.stat()
+    texture_parm = material.parms["basecolor_texture"]
+    original_set = texture_parm.set
+    overwrite_denied = False
+
+    def overwrite_during_mutation(value: object) -> None:
+        nonlocal overwrite_denied
+        try:
+            with texture.open("r+b") as stream:
+                stream.write(replacement_payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.utime(texture, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+        except PermissionError:
+            overwrite_denied = True
+        original_set(value)
+
+    texture_parm.set = overwrite_during_mutation
+
+    result = module.assign_texture(material.path(), "basecolor", str(texture))
+
+    assert result["success"] is True, result
+    assert overwrite_denied is True
+    assert texture.read_bytes() == original_payload
+    assert material.parms["basecolor_useTexture"].value == 1
+    assert material.parms["basecolor_texture"].value == str(texture)
+
+
 def test_texture_payload_is_hashed_once_per_assignment(monkeypatch, tmp_path: Path) -> None:
     module = _load_script()
     string_type = object()
@@ -505,6 +546,34 @@ def test_texture_payload_is_hashed_once_per_assignment(monkeypatch, tmp_path: Pa
 
     assert result["success"] is True, result
     assert bytes_read == texture.stat().st_size
+
+
+def test_texture_digest_deadline_is_checked_after_eof_read(monkeypatch, tmp_path: Path) -> None:
+    module = _load_script()
+    hou = ModuleType("hou")
+    hou.node = lambda _path: (_ for _ in ()).throw(AssertionError("scene lookup must not run"))
+    monkeypatch.setitem(sys.modules, "hou", hou)
+    texture = tmp_path / "empty.exr"
+    texture.write_bytes(b"")
+    now = 0.0
+    original_read = module.os.read
+
+    def monotonic() -> float:
+        return now
+
+    def delayed_eof_read(fd: int, size: int) -> bytes:
+        nonlocal now
+        chunk = original_read(fd, size)
+        now = module._MAX_TEXTURE_HASH_SECS + 0.001
+        return chunk
+
+    monkeypatch.setattr(module.time, "monotonic", monotonic)
+    monkeypatch.setattr(module.os, "read", delayed_eof_read)
+
+    result = module.assign_texture("/mat/principledshader1", "basecolor", str(texture))
+
+    assert result["success"] is False
+    assert result["error"] == "UNSAFE_TEXTURE_FILE"
 
 
 def test_missing_texture_file_returns_stable_redacted_error(monkeypatch, tmp_path: Path) -> None:

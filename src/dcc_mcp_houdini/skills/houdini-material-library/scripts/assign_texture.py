@@ -8,7 +8,7 @@ import re
 import stat
 import time
 import uuid
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -63,7 +63,60 @@ def _is_reparse(stat_result: os.stat_result) -> bool:
     return bool(getattr(stat_result, "st_file_attributes", 0) & reparse_flag)
 
 
-def _capture_texture_file(texture_path: str) -> _TextureFileRef:
+@contextmanager
+def _texture_file_lease(texture_path: str):
+    """Hold one readable file identity, denying writes on Windows."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if os.name != "nt":
+        fd = os.open(texture_path, flags)
+        try:
+            yield fd
+        finally:
+            os.close(fd)
+        return
+
+    import ctypes  # noqa: PLC0415
+    import msvcrt  # noqa: PLC0415
+    from ctypes import wintypes  # noqa: PLC0415
+
+    create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    handle = create_file(
+        texture_path,
+        0x80000000,  # GENERIC_READ
+        0x00000001,  # FILE_SHARE_READ: deny write and delete while leased
+        None,
+        3,  # OPEN_EXISTING
+        0x08000000,  # FILE_FLAG_SEQUENTIAL_SCAN
+        None,
+    )
+    invalid_handle = wintypes.HANDLE(-1).value
+    if handle == invalid_handle:
+        error = ctypes.get_last_error()
+        if error in (2, 3):
+            raise FileNotFoundError(error, "texture file was not found")
+        raise OSError(error, "texture file lease could not be acquired")
+    try:
+        fd = msvcrt.open_osfhandle(handle, flags)
+    except BaseException:  # noqa: BLE001
+        ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(handle)
+        raise
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
+def _capture_texture_file(texture_path: str, fd: int) -> _TextureFileRef:
     path = Path(texture_path).absolute()
     try:
         lexical = os.path.normcase(os.path.normpath(str(path)))
@@ -89,26 +142,24 @@ def _capture_texture_file(texture_path: str) -> _TextureFileRef:
         if path_stat.st_size > _MAX_TEXTURE_FILE_BYTES:
             raise _TextureFileError("texture file exceeds bounded validation size")
 
-        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(str(path), flags)
-        try:
-            opened_before = os.fstat(fd)
-            digest = hashlib.sha256()
-            bytes_read = 0
-            deadline = time.monotonic() + _MAX_TEXTURE_HASH_SECS
-            while True:
-                if time.monotonic() > deadline:
-                    raise _TextureFileError("texture digest deadline exceeded")
-                chunk = os.read(fd, _TEXTURE_HASH_CHUNK_BYTES)
-                if not chunk:
-                    break
-                bytes_read += len(chunk)
-                if bytes_read > _MAX_TEXTURE_FILE_BYTES:
-                    raise _TextureFileError("texture digest exceeded bounded work")
-                digest.update(chunk)
-            opened_after = os.fstat(fd)
-        finally:
-            os.close(fd)
+        opened_before = os.fstat(fd)
+        os.lseek(fd, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        bytes_read = 0
+        deadline = time.monotonic() + _MAX_TEXTURE_HASH_SECS
+        while True:
+            if time.monotonic() > deadline:
+                raise _TextureFileError("texture digest deadline exceeded")
+            chunk = os.read(fd, _TEXTURE_HASH_CHUNK_BYTES)
+            if time.monotonic() > deadline:
+                raise _TextureFileError("texture digest deadline exceeded")
+            if not chunk:
+                break
+            bytes_read += len(chunk)
+            if bytes_read > _MAX_TEXTURE_FILE_BYTES:
+                raise _TextureFileError("texture digest exceeded bounded work")
+            digest.update(chunk)
+        opened_after = os.fstat(fd)
         path_after = os.lstat(str(path))
     except _TextureFileError:
         raise
@@ -297,7 +348,7 @@ def _assign_principled(
                 "Texture assignment failed and rollback could not be verified",
                 "TEXTURE_ROLLBACK_FAILED",
             )
-        if isinstance(exc, _TextureFileError):
+        if isinstance(exc, (_TextureFileError, PermissionError)):
             return skill_error("Texture file changed during assignment", "TEXTURE_FILE_CHANGED")
         return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
 
@@ -386,7 +437,7 @@ def _assign_direct_texture(
                 "Texture assignment failed and rollback could not be verified",
                 "TEXTURE_ROLLBACK_FAILED",
             )
-        if isinstance(exc, _TextureFileError):
+        if isinstance(exc, (_TextureFileError, PermissionError)):
             return skill_error("Texture file changed during assignment", "TEXTURE_FILE_CHANGED")
         return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
 
@@ -627,7 +678,7 @@ def _assign_wired_material(
                 "Texture wiring failed and rollback could not be verified",
                 "TEXTURE_ROLLBACK_FAILED",
             )
-        if isinstance(exc, _TextureFileError):
+        if isinstance(exc, (_TextureFileError, PermissionError)):
             return skill_error("Texture file changed during assignment", "TEXTURE_FILE_CHANGED")
         if isinstance(exc, _TextureParameterError):
             return skill_error(
@@ -638,42 +689,15 @@ def _assign_wired_material(
         return skill_error("Texture could not be wired to the material input", "TEXTURE_WIRING_FAILED")
 
 
-def assign_texture(
+def _assign_captured_texture(
+    hou: Any,
     material_path: str,
     parameter_name: str,
-    texture_path: str,
-    colorspace: Optional[str] = None,
+    texture_ref: _TextureFileRef,
+    colorspace: Optional[str],
 ) -> dict:
-    """Assign a texture to one explicitly supported material or image target."""
-    try:
-        import hou  # noqa: PLC0415
-    except ImportError:
-        return hou_import_error()
-
-    if not isinstance(material_path, str) or not material_path.startswith("/"):
-        return skill_error("Invalid Houdini material path", "INVALID_MATERIAL_PATH")
-    if not isinstance(parameter_name, str) or not _PARAMETER_NAME_RE.fullmatch(parameter_name):
-        return skill_error("Invalid texture parameter name", "INVALID_PARAMETER_NAME")
-    if not isinstance(texture_path, str) or not texture_path:
-        return skill_error("Invalid texture file path", "INVALID_TEXTURE_PATH")
-    if colorspace is not None and (not isinstance(colorspace, str) or not colorspace):
-        return skill_error("Invalid texture color space", "INVALID_COLORSPACE")
-    try:
-        texture_ref = _capture_texture_file(texture_path)
-    except FileNotFoundError:
-        return skill_error(
-            "Texture file was not found",
-            "TEXTURE_FILE_NOT_FOUND",
-            prompt="Check the texture path and try again.",
-        )
-    except _TextureFileError:
-        return skill_error(
-            "Texture file could not be used safely",
-            "UNSAFE_TEXTURE_FILE",
-            prompt="Use a stable local regular file with no links or reparse points.",
-        )
+    """Mutate Houdini while the captured texture file lease remains held."""
     texture_path = texture_ref.path
-
     try:
         target_node = get_node(hou, material_path)
         target_type = target_node.type().name()
@@ -756,6 +780,50 @@ def assign_texture(
                 "TEXTURE_ROLLBACK_FAILED",
             )
         return skill_error("Texture assignment failed", "TEXTURE_ASSIGNMENT_FAILED")
+
+
+def assign_texture(
+    material_path: str,
+    parameter_name: str,
+    texture_path: str,
+    colorspace: Optional[str] = None,
+) -> dict:
+    """Assign a texture to one explicitly supported material or image target."""
+    try:
+        import hou  # noqa: PLC0415
+    except ImportError:
+        return hou_import_error()
+
+    if not isinstance(material_path, str) or not material_path.startswith("/"):
+        return skill_error("Invalid Houdini material path", "INVALID_MATERIAL_PATH")
+    if not isinstance(parameter_name, str) or not _PARAMETER_NAME_RE.fullmatch(parameter_name):
+        return skill_error("Invalid texture parameter name", "INVALID_PARAMETER_NAME")
+    if not isinstance(texture_path, str) or not texture_path:
+        return skill_error("Invalid texture file path", "INVALID_TEXTURE_PATH")
+    if colorspace is not None and (not isinstance(colorspace, str) or not colorspace):
+        return skill_error("Invalid texture color space", "INVALID_COLORSPACE")
+    try:
+        with _texture_file_lease(texture_path) as fd:
+            texture_ref = _capture_texture_file(texture_path, fd)
+            return _assign_captured_texture(hou, material_path, parameter_name, texture_ref, colorspace)
+    except FileNotFoundError:
+        return skill_error(
+            "Texture file was not found",
+            "TEXTURE_FILE_NOT_FOUND",
+            prompt="Check the texture path and try again.",
+        )
+    except _TextureFileError:
+        return skill_error(
+            "Texture file could not be used safely",
+            "UNSAFE_TEXTURE_FILE",
+            prompt="Use a stable local regular file with no links or reparse points.",
+        )
+    except OSError:
+        return skill_error(
+            "Texture file could not be leased safely",
+            "UNSAFE_TEXTURE_FILE",
+            prompt="Close writers and use a stable local regular file.",
+        )
 
 
 @skill_entry
