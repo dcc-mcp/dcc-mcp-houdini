@@ -76,7 +76,10 @@ tools:
   - name: save_hip_file
     description: >-
       Save the current Houdini hip file, optionally to a new path, through a
-      sibling temporary file and atomic target replacement.
+      sibling temporary file and atomic target replacement. In graphical
+      Houdini, verify the dirty flag and fall back to a direct Save As when HOM
+      requires it to mark the scene clean; the result reports whether the final
+      write remained atomic and the observable unsaved state.
     input_schema:
       type: object
       properties:
