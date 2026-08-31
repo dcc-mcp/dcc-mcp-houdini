@@ -480,6 +480,25 @@ class TestLightSkills:
         assert result["intensity"] == 2.0
         assert result["env_map"] == "/maps/studio.hdr"
 
+    def test_lighting_summary_accepts_list_wrapped_light_type(self) -> None:
+        mod = _load_script("houdini-light-rig", "get_lighting_summary.py")
+        light = _node("/obj/key", "key", "hlight::2.0")
+        light_type = MagicMock()
+        light_type.eval.return_value = ([7],)
+        light.parmTuple.side_effect = lambda name: light_type if name == "light_type" else None
+        light.parm.return_value = None
+        parent = _node("/obj", "obj")
+        parent.children.return_value = [light]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = parent
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_lighting_summary()
+
+        assert result["success"] is True
+        assert result["context"]["lights"][0]["type"] == "distant"
+        assert result["context"]["lights"][0]["type_index"] == 7
+
 
 class TestViewSkills:
     def test_frame_view_headless(self) -> None:

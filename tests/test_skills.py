@@ -1387,15 +1387,94 @@ class TestAutomationSkills:
 
         hip_file.save.side_effect = save
         mock_hou = MagicMock(hipFile=hip_file)
+        mock_hou.isUIAvailable.return_value = False
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.save_hip_file(str(target))
 
         resolved = str(target.resolve())
         assert result["success"] is True
-        assert result["context"] == {"hip_file": resolved, "atomic_replace": True}
+        assert result["context"] == {
+            "hip_file": resolved,
+            "atomic_replace": True,
+            "unsaved_changes": None,
+        }
         assert target.read_bytes() == b"new"
         hip_file.setName.assert_called_once_with(resolved)
         assert list(tmp_path.iterdir()) == [target]
+
+    def test_save_hip_file_clears_gui_dirty_state_after_atomic_replace(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "save_hip_file.py")
+        target = tmp_path / "scene.hip"
+        target.write_bytes(b"old")
+        hip_file = MagicMock()
+        state = {"name": str(target), "dirty": True}
+
+        def save(file_name: str, save_to_recent_files: bool) -> None:
+            assert save_to_recent_files is False
+            Path(file_name).write_bytes(b"new")
+            state["name"] = file_name
+            state["dirty"] = False
+
+        def set_name(file_name: str) -> None:
+            state["name"] = file_name
+            state["dirty"] = True
+
+        hip_file.name.side_effect = lambda: state["name"]
+        hip_file.path.side_effect = lambda: state["name"]
+        hip_file.save.side_effect = save
+        hip_file.setName.side_effect = set_name
+        hip_file.hasUnsavedChanges.side_effect = lambda: state["dirty"]
+        mock_hou = MagicMock(hipFile=hip_file)
+        mock_hou.isUIAvailable.return_value = True
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.save_hip_file(str(target))
+
+        assert result["success"] is True
+        assert state["name"] == str(target.resolve())
+        assert state["dirty"] is False
+        assert result["context"]["atomic_replace"] is False
+        assert result["context"]["unsaved_changes"] is False
+        assert hip_file.save.call_count == 2
+
+    def test_save_hip_file_preserves_staged_recovery_when_gui_confirmation_fails(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "save_hip_file.py")
+        target = tmp_path / "scene.hip"
+        target.write_bytes(b"old")
+        hip_file = MagicMock()
+        state = {"name": str(target), "dirty": True, "save_count": 0}
+
+        def save(file_name: str, save_to_recent_files: bool) -> None:
+            assert save_to_recent_files is False
+            state["save_count"] += 1
+            if state["save_count"] == 1:
+                Path(file_name).write_bytes(b"new")
+                state["name"] = file_name
+                state["dirty"] = False
+                return
+            Path(file_name).write_bytes(b"partial")
+            raise OSError("confirmation save failed")
+
+        def set_name(file_name: str) -> None:
+            state["name"] = file_name
+            state["dirty"] = True
+
+        hip_file.name.side_effect = lambda: state["name"]
+        hip_file.path.side_effect = lambda: state["name"]
+        hip_file.save.side_effect = save
+        hip_file.setName.side_effect = set_name
+        hip_file.hasUnsavedChanges.side_effect = lambda: state["dirty"]
+        mock_hou = MagicMock(hipFile=hip_file)
+        mock_hou.isUIAvailable.return_value = True
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.save_hip_file(str(target))
+
+        recovery = Path(result["context"]["recovery_file"])
+        assert result["success"] is False
+        assert target.read_bytes() == b"partial"
+        assert recovery != target
+        assert recovery.read_bytes() == b"new"
 
     def test_save_hip_file_preserves_target_when_replace_fails(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-automation", "save_hip_file.py")

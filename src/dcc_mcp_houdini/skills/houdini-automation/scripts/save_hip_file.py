@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import Optional
 
 from _automation_common import hou_import_error
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
+
+from dcc_mcp_houdini._hip_file_state import get_hip_dirty_state
 
 
 def save_hip_file(file_path: Optional[str] = None) -> dict:
@@ -20,6 +23,8 @@ def save_hip_file(file_path: Optional[str] = None) -> dict:
 
     temporary = None
     temporary_saved = False
+    target_replaced = False
+    recovery_staged = False
     previous_name = None
     try:
         previous_name = hou.hipFile.name()
@@ -32,9 +37,40 @@ def save_hip_file(file_path: Optional[str] = None) -> dict:
         temporary_saved = True
         hou.hipFile.setName(str(target))
         os.replace(str(temporary), str(target))
-        return skill_success("Saved Houdini hip file", hip_file=str(target), atomic_replace=True)
+        target_replaced = True
+
+        ui_available = bool(hou.isUIAvailable())
+        dirty_state = get_hip_dirty_state(hou)
+        atomic_replace = True
+        if dirty_state is True:
+            # Save As is the documented HOM operation that clears GUI dirty
+            # state. Preserve the atomic replacement separately in case this
+            # final state-confirming save partially overwrites the target.
+            shutil.copy2(str(target), str(temporary))
+            recovery_staged = True
+            hou.hipFile.save(file_name=str(target), save_to_recent_files=False)
+            atomic_replace = False
+            dirty_state = get_hip_dirty_state(hou)
+        if ui_available and dirty_state is not False:
+            raise RuntimeError("Houdini still reports unsaved changes after saving the HIP file")
+        if recovery_staged:
+            temporary.unlink()
+            recovery_staged = False
+        return skill_success(
+            "Saved Houdini hip file",
+            hip_file=str(target),
+            atomic_replace=atomic_replace,
+            unsaved_changes=dirty_state,
+        )
     except Exception as exc:
-        recovery_file = str(temporary) if temporary_saved and temporary is not None and temporary.exists() else None
+        if recovery_staged and temporary is not None and temporary.exists():
+            recovery_file = str(temporary)
+        elif not target_replaced and temporary_saved and temporary is not None and temporary.exists():
+            recovery_file = str(temporary)
+        elif target_replaced and target.exists():
+            recovery_file = str(target)
+        else:
+            recovery_file = None
         try:
             hou.hipFile.setName(recovery_file or previous_name)
         except Exception:

@@ -81,6 +81,11 @@ structured `parameters` object; no renderer-specific Python is required.
 Do not save between batch calls. After every material and stage response has a
 successful summary, call `save_hip_file`. It writes a sibling temporary HIP and
 uses an atomic filesystem replacement, so a save or replace failure preserves
-the prior target. If replacement fails after the temporary save, use the
-returned `recovery_file`. In-memory recipes remain separate transactions;
-reload the prior saved HIP when whole-batch rollback is required.
+the prior target. In graphical Houdini, the tool verifies the dirty flag after
+replacement. If Houdini still reports unsaved changes, it performs a documented
+Save As to the target, returns `atomic_replace=false`, and verifies that the
+dirty flag cleared. Headless Hython reports `unsaved_changes=null` because HOM
+cannot observe that state there. If a save or verification fails after a valid
+file was staged, use the returned `recovery_file`. In-memory recipes remain
+separate transactions; reload the prior saved HIP when whole-batch rollback is
+required.

@@ -90,14 +90,26 @@ def apply_transform(
     return applied
 
 
+def _menu_index(value: Any) -> Optional[int]:
+    """Normalize Houdini menu values that may be wrapped by a parm tuple."""
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        value = value[0]
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def get_light_parms(light: Any) -> dict:
     """Read common hlight parameters and return a JSON-safe dict."""
     node_type = light.type().name().lower()
-    type_index = eval_parm(light, "light_type")
+    type_index = _menu_index(eval_parm(light, "light_type"))
     type_name = "environment" if "envlight" in node_type else None
     if type_name is None and type_index is not None:
         for name, idx in LIGHT_TYPES.items():
-            if idx == int(type_index) and name != "sun":
+            if idx == type_index and name != "sun":
                 type_name = name
                 break
 
