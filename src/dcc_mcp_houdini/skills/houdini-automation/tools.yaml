@@ -2,7 +2,9 @@ tools:
   - name: run_python_file
     description: >-
       Execute an existing Python file inside Houdini with `hou`, `args`, and
-      `context` pre-bound. Mutates the session according to the script.
+      `context` pre-bound. Mutates the session according to the script. Inline
+      stdout, stderr, and result payloads are bounded; optional overflow
+      artifacts retain the complete UTF-8 output with byte counts and SHA-256.
     input_schema:
       type: object
       required: [file_path]
@@ -22,6 +24,37 @@ tools:
         working_directory:
           type: string
           description: "Optional working directory while the script runs."
+        output_mode:
+          type: string
+          enum: [summary, structured, full]
+          default: full
+          description: >-
+            `full` preserves the legacy string result, `structured` returns a
+            JSON-safe result when possible, and `summary` omits inline bodies.
+        max_stdout_chars:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 4000
+          description: "Maximum stdout characters returned inline."
+        max_stderr_chars:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 4000
+          description: "Maximum stderr characters returned inline, including failure tracebacks."
+        max_result_chars:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 8000
+          description: "Maximum serialized result characters returned inline."
+        spill_overflow_to_artifact:
+          type: boolean
+          default: true
+          description: >-
+            Persist complete truncated output to temporary UTF-8 artifacts and
+            return path, character count, byte count, and SHA-256 metadata.
     read_only: false
     destructive: true
     idempotent: false

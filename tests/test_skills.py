@@ -1373,6 +1373,199 @@ class TestAutomationSkills:
         assert "hello" in result["context"]["stdout"]
         assert result["context"]["result"] == "42"
 
+    def test_run_python_file_returns_structured_json_result(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "structured.py"
+        script.write_text(
+            "result = {'count': 2, 'items': ['box', 'sphere']}\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(str(script), output_mode="structured")
+
+        assert result["success"] is True
+        assert result["context"]["result"] == {
+            "count": 2,
+            "items": ["box", "sphere"],
+        }
+        assert result["context"]["output_summary"] == {
+            "mode": "structured",
+            "stdout_chars": 0,
+            "stderr_chars": 0,
+            "result_chars": 36,
+            "truncated": {"stdout": False, "stderr": False, "result": False},
+            "artifacts": {},
+        }
+
+    def test_run_python_file_bounds_inline_output_and_spills_full_artifacts(self, tmp_path: Path) -> None:
+        import hashlib
+
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "large_output.py"
+        script.write_text(
+            "import sys\n"
+            "print('s' * 200, end='')\n"
+            "print('e' * 180, end='', file=sys.stderr)\n"
+            "result = {'payload': 'r' * 220}\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(
+                str(script),
+                output_mode="structured",
+                max_stdout_chars=32,
+                max_stderr_chars=24,
+                max_result_chars=40,
+            )
+
+        assert result["success"] is True
+        context = result["context"]
+        assert context["stdout"] == "s" * 32
+        assert context["stderr"] == "e" * 24
+        assert context["result"] is None
+        assert len(context["result_preview"]) == 40
+        assert context["output_summary"]["truncated"] == {
+            "stdout": True,
+            "stderr": True,
+            "result": True,
+        }
+        assert set(context["output_summary"]["artifacts"]) == {"stdout", "stderr", "result"}
+
+        expected = {
+            "stdout": "s" * 200,
+            "stderr": "e" * 180,
+            "result": '{"payload":"' + "r" * 220 + '"}',
+        }
+        for channel, full_text in expected.items():
+            artifact = context["output_summary"]["artifacts"][channel]
+            artifact_path = Path(artifact["path"])
+            assert artifact_path.read_text(encoding="utf-8") == full_text
+            assert artifact["chars"] == len(full_text)
+            assert artifact["bytes"] == len(full_text.encode("utf-8"))
+            assert artifact["sha256"] == hashlib.sha256(full_text.encode("utf-8")).hexdigest()
+            artifact_path.unlink()
+
+    def test_run_python_file_can_truncate_without_persisting_artifacts(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "no_spill.py"
+        script.write_text("print('x' * 100, end='')\nresult = 'y' * 100\n", encoding="utf-8")
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(
+                str(script),
+                max_stdout_chars=12,
+                max_result_chars=16,
+                spill_overflow_to_artifact=False,
+            )
+
+        assert result["success"] is True
+        assert result["context"]["stdout"] == "x" * 12
+        assert result["context"]["result"] == "y" * 16
+        assert result["context"]["output_summary"]["truncated"] == {
+            "stdout": True,
+            "stderr": False,
+            "result": True,
+        }
+        assert result["context"]["output_summary"]["artifacts"] == {}
+
+    def test_run_python_file_summary_omits_inline_bodies_and_persists_output(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "summary.py"
+        script.write_text("print('hello')\nresult = {'ok': True}\n", encoding="utf-8")
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(str(script), output_mode="summary")
+
+        context = result["context"]
+        assert context["stdout"] is None
+        assert context["stderr"] is None
+        assert context["result"] is None
+        assert set(context["output_summary"]["artifacts"]) == {"stdout", "result"}
+        stdout_path = Path(context["output_summary"]["artifacts"]["stdout"]["path"])
+        result_path = Path(context["output_summary"]["artifacts"]["result"]["path"])
+        assert stdout_path.read_text(encoding="utf-8") == "hello\n"
+        assert result_path.read_text(encoding="utf-8") == '{"ok":true}'
+        stdout_path.unlink()
+        result_path.unlink()
+
+    @pytest.mark.parametrize(
+        ("kwargs", "expected"),
+        [
+            ({"output_mode": "verbose"}, "Invalid output mode"),
+            ({"max_stdout_chars": -1}, "max_stdout_chars must be an integer"),
+            ({"spill_overflow_to_artifact": "yes"}, "Invalid spill option"),
+        ],
+    )
+    def test_run_python_file_rejects_invalid_output_contract(
+        self,
+        tmp_path: Path,
+        kwargs: dict,
+        expected: str,
+    ) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "noop.py"
+        script.write_text("result = None\n", encoding="utf-8")
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(str(script), **kwargs)
+
+        assert result["success"] is False
+        assert expected in str(result)
+
+    def test_run_python_file_bounds_failure_traceback(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "failure.py"
+        script.write_text("print('before')\nraise RuntimeError('z' * 300)\n", encoding="utf-8")
+
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(str(script), max_stderr_chars=80)
+
+        assert result["success"] is False
+        assert result["context"]["stdout"] == "before\n"
+        assert len(result["context"]["stderr"]) == 80
+        summary = result["context"]["output_summary"]
+        assert summary["truncated"]["stderr"] is True
+        artifact = summary["artifacts"]["stderr"]
+        artifact_path = Path(artifact["path"])
+        assert "RuntimeError:" in artifact_path.read_text(encoding="utf-8")
+        artifact_path.unlink()
+
+    def test_run_python_file_cleans_partial_artifacts_when_spill_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mod = _load_script("houdini-automation", "run_python_file.py")
+        script = tmp_path / "spill_failure.py"
+        script.write_text(
+            "import sys\nprint('out' * 20)\nprint('err' * 20, file=sys.stderr)\n",
+            encoding="utf-8",
+        )
+        real_persist = mod._BoundedTextCapture.persist
+        persisted_paths = []
+
+        def persist(capture, label, **kwargs):
+            if label == "stderr":
+                raise OSError("injected artifact failure")
+            artifact = real_persist(capture, label, **kwargs)
+            if artifact is not None:
+                persisted_paths.append(Path(artifact["path"]))
+            return artifact
+
+        monkeypatch.setattr(mod._BoundedTextCapture, "persist", persist)
+        with patch.dict(sys.modules, {"hou": MagicMock()}):
+            result = mod.run_python_file(
+                str(script),
+                max_stdout_chars=8,
+                max_stderr_chars=8,
+            )
+
+        assert result["success"] is False
+        assert persisted_paths
+        assert all(not path.exists() for path in persisted_paths)
+
     def test_save_hip_file_atomically_replaces_target(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-automation", "save_hip_file.py")
         target = tmp_path / "scene.hip"
