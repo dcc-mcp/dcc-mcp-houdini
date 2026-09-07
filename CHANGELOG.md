@@ -16,6 +16,27 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.37.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.36.0...v0.37.0) (2026-09-07)
+
+
+### Features
+
+* expand Houdini domain skills ([1cc3baf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1cc3baf96ec78f22bd2d9364969a800bdc07f20f))
+* validate Houdini domain graphs and inspect geometry data ([8fe28ea](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8fe28ea8b4f8c4aedf21bc4b387033ef5fa925fa))
+
+
+### Bug Fixes
+
+* compare Houdini loft parents by node equality ([f11a3ed](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f11a3ed75b9e3ddb8c2bbea121589499c3d9c90c))
+* paginate tools in live Houdini E2E ([49810c2](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/49810c252343572fb53bbf578967e6664c9765ac))
+* preserve physical scale in typed FBX exports ([dd349a7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/dd349a769b4232db843ceee7da7078a652b23b75))
+* scan complete husk logs for render failures ([9293d93](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9293d93d1de8fd3c98190f9c83018f0ef8e6ca38))
+
+
+### Documentation
+
+* record live Husk procedural failure acceptance ([d7127bc](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d7127bccdee54b3ec21a2d5aca8abfdd6c074a24))
+
 ## [0.36.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.35.1...v0.36.0) (2026-08-31)
 
 
