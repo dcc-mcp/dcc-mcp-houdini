@@ -2,11 +2,11 @@
 
 This iteration adds 3 on-demand skill packages and 15 tools over main:
 4 Copernicus, 4 DOP simulation, 5 PDG/TOP, and 2 geometry data queries.
-The catalog contains 38 packages and 259 tools. Minimal startup is unchanged.
+The catalog contains 38 packages and 260 tools after the primitive-topology follow-up. Minimal startup is unchanged.
 
 | Domain | Implemented | Evidence and remaining work |
 | --- | --- | --- |
-| Geometry data | Paged point/primitive/vertex/detail values; named primitive intrinsics with bounded JSON | Unit pagination/truncation tests and real-HOM point/intrinsic reads. Full topology analysis remains future work. |
+| Geometry data | Paged attribute values, named intrinsics, and ordered primitive vertex-to-point references | Topology pagination/truncation tests pass; the topology follow-up still needs real-HOM acceptance. Full manifoldness analysis remains future work. |
 | Copernicus | Modern copnet creation, typed filter graph construction, connections and cached diagnostics | Real constant-to-blur graph created and inspected. Image cooking/export remains a separate verification step. Legacy COP2 is rejected. |
 | Pyro / FLIP / RBD / Vellum | DOP containers and typed solver skeletons, parameter readback/rollback, structural diagnostics | All four solver types created in Houdini 22.0.368. Sources, object data, output wiring, and simulated results are still required; these are not runnable effect templates. |
 | PDG / TOP | Containers, tasks, checked dependencies, item states, blocking/nonblocking cook outcomes | Real two-item Wedge task completed; failed/canceled/incomplete states covered deterministically. Farm scheduler and distributed job acceptance remain separate. |

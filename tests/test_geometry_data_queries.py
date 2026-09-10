@@ -25,6 +25,51 @@ def load(name):
     return module
 
 
+def test_topology_pages_primitives_and_bounds_vertex_iteration():
+    accesses, vertices = [], []
+
+    def primitive(index):
+        accesses.append(index)
+
+        def iterate():
+            for point_index in (9, 2, 7, 4):
+                vertices.append(point_index)
+                yield SimpleNamespace(point=lambda p=point_index: SimpleNamespace(number=lambda: p))
+
+        return SimpleNamespace(numVertices=lambda: 4, vertices=iterate, type=lambda: "Polygon", isClosed=lambda: True)
+
+    geo = SimpleNamespace(primCount=lambda: 10, prim=primitive)
+    node = SimpleNamespace(path=lambda: "/obj/geo1/OUT", geometry=lambda: geo)
+    with patch.dict(sys.modules, {"hou": SimpleNamespace(node=lambda _: node)}):
+        result = load("get_primitive_topology").get_primitive_topology(
+            "/obj/geo1/OUT", offset=3, limit=1, vertex_limit=2
+        )
+    assert result["success"]
+    assert accesses == [3] and vertices == [9, 2]
+    data = result["context"]
+    assert data["next_offset"] == 4 and data["total_count"] == 10
+    assert data["primitives"] == [
+        {
+            "primitive_index": 3,
+            "primitive_type": "Polygon",
+            "vertex_count": 4,
+            "point_indices": [9, 2],
+            "vertices_truncated": True,
+            "closed": True,
+        }
+    ]
+
+
+@pytest.mark.parametrize("kwargs", [{"offset": -1}, {"limit": True}, {"limit": 33}, {"vertex_limit": 129}])
+def test_topology_rejects_invalid_bounds_before_hom(kwargs):
+    def forbidden(_):
+        raise AssertionError("Invalid request accessed HOM")
+
+    with patch.dict(sys.modules, {"hou": SimpleNamespace(node=forbidden)}):
+        result = load("get_primitive_topology").get_primitive_topology("/obj/geo1/OUT", **kwargs)
+    assert not result["success"]
+
+
 def make_geometry(owner, values):
     accesses = []
     attribute = SimpleNamespace(dataType=lambda: "Float", size=lambda: 3)

@@ -31,7 +31,7 @@ main` because they call `hou`. Prefer these over
   and `create_curve_guides` (bounded inline JSON or JSON-file polyline/NURBS
   guide topology).
 - **`geometry-query`** (read-only except cook): `get_geometry_info`,
-  `list_attributes`, `get_attribute_values`, `get_primitive_intrinsics`,
+  `list_attributes`, `get_attribute_values`, `get_primitive_intrinsics`, `get_primitive_topology`,
   `list_groups`, `get_cook_status`.
 
 `get_attribute_values` supports point, primitive, vertex (linear index), and
@@ -40,6 +40,11 @@ Each value is bounded to 64 items and 1024 serialized characters and reports
 truncation. `get_primitive_intrinsics` reads up to 32 named properties, including
 packed transforms and bounds. These calls may trigger the SOP's normal cook to
 obtain geometry, but never change geometry or write files.
+
+`get_primitive_topology` reads up to 32 primitives and 128 ordered point references
+per primitive. `next_offset` pages primitives; `vertices_truncated` marks incomplete
+vertex lists. Closure is null for primitive types without a closure query. This
+is an inspection primitive, not a manifoldness or full-mesh validation result.
 
 ## Tracer-bullet flow
 
