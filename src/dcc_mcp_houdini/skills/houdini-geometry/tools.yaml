@@ -1,4 +1,23 @@
 tools:
+  - name: get_primitive_topology
+    description: Read a bounded page of primitives with ordered vertex-to-point indices, primitive types, closure and explicit vertex truncation. Does not infer manifoldness or triangulate geometry.
+    source_file: scripts/get_primitive_topology.py
+    execution: sync
+    affinity: main
+    group: geometry-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations: {read_only_hint: true, destructive_hint: false, idempotent_hint: true}
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [node_path]
+      properties:
+        node_path: {type: string, minLength: 1}
+        offset: {type: integer, minimum: 0, maximum: 2147483647, default: 0}
+        limit: {type: integer, minimum: 1, maximum: 32, default: 16}
+        vertex_limit: {type: integer, minimum: 1, maximum: 128, default: 64}
   - name: create_primitive
     description: >-
       Create a common SOP primitive (box, sphere, grid, tube, curve, null,
