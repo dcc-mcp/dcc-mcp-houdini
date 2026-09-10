@@ -37,6 +37,17 @@ jobs:
         run: ruff check src/ tests/ tools/ packaging/
       - name: Ruff format check
         run: ruff format --check src/ tests/ tools/ packaging/
+      - uses: actions/checkout@v6
+        with:
+          repository: dcc-mcp/dcc-mcp-agent-plugins
+          ref: 54b9d46a9fcefab1ed3a6aafc18da6ab4198ad25
+          path: .agent-plugins
+      - name: Check Agent quickstart
+        run: >-
+          python .agent-plugins/scripts/sync_adapter_readme.py
+          --repository ${{ github.event.repository.name }}
+          --readme README.md
+          --check
       - name: Install dcc-mcp-cli (runtime skill validator)
         env:
           GITHUB_TOKEN: ${{ github.token }}
