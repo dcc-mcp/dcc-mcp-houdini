@@ -6,7 +6,7 @@ The catalog contains 38 packages and 260 tools after the primitive-topology foll
 
 | Domain | Implemented | Evidence and remaining work |
 | --- | --- | --- |
-| Geometry data | Paged attribute values, named intrinsics, and ordered primitive vertex-to-point references | Topology pagination/truncation tests pass; the topology follow-up still needs real-HOM acceptance. Full manifoldness analysis remains future work. |
+| Geometry data | Paged attribute values, named intrinsics, and ordered primitive vertex-to-point references | Pagination/truncation tests and a licensed Houdini 22.0.368 topology smoke pass. Full manifoldness analysis remains future work. |
 | Copernicus | Modern copnet creation, typed filter graph construction, connections and cached diagnostics | Real constant-to-blur graph created and inspected. Image cooking/export remains a separate verification step. Legacy COP2 is rejected. |
 | Pyro / FLIP / RBD / Vellum | DOP containers and typed solver skeletons, parameter readback/rollback, structural diagnostics | All four solver types created in Houdini 22.0.368. Sources, object data, output wiring, and simulated results are still required; these are not runnable effect templates. |
 | PDG / TOP | Containers, tasks, checked dependencies, item states, blocking/nonblocking cook outcomes | Real two-item Wedge task completed; failed/canceled/incomplete states covered deterministically. Farm scheduler and distributed job acceptance remain separate. |
@@ -28,6 +28,11 @@ test. It verifies the imported adapter belongs to this checkout, creates only
 transient in-memory nodes, and exits nonzero on a failed contract. The final
 marker is `HOUDINI_CAPABILITY_PROBE_PASSED`. The MCP transport smoke is
 `.github/scripts/run_houdini_e2e.py`.
+
+For the isolated ordered-topology check, run
+`hython .github/scripts/run_houdini_topology.py`. It compares paged results with
+real HOM vertex order, checks truncation and closure, and destroys its temporary
+geometry. The success marker is `HOUDINI_TOPOLOGY_PROBE_PASSED`.
 
 ## Issue batch
 
