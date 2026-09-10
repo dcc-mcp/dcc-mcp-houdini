@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.38.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.37.0...v0.38.0) (2026-09-10)
+
+
+### Features
+
+* add bounded primitive topology inspection ([dc6bd44](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/dc6bd441d3c90e1ac96c1d644be8e5e2b5919f78))
+
+
+### Documentation
+
+* add canonical agent quickstart ([#295](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/295)) ([0736436](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0736436893ae81b4f1e2f650c801ad9bfe84a324))
+
 ## [0.37.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.36.0...v0.37.0) (2026-09-07)
 
 
