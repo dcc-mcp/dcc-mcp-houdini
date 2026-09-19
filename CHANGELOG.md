@@ -16,6 +16,14 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.41.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.0...v0.41.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **bake:** use one UV convention and make UDIM bake config atomic ([#312](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/312)) ([0b9ab16](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0b9ab167e83d00daee0befc79704624be91519da))
+* **windows:** skip recycled pids when terminating a render process tree ([#309](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/309)) ([b3fcd21](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b3fcd2133f2ba194c50b867887c4a1d68e066a94))
+
 ## [0.41.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.40.0...v0.41.0) (2026-09-19)
 
 
