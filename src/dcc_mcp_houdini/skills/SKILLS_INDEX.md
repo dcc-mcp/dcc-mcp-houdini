@@ -27,6 +27,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Model typed SOP geometry | `load_skill("houdini-mesh-ops")` → `loft_sections` / `lathe_profile` / `extrude_faces` / `bevel_edges` / `bridge_edges` / `boolean_op` / `add_edge_loop` / `array_instances` / `mirror` / `auto_uv` / `uv_project` → inspect returned readback → `houdini_geometry__get_cook_status` |
 | Create a DOP solver skeleton | `load_skill("houdini-simulation")` → `create_simulation_network(simulation_type="pyro"|"flip"|"rbd"|"vellum")` → `configure_simulation_solver` → `inspect_simulation_network` → `validate_simulation_setup` |
 | Fracture & constrain rigid bodies | `load_skill("houdini-simulation")` → `create_fracture` → `create_simulation_network(simulation_type="rbd")` → `create_constraint_network` → `create_collision_source` → `validate_simulation_setup` |
+| Configure light shadows | `load_skill("houdini-light-rig")` → `configure_light_shadow(light_path=..., settings={...})` |
+| Configure light bank and IES | `load_skill("houdini-light-rig")` → `configure_light_bank(light_path=..., settings={...})` → `set_light_ies(light_path=..., ies_file=...)` |
 | Bake a UDIM texture set | `load_skill("houdini-uv")` → `inspect_uv` → `load_skill("houdini-texture-bake")` → `list_bake_targets` → `configure_udim_bake` → bake → `inspect_bake_output` |
 | Unwrap and pack UVs | `load_skill("houdini-uv")` → `unwrap_uv` → `transform_uv` (layout) → `inspect_uv` |
 | Simulate a crowd | `load_skill("houdini-crowds")` → `create_crowd_network` → `add_crowd_behavior` (steer → avoid) → `inspect_crowd` |

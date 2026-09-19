@@ -18,6 +18,23 @@ LIGHT_TYPES = {
     "environment": 8,
 }
 
+# Light bank: per-light membership used by the Light Bank pane and by render-time
+# light selection. Names differ across Houdini versions and light types, so each
+# setting is resolved against these aliases rather than assumed.
+BANK_ALIASES = {
+    "categories": ("categories", "lightcategories", "vm_categories", "lightmask"),
+    "selectable": ("lightselectable", "selectable", "vm_lightselectable"),
+    "enabled": ("lightenable", "enable", "vm_lightenable"),
+}
+
+# IES: photometric profile attached to a light.
+IES_ALIASES = {
+    "ies_file": ("iesfile", "ies_file", "vm_iesfile", "light_iesfile"),
+    "ies_enabled": ("iesenable", "useies", "vm_iesenable"),
+    "ies_scale": ("iesintensityscale", "iesscale", "vm_iesscale"),
+    "ies_rotate": ("iesrotate", "iesrotatez", "vm_iesrotate"),
+}
+
 # Shape types that support area light parameters (areasize, etc.)
 AREA_SHAPES = {"grid", "disk", "sphere", "tube"}
 

@@ -60,7 +60,8 @@ def configure_light_shadow(light_path: str, settings) -> dict:
                 applied_parameters={},
                 skipped_parameters=skipped,
                 resolved_names=resolved,
-                valid=True,
+                # Nothing was applied, so this is not a valid configuration.
+                valid=not skipped,
                 validation_scope="parameter_presence",
             )
         applied = None
