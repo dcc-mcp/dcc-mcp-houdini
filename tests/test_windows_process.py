@@ -107,6 +107,106 @@ def test_recycled_pid_older_than_its_claimed_parent_is_skipped() -> None:
     kernel32.OpenProcess.assert_not_called()
 
 
+def test_child_of_a_rejected_pid_is_rejected_too() -> None:
+    """Rejection has to travel down the chain: an orphan's own child is not ours.
+
+    The orphan predates the job root, but its child started after the root and
+    after the orphan, so a single-hop check would accept the child and terminate
+    a process that has nothing to do with this job.
+    """
+    kernel32 = _stub_kernel32(openable=[200, 300])
+    start_times = {100: 9000, 200: 1000}
+
+    def _start_times(_kernel32, pid):
+        return {300: 9500}.get(pid, 1000)
+
+    with patch.object(_windows_process, "_process_start_time", side_effect=_start_times):
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100), (300, 200)],
+            {100},
+            start_times,
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+
+    assert opened == 0
+    assert handles == {}
+    kernel32.OpenProcess.assert_not_called()
+
+
+def test_child_of_an_unqueryable_pid_is_rejected_too() -> None:
+    """A pid we cannot even query must not become a trusted ancestor."""
+    kernel32 = _stub_kernel32(openable=[200, 300])
+    start_times = {100: 9000, 200: None}
+
+    def _start_times(_kernel32, pid):
+        return {300: 9500}.get(pid)
+
+    with patch.object(_windows_process, "_process_start_time", side_effect=_start_times):
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100), (300, 200)],
+            {100},
+            start_times,
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+
+    assert opened == 0
+    assert handles == {}
+    kernel32.OpenProcess.assert_not_called()
+
+
+def test_real_grandchild_of_the_root_is_still_captured() -> None:
+    """A genuine two level tree must survive the stricter chain check."""
+    kernel32 = _stub_kernel32(openable=[200, 300])
+    start_times = {100: 9000}
+
+    with patch.object(_windows_process, "_process_start_time", return_value=9500):
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100), (300, 200)],
+            {100},
+            start_times,
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+
+    assert opened == 2
+    assert sorted(handles) == [200, 300]
+
+
+def test_root_hop_stays_permissive_when_the_root_time_is_unknown() -> None:
+    """An unreadable root creation time must not skip every direct child.
+
+    ``subprocess.Popen`` still owns the authoritative root handle, so losing the
+    root creation time must not turn a normal cancellation into a timeout.
+    """
+    kernel32 = _stub_kernel32(openable=[200])
+
+    with patch.object(_windows_process, "_process_start_time", return_value=1000):
+        opened, handles = _capture(
+            kernel32, [(200, 100)], {100}, {}, _windows_process._ERROR_ACCESS_DENIED, root_start=None
+        )
+
+    assert opened == 1
+    assert sorted(handles) == [200]
+
+
+def test_rejected_pid_never_becomes_a_trusted_ancestor() -> None:
+    """The trusted set may only grow with pids that passed the identity check."""
+    kernel32 = _stub_kernel32(openable=[200, 300])
+    known_pids = {100}
+
+    with patch.object(_windows_process, "_snapshot_processes", return_value=[(200, 100), (300, 200)]), patch.object(
+        _windows_process, "_process_start_time", return_value=1000
+    ):
+        _windows_process._capture_descendant_handles(kernel32, known_pids, {}, 9000, {})
+
+    assert known_pids == {100}
+
+
 def test_process_that_hides_from_query_limited_information_is_skipped() -> None:
     """Another security context or a protected process cannot be one we spawned."""
     kernel32 = _stub_kernel32(openable=[200])
