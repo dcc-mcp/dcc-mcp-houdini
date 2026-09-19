@@ -223,3 +223,69 @@ tools:
     next-tools:
       on-failure:
         - houdini_scene__get_node_info
+  - name: create_materialx_node
+    search_aliases:
+      - "create materialx node"
+      - "add mtlx node"
+      - "new shader graph node"
+      - "add node to material"
+    description: Add a typed node to an existing MaterialX subnetwork.
+    source_file: scripts/create_materialx_node.py
+    execution: sync
+    affinity: main
+    group: authoring
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [material_path, node_type]
+      additionalProperties: false
+      properties:
+        material_path:
+          type: string
+          description: Absolute path of the MaterialX subnetwork that will host the node.
+        node_type:
+          type: string
+          description: Houdini node type name, such as mtlxstandard_surface or mtlximage.
+        node_name:
+          type: string
+          description: Node name; defaults to a name derived from node_type.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: inspect_materialx_graph
+    search_aliases:
+      - "inspect materialx graph"
+      - "list shader nodes"
+      - "read material wiring"
+      - "show mtlx network"
+    description: "Inspect a MaterialX subnetwork: node inventory, input wiring and unwired nodes."
+    source_file: scripts/inspect_materialx_graph.py
+    execution: sync
+    affinity: main
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [material_path]
+      additionalProperties: false
+      properties:
+        material_path:
+          type: string
+          description: Absolute path of the MaterialX subnetwork.
+        max_nodes:
+          type: integer
+          default: 64
+          minimum: 1
+          maximum: 256

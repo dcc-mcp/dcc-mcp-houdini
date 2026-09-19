@@ -93,7 +93,7 @@ def inspect_cop_output(node_path: str, output_path: str = None) -> dict:
             artifact_count=len(existing),
             artifact_paths=existing,
             artifact_size_bytes=size_bytes,
-            truncated_matches=len(matches) >= MAX_MATCHES,
+            truncated_matches=len(matches) > MAX_MATCHES,
             validation_scope="filesystem_stat",
             render_verified=False,
         )

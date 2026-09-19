@@ -198,7 +198,9 @@ def cooked_geometry(node):
     needs_cook = getattr(node, "needsToCook", None)
     if callable(needs_cook):
         try:
-            if needs_cook():
+            # Only a real boolean answer counts; a mock or an exotic return must
+            # not be read as "this node is dirty".
+            if needs_cook() is True:
                 return None
         except Exception:
             return None
@@ -277,9 +279,16 @@ MAX_UV_SAMPLES = 20000
 
 
 def uv_attribute_names(geometry, max_names=8):
-    """Names of float UV attributes (size >= 2) on point or vertex, in order."""
+    """Names of float UV attributes (size >= 2), vertex attributes first.
+
+    Vertex order matters: Houdini stores UVs as a **vertex** attribute, so a
+    geometry carrying both a point-level and a vertex-level match must report
+    the vertex one. Matching is anchored at the start of the name, because a
+    substring test would accept attributes such as ``Cd_uv`` or ``flowuv`` that
+    are not UV sets.
+    """
     names = []
-    for accessor in ("pointAttribs", "vertexAttribs"):
+    for accessor in ("vertexAttribs", "pointAttribs"):
         method = getattr(geometry, accessor, None)
         if not callable(method):
             continue
@@ -293,14 +302,17 @@ def uv_attribute_names(geometry, max_names=8):
                 size = attribute.size()
             except Exception:
                 continue
-            if UV_NAME_PREFIX in name.lower() and size >= 2 and name not in names:
+            if name.startswith(UV_NAME_PREFIX) and size >= 2 and name not in names:
                 names.append(name)
     return names[:max_names]
 
 
 def uv_values(geometry, name):
-    """Float values of a UV attribute, or ``None`` when they cannot be read."""
-    for accessor in ("pointFloatAttribValues", "vertexFloatAttribValues"):
+    """Float values of a UV attribute, or ``None`` when they cannot be read.
+
+    Vertex accessors come first for the same reason as ``uv_attribute_names``.
+    """
+    for accessor in ("vertexFloatAttribValues", "pointFloatAttribValues"):
         method = getattr(geometry, accessor, None)
         if not callable(method):
             continue

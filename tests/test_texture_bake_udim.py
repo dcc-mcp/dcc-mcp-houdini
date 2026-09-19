@@ -346,3 +346,150 @@ def test_hou_missing_returns_structured_error():
     result = _load("inspect_bake_output.py").inspect_bake_output("/tmp/hero.exr")
     assert not result["success"]
     assert result["message"] == "Houdini not available"
+
+
+# ---------------------------------------------------------------------------
+# Regressions from review: the guard must hold through the caller, not just in
+# the helper, and a failed request must not leave a ROP it created behind.
+# ---------------------------------------------------------------------------
+
+
+class _CookTrackingDisplay:
+    """Display node that records whether geometry() was reached."""
+
+    def __init__(self, dirty=True):
+        self.cooks = []
+        self.needsToCook = lambda: dirty
+        self._geometry = _uv_geometry((0.2, 0.3, 1.4, 0.5))
+
+    def geometry(self):
+        self.cooks.append(1)
+        return self._geometry
+
+
+def test_list_bake_targets_does_not_cook_a_dirty_node():
+    """The guard has to survive the list_bake_targets caller, not just udim_info.
+
+    bake_geometry_info used to read display.geometry() before delegating to
+    udim_info, which cooked the node first and made the guard report `computed`
+    for geometry that was never cooked.
+    """
+    root, _geo, hou = _scene_with_attrib_data()
+    node = root.createNode("geo", "dirty")
+    display = _CookTrackingDisplay(dirty=True)
+    node.displayNode = lambda: display
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("list_bake_targets.py").list_bake_targets()
+    target = next((item for item in result["context"]["targets"] if item["path"] == node.path()), None)
+    assert target is not None, result["context"]["targets"]
+    assert target["udim_detection"] == "unavailable"
+    assert target["geometry_available"] is False
+    assert target["primitive_count"] == 0
+    assert target["bake_ready"] is False
+    assert display.cooks == []
+
+
+def test_bake_geometry_info_reads_clean_geometry_and_stays_bake_ready():
+    root, _geo, hou = _scene_with_attrib_data()
+    node = root.createNode("geo", "clean")
+    display = _CookTrackingDisplay(dirty=False)
+    node.displayNode = lambda: display
+    common = _load("_texture_bake_common.py")
+    with patch.dict(sys.modules, {"hou": hou}):
+        info = common.bake_geometry_info(hou, node.path())
+    assert info["geometry_available"] is True
+    assert info["udim_detection"] == "computed"
+    assert info["bake_ready"] is True
+    # Clean geometry is read (several helpers need it); only dirty nodes are refused.
+    assert display.cooks
+
+
+def test_configure_udim_bake_destroys_the_rop_it_created_on_failure():
+    root, _geo, hou = scene()
+    out = root.createNode("ropnet", "out")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("configure_udim_bake.py").configure_udim_bake(
+            "/obj/out/bake_maps", tile_range=[1001], parameters={"nope": 1}
+        )
+    assert not result["success"]
+    assert out.children() == ()
+
+
+def test_configure_udim_bake_preserves_a_pre_existing_rop_on_failure():
+    root, _geo, hou = scene()
+    out = root.createNode("ropnet", "out")
+    existing = out.createNode("baker", "bake_maps")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("configure_udim_bake.py").configure_udim_bake(
+            "/obj/out/bake_maps", tile_range=[1001], parameters={"nope": 1}
+        )
+    assert not result["success"]
+    assert out.children() == (existing,)
+    assert existing.destroyed is False
+
+
+def test_configure_udim_bake_leaves_nothing_when_tiles_cannot_resolve():
+    """Tile resolution happens before the ROP is created, so nothing to clean up."""
+    root, _geo, hou = scene()
+    out = root.createNode("ropnet", "out")
+    node = root.createNode("geo", "plain")
+    node.displayNode = lambda: _DisplayNode(
+        SimpleNamespace(
+            pointAttribs=lambda: [_attribute("P", 3)],
+            vertexAttribs=list,
+            iterPrims=lambda: [object()],
+        )
+    )
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("configure_udim_bake.py").configure_udim_bake("/obj/out/bake_maps", target_path=node.path())
+    assert not result["success"]
+    assert out.children() == ()
+
+
+# ---------------------------------------------------------------------------
+# Regressions from review: shared UV helper semantics
+# ---------------------------------------------------------------------------
+
+
+def test_uv_attribute_names_prefers_vertex_over_point():
+    """Houdini stores UVs as a vertex attribute; point must not win."""
+
+    class Geometry(SimpleNamespace):
+        def pointAttribs(self):
+            return [_attribute("uv", 3)]
+
+        def vertexAttribs(self):
+            return [_attribute("uv", 3)]
+
+        def vertexFloatAttribValues(self, name):
+            return [0.2, 0.3, 1.4, 0.5] if name == "uv" else []
+
+        def pointFloatAttribValues(self, name):
+            return [0.2, 0.3] if name == "uv" else []
+
+    from dcc_mcp_houdini._domain_graph import uv_values
+
+    geometry = Geometry()
+    names = uv_attribute_names_fn(geometry)
+    assert names == ["uv"]
+    # The vertex accessor is tried first, so the 4-component list wins.
+    assert uv_values(geometry, "uv") == [0.2, 0.3, 1.4, 0.5]
+
+
+def test_uv_attribute_names_anchors_the_name_match():
+    """A substring test would accept Cd_uv or flowuv, which are not UV sets."""
+
+    class Geometry(SimpleNamespace):
+        def pointAttribs(self):
+            return [_attribute("Cd_uv", 3), _attribute("flowuv", 3), _attribute("uv", 3)]
+
+        def vertexAttribs(self):
+            return []
+
+    assert uv_attribute_names_fn(Geometry()) == ["uv"]
+
+
+def uv_attribute_names_fn(geometry):
+    from dcc_mcp_houdini._domain_graph import uv_attribute_names
+
+    return uv_attribute_names(geometry)

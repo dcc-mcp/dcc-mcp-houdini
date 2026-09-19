@@ -93,7 +93,7 @@ def inspect_bake_output(output_path: str, expected_tiles: List[int] = None) -> d
             artifact_exists=bool(existing),
             artifact_count=len(existing),
             artifact_paths=existing,
-            truncated_matches=len(matches) >= MAX_MATCHES,
+            truncated_matches=len(matches) > MAX_MATCHES,
             expected_tiles=tiles,
             tile_results=tile_report,
             missing_tiles=missing,
