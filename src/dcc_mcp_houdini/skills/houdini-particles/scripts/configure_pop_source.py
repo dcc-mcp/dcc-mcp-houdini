@@ -31,7 +31,6 @@ def configure_pop_source(node_path: str, parameters, cook: bool = False) -> dict
                 node=summary,
                 node_path=node.path(),
                 applied_parameters=applied,
-                skipped_parameters=[],
                 cooked=cook,
                 valid=True,
                 validation_scope="parameters_and_cached_diagnostics",

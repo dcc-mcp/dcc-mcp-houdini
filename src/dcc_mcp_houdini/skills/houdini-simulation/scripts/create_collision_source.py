@@ -2,12 +2,13 @@
 
 from contextlib import ExitStack
 
-from _simulation_common import COLLISION_TYPES, apply_parameters, find_solver, next_free_input, validate_choice
+from _simulation_common import COLLISION_TYPES, apply_parameters, find_solver, validate_choice
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
     get_node,
     hou_missing_error,
+    next_free_input,
     node_summary,
     owned_node,
     require_category,

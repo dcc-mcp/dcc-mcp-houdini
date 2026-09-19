@@ -151,6 +151,17 @@ def resolve_inputs(hou, network, input_nodes):
     return sources
 
 
+def next_free_input(node, limit=32):
+    """First free input index of a node, bounded so a bad graph cannot loop."""
+    used = set()
+    for connection in node.inputConnections():
+        used.add(connection.inputIndex())
+    for index in range(limit):
+        if index not in used:
+            return index
+    raise ValueError("No free input available on {}".format(node.path()))
+
+
 def node_summary(node):
     return {
         "path": node.path(),

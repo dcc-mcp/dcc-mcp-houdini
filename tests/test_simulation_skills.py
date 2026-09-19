@@ -224,3 +224,12 @@ def test_apply_parameters_reports_missing_names_and_rolls_back():
         with common.apply_parameters(node, {"size": 9}):
             raise RuntimeError("boom")
     assert node.parm("size").eval() == 1
+
+
+def test_next_free_input_is_shared_with_domain_graph() -> None:
+    """The simulation package no longer keeps a private copy of the helper."""
+    from dcc_mcp_houdini import _domain_graph
+
+    common = _load("_simulation_common.py")
+    assert not hasattr(common, "next_free_input")
+    assert hasattr(_domain_graph, "next_free_input")

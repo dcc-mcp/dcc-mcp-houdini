@@ -184,7 +184,7 @@ def test_inspect_particles_reads_counts_and_attributes():
     )
     box = SimpleNamespace(minvec=lambda: (0.0, 1.0, 2.0), maxvec=lambda: (3.0, 4.0, 5.0))
     pop_object.geometry = lambda: SimpleNamespace(
-        points=lambda: [object(), object(), object()],
+        numPoints=lambda: 3,
         pointAttribs=lambda: [velocity, lifetime],
         boundingBox=lambda: box,
     )
@@ -240,3 +240,54 @@ def test_pop_type_maps_and_base_type() -> None:
     assert set(module.BEHAVIOR_TYPES) == {"kill", "replicate", "split", "limit", "collide", "steer"}
     assert module.base_type("popsolver::3.0") == "popsolver"
     assert module.base_type("popwind") == "popwind"
+
+
+def test_particle_payloads_do_not_advertise_skipped_parameters():
+    root, _geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        created = _load("create_pop_network.py").create_pop_network(root.path())
+        configured = _load("configure_pop_source.py").configure_pop_source("/obj/popnet1/popsource1", {"timescale": 2})
+        forced = _load("add_particle_force.py").add_particle_force("/obj/popnet1", "wind")
+        behavior = _load("add_particle_behavior.py").add_particle_behavior("/obj/popnet1", "kill")
+    for result in (created, configured, forced, behavior):
+        assert result["success"]
+        assert "skipped_parameters" not in result["context"]
+
+
+def test_inspect_particles_counts_without_instantiating_points():
+    root, _geo, hou = scene()
+    network, _solver = _pop_network(root)
+    pop_object = network.createNode("popobject")
+
+    class Geometry:
+        def __init__(self):
+            self.instantiated_points = False
+
+        def numPoints(self):
+            return 7
+
+        def points(self):
+            self.instantiated_points = True
+            return [object()] * 7
+
+        def pointAttribs(self):
+            return []
+
+        def boundingBox(self):
+            return None
+
+    geometry = Geometry()
+    pop_object.geometry = lambda: geometry
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_particles.py").inspect_particles(pop_object.path())
+    assert result["success"]
+    assert result["context"]["geometry_available"] is True
+    assert result["context"]["particle_count"] == 7
+    assert geometry.instantiated_points is False
+
+
+def test_next_free_input_is_shared_with_domain_graph() -> None:
+    from dcc_mcp_houdini import _domain_graph
+
+    assert hasattr(_domain_graph, "next_free_input")
+    assert _load("_particles_common.py").next_free_input is _domain_graph.next_free_input

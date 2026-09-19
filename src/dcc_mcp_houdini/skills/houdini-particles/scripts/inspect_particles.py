@@ -57,7 +57,8 @@ def inspect_particles(node_path: str, attributes=None, max_attributes: int = 32)
                 validation_scope="node_diagnostics_only",
                 simulation_verified=False,
             )
-        points = list(geometry.points())
+        # numPoints() counts without instantiating every hou.Point.
+        particle_count = geometry.numPoints()
         candidates = geometry.pointAttribs()
         if requested:
             wanted = set(requested)
@@ -74,7 +75,7 @@ def inspect_particles(node_path: str, attributes=None, max_attributes: int = 32)
             "Inspected particle node",
             node=summary,
             geometry_available=True,
-            particle_count=len(points),
+            particle_count=particle_count,
             attribute_count=len(candidates),
             attributes=reports,
             truncated_attributes=len(candidates) > len(reports),
