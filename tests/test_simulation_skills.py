@@ -341,3 +341,35 @@ def test_add_gas_field_rejects_unknown_type_and_foreign_target():
     assert not foreign["success"]
     assert "connect_to must name a node inside" in skill_error_detail(foreign)
     assert stray.parent() is geo
+
+
+def test_solver_helpers_do_not_advertise_skipped_parameters():
+    """parameter_edit hard-fails, so these two must not claim a skip path."""
+    root, geo, hou = scene()
+    network, solver = root.createNode("dopnet"), None
+    solver = network.createNode("pyrosolver")
+    with patch.dict(sys.modules, {"hou": hou}):
+        created = _load("create_simulation_network.py").create_simulation_network(
+            root.path(), "pyro", network_name="dopnet1", parameters={"timescale": 2}
+        )
+        configured = _load("configure_simulation_solver.py").configure_simulation_solver(
+            solver.path(), {"timescale": 0.5}
+        )
+    assert created["success"] and configured["success"]
+    assert "skipped_parameters" not in created["context"]
+    assert "skipped_parameters" not in configured["context"]
+
+
+def test_best_effort_defaults_keep_real_skipped_parameters():
+    """These three seed optional defaults, so a genuine skip path is correct."""
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        fracture = _load("create_fracture.py").create_fracture(geo.path(), "voronoi")
+        constraint = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(), "glue", relationship_parent=geo.path()
+        )
+        collision = _load("create_collision_source.py").create_collision_source(dopnet.path(), geo.path())
+    for result in (fracture, constraint, collision):
+        assert result["success"]
+        assert "skipped_parameters" in result["context"]

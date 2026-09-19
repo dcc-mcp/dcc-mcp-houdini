@@ -52,7 +52,6 @@ def create_simulation_network(
                 created_network=created_network,
                 created_solver=created_solver,
                 applied_parameters=applied,
-                skipped_parameters=[],
                 setup_state="skeleton",
                 simulation_verified=False,
                 required_setup=["object/source geometry", "solver inputs and output", "simulation cook"],

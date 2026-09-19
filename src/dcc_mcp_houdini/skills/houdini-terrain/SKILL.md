@@ -62,7 +62,9 @@ Pass what you want through `parameters` and read `applied_parameters` back.
 - `create_heightfield` returns `setup_state="skeleton"` and lists the setup a
   renderable terrain still needs, including a `heightfield_output` node.
 - `inspect_heightfield` reports `geometry_available=false` instead of guessing
-  when the node exposes no cached geometry; `layer_names=[]` means the read was
-  not available, not that the terrain has no layers.
+  when the node exposes no cached geometry. Read `layer_names_available` to
+  disambiguate: `False` means the read was not available, while an empty list
+  with `True` available means the terrain genuinely reports no layers. Never
+  infer emptiness from `layer_count=0` alone.
 - Creation failures destroy only the nodes owned by the failed request, and
   parameter writes are rolled back (values, expressions and animation).

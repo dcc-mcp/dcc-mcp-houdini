@@ -212,6 +212,30 @@ def _bounding_box(geometry):
     }
 
 
+def _read_volume_names(geometry, max_names, name_attribute):
+    """Return ``(names, names_available)``.
+
+    ``names_available`` distinguishes "the names source answered" from "it was
+    not readable"; an empty list with ``names_available=True`` means a volume
+    that genuinely reports no grids, which callers must not confuse with a
+    failed read.
+    """
+    intrinsic = getattr(geometry, "intrinsicValue", None)
+    if callable(intrinsic):
+        raw = _guarded(lambda: intrinsic("vdb_grids"))
+        if isinstance(raw, str):
+            return raw.split()[:max_names], True
+    if name_attribute is not None:
+        values = getattr(geometry, "primStringAttribValues", None)
+        if callable(values):
+            raw = _guarded(lambda: values(name_attribute))
+            if isinstance(raw, (list, tuple)):
+                return [str(item) for item in raw][:max_names], True
+            if isinstance(raw, str):
+                return raw.split()[:max_names], True
+    return [], False
+
+
 def volume_readback(geometry, max_names=16, name_attribute=None):
     """Bounded volume/VDB readback shared by the volume and terrain skills.
 
@@ -223,21 +247,11 @@ def volume_readback(geometry, max_names=16, name_attribute=None):
     for key, accessor in (("point_count", "numPoints"), ("prim_count", "numPrims")):
         method = getattr(geometry, accessor, None)
         counts[key] = _guarded(method) if callable(method) else None
-    names = []
-    raw = None
-    intrinsic = getattr(geometry, "intrinsicValue", None)
-    if callable(intrinsic):
-        raw = _guarded(lambda: intrinsic("vdb_grids"))
-    if not (isinstance(raw, str) and raw):
-        values = getattr(geometry, "primStringAttribValues", None)
-        if name_attribute is not None and callable(values):
-            raw = _guarded(lambda: values(name_attribute))
-            raw = " ".join(raw) if isinstance(raw, (list, tuple)) else None
-    if isinstance(raw, str) and raw:
-        names = raw.split()[:max_names]
+    names, names_available = _read_volume_names(geometry, max_names, name_attribute)
     return {
         "point_count": counts["point_count"],
         "prim_count": counts["prim_count"],
         "volume_names": names,
+        "names_available": names_available,
         "bounding_box": _bounding_box(geometry),
     }

@@ -46,11 +46,22 @@ Common `vdbcombine` operation values to pass through `parameters`:
 `sdfunion`, `sdmintersect`, `sdfdifference`, `sdfblend`, `sum`, `product`,
 `min`, `max`.
 
+## Source resolution
+
+Both tools resolve sources through one shared helper: a source must be an
+existing node in `parent_path`, and `source_b_path` may not be supplied without
+`source_path` (input 0 must never be left dangling). Cross-network inputs are
+rejected rather than silently accepted, matching `resolve_inputs` elsewhere in
+the adapter.
+
 ## Honesty contract
 
 - `inspect_vdb` reports `geometry_available=false` instead of guessing when the
   node exposes no cached geometry.
-- `volume_names` is populated from the `vdb_grids` intrinsic; an empty list
-  means the read was not available, not that the volume is empty.
+- `volume_names` is populated from the `vdb_grids` intrinsic. Read
+  `volume_names_available` to disambiguate: `False` means the read was not
+  available, while `False` names with `True` available means the volume
+  genuinely reports no grids. Never infer emptiness from `volume_count=0`
+  alone.
 - Creation failures destroy only the nodes owned by the failed request, and
   parameter writes are rolled back (values, expressions and animation).
