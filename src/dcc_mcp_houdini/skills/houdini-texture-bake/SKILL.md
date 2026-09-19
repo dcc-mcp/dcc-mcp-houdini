@@ -94,6 +94,8 @@ When no bake method is detected, tools return a structured diagnostic payload
 | `udim_tile_count` | Number of distinct tiles |
 | `udim_detection` | `computed`, `no_values`, `no_uv_sets` or `unavailable` |
 | `needs_udim_output` | True when the geometry spans more than one tile |
+| `geometry_available` | False when the node is dirty or exposes no cached geometry |
+
 
 When `needs_udim_output` is true, a flat output path silently collapses every
 tile into one file. Use `configure_udim_bake` before baking: it resolves the
@@ -105,6 +107,13 @@ missing.
 
 A tile count of 1 is not an error: `needs_udim_output` stays false and the
 output path is left flat.
+
+UDIM coverage is resolved **before** any geometry read. A dirty node reports
+`geometry_available=false`, `udim_detection=unavailable`, `primitive_count=0`
+and `bake_ready=false` instead of being cooked implicitly — cook it first, then
+inspect. `configure_udim_bake` resolves the tile set before creating a ROP, and
+destroys a ROP it created if a later step fails; a pre-existing ROP is left
+untouched.
 
 ## Context limitations
 

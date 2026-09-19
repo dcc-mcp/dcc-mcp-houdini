@@ -7,7 +7,7 @@ from typing import Any
 from _texture_bake_common import (
     UDIM_TOKEN,
     bake_output_paths,
-    create_or_get_bake_rop,
+    create_or_get_bake_rop_ex,
     detect_bake_methods,
     set_parm_if_exists,
     udim_info,
@@ -41,6 +41,50 @@ def _resolve_tiles(hou: Any, target_path: str, tile_range) -> tuple:
     return info["udim_tiles"], "geometry"
 
 
+def _resolved_output(output_path: str, tiles) -> str:
+    if not output_path or UDIM_TOKEN in output_path:
+        return output_path
+    if len(tiles) <= 1:
+        return output_path
+    root, dot, extension = output_path.rpartition(".")
+    return (root if dot else output_path) + "." + UDIM_TOKEN + (dot + extension if dot else "")
+
+
+def _apply(rop: Any, tiles, source: str, target_path: str, output_path: str, overrides: dict, methods: dict) -> dict:
+    """Apply the resolved configuration.
+
+    Runs inside the caller's rollback: any exception propagates so a ROP this
+    request created is destroyed, while a pre-existing ROP is left alone.
+    """
+    # Caller overrides are strict: an unknown name fails the call.
+    for name, value in overrides.items():
+        if not set_parm_if_exists(rop, name, value):
+            raise ValueError("Parameter not found: {}".format(name))
+
+    resolved_output = _resolved_output(output_path, tiles)
+    unapplied_defaults = []
+    if output_path:
+        if not any(set_parm_if_exists(rop, name, resolved_output) for name in OUTPUT_PATH_PARMS):
+            unapplied_defaults.append("output_path")
+        if len(tiles) > 1 and not any(set_parm_if_exists(rop, name, 1) for name in BAKE_RANGE_PARMS):
+            unapplied_defaults.append("bake_range")
+
+    paths = bake_output_paths(resolved_output, tiles) if resolved_output else []
+    return skill_success(
+        "Configured UDIM bake",
+        rop_path=rop.path(),
+        target_path=target_path,
+        tile_count=len(tiles),
+        udim_tiles=tiles,
+        tile_source=source,
+        needs_udim_output=len(tiles) > 1,
+        output_path=resolved_output,
+        output_paths=paths,
+        unapplied_defaults=unapplied_defaults,
+        available_methods=methods.get("available_methods", []),
+    )
+
+
 def configure_udim_bake(
     rop_path: str,
     target_path: str = None,
@@ -59,6 +103,9 @@ def configure_udim_bake(
             raise ValueError("output_path must be a string")
         if parameters is not None and not isinstance(parameters, dict):
             raise ValueError("parameters must be an object")
+        for name in parameters or {}:
+            if not isinstance(name, str):
+                raise ValueError("parameter names must be strings")
         methods = detect_bake_methods(hou)
         if not methods.get("available_methods"):
             return skill_error(
@@ -67,6 +114,8 @@ def configure_udim_bake(
                 available_methods=[],
                 recommendations=methods.get("recommendations", []),
             )
+        # Resolve everything that can fail before the ROP exists, so a failed
+        # request has nothing to clean up.
         tiles, source = _resolve_tiles(hou, target_path, tile_range)
         if not tiles:
             return skill_error(
@@ -77,41 +126,16 @@ def configure_udim_bake(
                 udim_detection=source,
                 needs_udim_output=False,
             )
-        rop = create_or_get_bake_rop(hou, rop_path)
-        # Caller overrides are strict: an unknown name fails the call.
-        for name, value in (parameters or {}).items():
-            if not set_parm_if_exists(rop, name, value):
-                raise ValueError("Parameter not found: {}".format(name))
-
-        resolved_output = output_path
-        unapplied_defaults = []
-        if output_path:
-            if UDIM_TOKEN in output_path:
-                resolved_output = output_path
-            elif len(tiles) > 1:
-                root, dot, extension = output_path.rpartition(".")
-                resolved_output = (root if dot else output_path) + "." + UDIM_TOKEN + (dot + extension if dot else "")
-            else:
-                resolved_output = output_path
-            if not any(set_parm_if_exists(rop, name, resolved_output) for name in OUTPUT_PATH_PARMS):
-                unapplied_defaults.append("output_path")
-            if len(tiles) > 1 and not any(set_parm_if_exists(rop, name, 1) for name in BAKE_RANGE_PARMS):
-                unapplied_defaults.append("bake_range")
-
-        paths = bake_output_paths(resolved_output, tiles) if resolved_output else []
-        return skill_success(
-            "Configured UDIM bake",
-            rop_path=rop.path(),
-            target_path=target_path,
-            tile_count=len(tiles),
-            udim_tiles=tiles,
-            tile_source=source,
-            needs_udim_output=len(tiles) > 1,
-            output_path=resolved_output,
-            output_paths=paths,
-            unapplied_defaults=unapplied_defaults,
-            available_methods=methods.get("available_methods", []),
-        )
+        rop, created_rop = create_or_get_bake_rop_ex(hou, rop_path)
+        try:
+            return _apply(rop, tiles, source, target_path, output_path, dict(parameters or {}), methods)
+        except BaseException:
+            if created_rop:
+                try:
+                    rop.destroy()
+                except Exception:
+                    pass
+            raise
     except Exception as exc:
         return skill_exception(exc, message="Failed to configure UDIM bake")
 

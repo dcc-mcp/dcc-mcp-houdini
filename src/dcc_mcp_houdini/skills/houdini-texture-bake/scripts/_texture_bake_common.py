@@ -186,6 +186,7 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
             "name": node.name(),
             "type": "obj",
             "has_display_geo": False,
+            "geometry_available": False,
             "has_uvs": False,
             "uv_layers": [],
             "primitive_count": 0,
@@ -194,8 +195,12 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
         info.update(udim_info(hou, node_path))
         return info
 
-    geo = display.geometry()
-    uv_layers = check_uvs(hou, node_path) or []
+    # Resolve UDIM coverage *before* touching geometry: cooked_geometry refuses
+    # to cook a dirty node, and reading display.geometry() here would cook it
+    # first, making the guard report "clean" for a node that was never cooked.
+    coverage = udim_info(hou, node_path)
+    geo = cooked_geometry(display)
+    uv_layers = check_uvs(hou, node_path) or [] if geo is not None else []
     prim_count = len(geo.iterPrims()) if geo is not None else 0
 
     info = {
@@ -203,12 +208,13 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
         "name": node.name(),
         "type": "obj" if node_path.startswith("/obj") else "sop",
         "has_display_geo": True,
+        "geometry_available": geo is not None,
         "has_uvs": bool(uv_layers),
         "uv_layers": uv_layers,
         "primitive_count": prim_count,
         "bake_ready": bool(uv_layers) and prim_count > 0,
     }
-    info.update(udim_info(hou, node_path))
+    info.update(coverage)
     return info
 
 
@@ -262,15 +268,25 @@ def create_or_get_bake_rop(hou: Any, rop_path: str) -> Any:
 
     Tries baker::2.0 first, then game_simple_baker.
     """
+    node, _created = create_or_get_bake_rop_ex(hou, rop_path)
+    return node
+
+
+def create_or_get_bake_rop_ex(hou: Any, rop_path: str) -> Tuple[Any, bool]:
+    """``create_or_get_bake_rop`` plus whether this call created the node.
+
+    Callers that can fail after creating the ROP use this so a failed request
+    destroys exactly what it made and leaves a pre-existing ROP untouched.
+    """
     node = hou.node(rop_path)
     if node is not None:
-        return node
+        return node, False
 
     for type_name in ("baker::2.0", "game_simple_baker", "bake_texture"):
         try:
             node = ensure_node(hou, rop_path, type_name)
             if node is not None:
-                return node
+                return node, True
         except Exception:
             continue
 
