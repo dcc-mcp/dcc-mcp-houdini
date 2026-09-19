@@ -203,3 +203,22 @@ def test_inspect_heightfield_distinguishes_no_layers_from_unreadable_names():
         unreadable = _load("inspect_heightfield.py").inspect_heightfield(node.path())
     assert unreadable["context"]["layer_names"] == []
     assert unreadable["context"]["layer_names_available"] is False
+
+
+def test_inspect_heightfield_does_not_cook_a_dirty_node():
+    root, geo, hou = scene()
+    node = geo.createNode("heightfield")
+    cooks = []
+
+    def geometry_with_cook_tracking():
+        cooks.append(1)
+        return _heightfield_geometry()
+
+    node.needsToCook = lambda: True
+    node.geometry = geometry_with_cook_tracking
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_heightfield.py").inspect_heightfield(node.path())
+    assert result["success"]
+    assert result["context"]["geometry_available"] is False
+    assert result["context"]["layer_names_available"] is False
+    assert cooks == []

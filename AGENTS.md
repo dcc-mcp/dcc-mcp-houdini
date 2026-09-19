@@ -113,6 +113,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
 | `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network` |
 | `houdini-vdb` | `create_vdb_node`, `combine_vdbs`, `inspect_vdb` |
+| `houdini-uv` | `unwrap_uv`, `transform_uv`, `inspect_uv` |
 | `houdini-terrain` | `create_heightfield`, `add_terrain_layer`, `inspect_heightfield` |
 
 ### interchange stage (load on demand)
@@ -136,7 +137,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 41 skill packages, 280 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
+**Total: 42 skill packages, 283 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
 
 ## Key Env Vars
 

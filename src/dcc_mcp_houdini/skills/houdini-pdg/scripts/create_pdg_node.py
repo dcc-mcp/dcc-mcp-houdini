@@ -1,4 +1,11 @@
-"""Create a Top node with parameter and input readback."""
+"""Create a Top node with parameter and input readback.
+
+Parameter overrides are applied through ``parameter_edit``: a name the node does
+not expose fails the call and rolls back, so this tool has no
+``skipped_parameters`` output.
+"""
+
+from contextlib import ExitStack
 
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
@@ -7,9 +14,9 @@ from dcc_mcp_houdini._domain_graph import (
     hou_missing_error,
     input_connections,
     owned_node,
+    parameter_edit,
     require_category,
     resolve_inputs,
-    set_parameters,
     validate_node_type,
     validate_parameters,
 )
@@ -27,8 +34,9 @@ def create_pdg_node(
         node_type = validate_node_type(node_type)
         validate_parameters(parameters)
         sources = resolve_inputs(hou, network, input_nodes)
-        with owned_node(network, node_type, node_name) as node:
-            applied, skipped = set_parameters(node, parameters)
+        with ExitStack() as stack:
+            node = stack.enter_context(owned_node(network, node_type, node_name))
+            applied = stack.enter_context(parameter_edit(node, parameters))
             for index, source in enumerate(sources):
                 node.setInput(index, source)
             wired = input_connections(node)
@@ -42,7 +50,6 @@ def create_pdg_node(
                 node_path=node.path(),
                 node_type=node.type().name(),
                 applied_parameters=applied,
-                skipped_parameters=skipped,
                 wired_inputs=wired,
             )
     except Exception as exc:

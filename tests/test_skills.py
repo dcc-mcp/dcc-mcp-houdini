@@ -1751,3 +1751,24 @@ class TestAutomationSkills:
         ]
         null.setInput.assert_called_once_with(0, box, 0)
         null.cook.assert_called_once_with(force=False)
+
+
+def test_docs_stage_catalogs_match_stage_loader() -> None:
+    """llms.txt and SKILLS_INDEX.md must not drift from _skill_loader."""
+    import re
+
+    from dcc_mcp_houdini._skill_loader import STAGE_SKILLS
+
+    index = (_SKILLS_ROOT / "SKILLS_INDEX.md").read_text(encoding="utf-8")
+    llms = (Path(__file__).parents[1] / "llms.txt").read_text(encoding="utf-8")
+    # bootstrap/scene rows in the docs are prose, not catalogs of every stage member.
+    for stage, expected in STAGE_SKILLS.items():
+        if stage in ("bootstrap", "scene"):
+            continue
+        expected_row = ", ".join("`{}`".format(name) for name in expected)
+        index_row = re.search(r"^\| `{}` \| (.*?) \| no \|$".format(stage), index, re.M)
+        assert index_row is not None, "SKILLS_INDEX.md is missing the {} row".format(stage)
+        assert index_row.group(1) == expected_row
+        llms_row = re.search(r"^- `{}`: (.*)$".format(stage), llms, re.M)
+        assert llms_row is not None, "llms.txt is missing the {} row".format(stage)
+        assert llms_row.group(1) == expected_row

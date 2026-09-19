@@ -188,7 +188,20 @@ def hou_missing_error():
 
 
 def cooked_geometry(node):
-    """Return cached geometry, or ``None``; never raise for an unreadable node."""
+    """Return cached geometry, or ``None``; never raise and never cook.
+
+    ``hou.Node.geometry()`` cooks a dirty node, which would make a read-only
+    inspection tool mutate the scene and block on an arbitrary cook. A node that
+    needs a cook reports no geometry instead, so callers can cook explicitly
+    first and inspect afterwards.
+    """
+    needs_cook = getattr(node, "needsToCook", None)
+    if callable(needs_cook):
+        try:
+            if needs_cook():
+                return None
+        except Exception:
+            return None
     try:
         return node.geometry()
     except Exception:
