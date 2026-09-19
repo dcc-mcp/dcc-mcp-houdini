@@ -7,7 +7,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -17,28 +16,6 @@ from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
 _DEFAULT_PATTERN = object()
-
-
-def _wait_for_windows_process_exit(pid: int, timeout_secs: float) -> bool:
-    import ctypes
-    from ctypes import wintypes
-
-    synchronize = 0x00100000
-    wait_object_0 = 0
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-    kernel32.WaitForSingleObject.restype = wintypes.DWORD
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    handle = kernel32.OpenProcess(synchronize, False, pid)
-    if not handle:
-        return True
-    try:
-        return kernel32.WaitForSingleObject(handle, int(timeout_secs * 1000)) == wait_object_0
-    finally:
-        kernel32.CloseHandle(handle)
 
 
 def _load_script(skill_name: str, script_name: str) -> ModuleType:
@@ -2260,8 +2237,8 @@ class TestRenderExecution:
         assert result["success"] is True
         read.assert_called_once_with("7" * 32, include_details=True)
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows process-tree regression")
     def test_cancel_render_job_survives_external_command_failure(self, tmp_path: Path) -> None:
+        """Cancellation reports a cancelled job without shelling out to an external helper."""
         mod = _load_script("houdini-render", "_background_render.py")
         job_id = "6" * 32
         job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
@@ -2270,51 +2247,46 @@ class TestRenderExecution:
             json.dumps({"job_id": job_id, "state": "running"}),
             encoding="utf-8",
         )
-        child_pid_path = tmp_path / "child.pid"
-        child_code = "import time; time.sleep(60)"
-        parent_code = (
-            "import pathlib, subprocess, sys, time; "
-            "child = subprocess.Popen([sys.executable, '-c', {!r}]); "
-            "pathlib.Path({!r}).write_text(str(child.pid), encoding='utf-8'); "
-            "time.sleep(60)"
-        ).format(child_code, str(child_pid_path))
-        process = subprocess.Popen(  # noqa: S603
-            [sys.executable, "-c", parent_code],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
+        process = MagicMock(pid=4321)
+        process.poll.side_effect = [None, 0]
         mod._PROCESS_HANDLES[job_id] = process
-        child_pid = None
+
+        with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
+            mod.subprocess, "run", side_effect=OSError("cannot create helper process")
+        ), patch.object(mod, "_terminate_process_tree") as terminate:
+            first = mod.cancel_render_job(job_id)
+            second = mod.cancel_render_job(job_id)
+
+        assert first["state"] == "cancelled"
+        assert first["cancel_requested"] is True
+        assert second["state"] == "cancelled"
+        assert second["cancel_requested"] is False
+        assert job_id not in mod._PROCESS_HANDLES
+        terminate.assert_called_once_with(process)
+
+    def test_cancel_render_job_surfaces_unopenable_process_handle(self, tmp_path: Path) -> None:
+        """A process handle the adapter cannot open stays a surfaced failure, never a silent cancel."""
+        mod = _load_script("houdini-render", "_background_render.py")
+        job_id = "e" * 32
+        job_dir = tmp_path / "dcc-mcp-houdini-render-jobs" / job_id
+        job_dir.mkdir(parents=True)
+        status_path = job_dir / "status.json"
+        status_path.write_text(json.dumps({"job_id": job_id, "state": "running"}), encoding="utf-8")
+        process = MagicMock(pid=4321)
+        process.poll.return_value = None
+        mod._PROCESS_HANDLES[job_id] = process
         try:
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and not child_pid_path.is_file():
-                time.sleep(0.02)
-            assert child_pid_path.is_file()
-            child_pid = int(child_pid_path.read_text(encoding="utf-8"))
-
             with patch.object(mod.tempfile, "gettempdir", return_value=str(tmp_path)), patch.object(
-                mod.subprocess, "run", side_effect=OSError("cannot create helper process")
-            ):
-                first = mod.cancel_render_job(job_id)
-                second = mod.cancel_render_job(job_id)
+                mod,
+                "_terminate_process_tree",
+                side_effect=RuntimeError("Failed to open an owned background process: [WinError 5] Access is denied."),
+            ), pytest.raises(RuntimeError, match="Failed to open an owned background process"):
+                mod.cancel_render_job(job_id)
 
-            assert first["state"] == "cancelled"
-            assert first["cancel_requested"] is True
-            assert second["state"] == "cancelled"
-            assert second["cancel_requested"] is False
-            assert job_id not in mod._PROCESS_HANDLES
-            assert process.poll() is not None
-            assert _wait_for_windows_process_exit(child_pid, timeout_secs=5)
+            assert json.loads(status_path.read_text(encoding="utf-8"))["state"] == "cancelling"
+            assert mod._PROCESS_HANDLES[job_id] is process
         finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait(timeout=5)
-            if child_pid is not None and not _wait_for_windows_process_exit(child_pid, timeout_secs=0):
-                subprocess.run(  # noqa: S603
-                    ["taskkill", "/PID", str(child_pid), "/T", "/F"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            mod._PROCESS_HANDLES.pop(job_id, None)
 
     def test_terminate_process_tree_uses_process_group_on_posix(self) -> None:
         mod = _load_script("houdini-render", "_background_render.py")
