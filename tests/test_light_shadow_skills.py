@@ -67,6 +67,9 @@ def test_configure_light_shadow_mixes_applied_and_unsupported():
     assert result["success"]
     assert result["context"]["applied_parameters"] == {"shadowblur": 0.5}
     assert result["context"]["skipped_parameters"] == ["distance"]
+    # Assert the conclusive field, not just the details: a partial configuration
+    # is not valid, and a hardcoded valid=True survived here until it was caught.
+    assert result["context"]["valid"] is False
 
 
 def test_configure_light_shadow_rejects_unknown_setting_name():
