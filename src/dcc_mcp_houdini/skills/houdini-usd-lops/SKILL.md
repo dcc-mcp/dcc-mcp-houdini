@@ -60,10 +60,15 @@ create or remove prims, edit variants, layers or references, or change the stage
 composition graph — those remain outside this package.
 
 Supported value types are bool, int, float, string, float2 and float3; anything
-else fails the call rather than being coerced. All requested attributes are
-pre-validated before the first write, so a rejected entry never leaves a partial
-write on the stage. A write the stage refuses is reported in
-`skipped_parameters`, and `readback_matches` tells the caller whether the values
-read back are the ones written.
+else fails the call rather than being coerced. Two- and three-component values
+are converted to `Gf.Vec2f` and `Gf.Vec3f` before the write, because OpenUSD maps
+Float2/Float3 onto those types and rejects a raw Python list.
+
+All requested attributes are pre-validated before the first write, so a rejected
+entry never leaves a partial write on the stage. Pre-validation cannot cover
+everything USD may refuse at write time, so the write loop also removes the
+attributes it created if any write raises. A write the stage refuses is reported
+in `skipped_parameters`, and `readback_matches` tells the caller whether the
+values read back are the ones written.
 
 Load `houdini-interchange` instead when the task is file import or export.

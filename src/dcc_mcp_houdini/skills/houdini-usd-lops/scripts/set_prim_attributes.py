@@ -10,21 +10,30 @@ from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_
 MAX_ATTRIBUTES = 32
 
 
-def _value_type(Usd: Any, Sdf: Any, value: Any) -> Any:
-    """Map a JSON value to the matching Sdf type, or ``None`` when unsupported."""
+def _is_number(item: Any) -> bool:
+    return isinstance(item, (int, float)) and not isinstance(item, bool)
+
+
+def _typed_value(Gf: Any, Sdf: Any, value: Any):
+    """Return ``(sdf_type, usd_value)`` for *value*, or ``None`` when unsupported.
+
+    OpenUSD maps Float2 and Float3 onto ``Gf.Vec2f`` and ``Gf.Vec3f``. Handing it
+    a raw Python list instead raises an ArgumentError inside ``Set``, so vector
+    values are converted here rather than at the call site.
+    """
     if isinstance(value, bool):
-        return Sdf.ValueTypeNames.Bool
+        return Sdf.ValueTypeNames.Bool, value
     if isinstance(value, int):
-        return Sdf.ValueTypeNames.Int
+        return Sdf.ValueTypeNames.Int, value
     if isinstance(value, float):
-        return Sdf.ValueTypeNames.Float
+        return Sdf.ValueTypeNames.Float, value
     if isinstance(value, str):
-        return Sdf.ValueTypeNames.String
+        return Sdf.ValueTypeNames.String, value
     if isinstance(value, (list, tuple)):
-        if len(value) == 3 and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value):
-            return Sdf.ValueTypeNames.Float3
-        if len(value) == 2 and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value):
-            return Sdf.ValueTypeNames.Float2
+        if len(value) == 3 and all(_is_number(item) for item in value):
+            return Sdf.ValueTypeNames.Float3, Gf.Vec3f(*(float(item) for item in value))
+        if len(value) == 2 and all(_is_number(item) for item in value):
+            return Sdf.ValueTypeNames.Float2, Gf.Vec2f(*(float(item) for item in value))
     return None
 
 
@@ -34,9 +43,9 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
     try:
-        from pxr import Sdf, Usd  # noqa: PLC0415
+        from pxr import Gf, Sdf, Usd  # noqa: PLC0415
     except ImportError:
-        return skill_error("USD not available", "pxr.Sdf and pxr.Usd could not be imported")
+        return skill_error("USD not available", "pxr.Gf, pxr.Sdf and pxr.Usd could not be imported")
     try:
         if not isinstance(attributes, dict) or not attributes:
             raise ValueError("attributes must be a non-empty object")
@@ -54,18 +63,30 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
         for name, value in attributes.items():
             if not str(name).replace(":", "_").replace("_", "").isalnum():
                 raise ValueError("Invalid USD attribute name: {}".format(name))
-            type_name = _value_type(Usd, Sdf, value)
-            if type_name is None:
+            typed = _typed_value(Gf, Sdf, value)
+            if typed is None:
                 raise ValueError("Unsupported value type for attribute: {}".format(name))
-            planned[str(name)] = (type_name, value)
+            planned[str(name)] = typed
 
         applied, skipped = {}, []
-        for name, (type_name, value) in planned.items():
-            attribute = prim.CreateAttribute(name, type_name)
-            if not attribute.Set(value, time):
-                skipped.append(name)
-                continue
-            applied[name] = value
+        created = []
+        try:
+            for name, (type_name, usd_value) in planned.items():
+                attribute = prim.CreateAttribute(name, type_name)
+                created.append(name)
+                if not attribute.Set(usd_value, time):
+                    skipped.append(name)
+                    continue
+                applied[name] = usd_value
+        except BaseException:
+            # Pre-validation cannot cover everything USD rejects at Set time, and
+            # an exception here would otherwise leave the earlier writes in place.
+            for name in reversed(created):
+                try:
+                    prim.RemoveProperty(name)
+                except Exception:
+                    pass
+            raise
 
         readback = {}
         for name in applied:

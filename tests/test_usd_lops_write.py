@@ -24,11 +24,38 @@ def _load(name):
     return module
 
 
+class _Vec:
+    """Stand-in for Gf.Vec2f / Gf.Vec3f."""
+
+    def __init__(self, *values):
+        self.values = tuple(values)
+
+    def __eq__(self, other):
+        return isinstance(other, _Vec) and other.values == self.values
+
+    def __hash__(self):
+        return hash(self.values)
+
+    def __repr__(self):
+        return "_Vec{}".format(self.values)
+
+
+def _as_vec(values):
+    return _Vec(*(float(item) for item in values))
+
+
 class _Attribute:
-    def __init__(self):
+    """Rejects anything USD would reject: vectors must arrive as Gf values."""
+
+    VECTOR_TYPES = ("float2", "float3")
+
+    def __init__(self, type_name):
+        self.type_name = type_name
         self._value = None
 
     def Set(self, value, _time):
+        if self.type_name in self.VECTOR_TYPES and not isinstance(value, _Vec):
+            raise TypeError("{} expects a Gf value, got {!r}".format(self.type_name, type(value).__name__))
         self._value = value
         return True
 
@@ -42,14 +69,26 @@ class _FailingAttribute(_Attribute):
 
 
 class _Prim:
-    def __init__(self, fail_for=()):
+    def __init__(self, fail_for=(), raise_for=()):
         self.attributes = {}
         self.fail_for = fail_for
+        self.raise_for = raise_for
 
-    def CreateAttribute(self, name, _type):
-        attribute = _FailingAttribute() if name in self.fail_for else _Attribute()
+    def CreateAttribute(self, name, type_name):
+        if name in self.raise_for:
+            attribute = _Attribute(type_name)
+
+            def boom(_value, _time):
+                raise RuntimeError("stage refused the write")
+
+            attribute.Set = boom
+        else:
+            attribute = _FailingAttribute(type_name) if name in self.fail_for else _Attribute(type_name)
         self.attributes[name] = attribute
         return attribute
+
+    def RemoveProperty(self, name):
+        self.attributes.pop(name, None)
 
     def GetAttribute(self, name):
         return self.attributes.get(name)
@@ -77,23 +116,32 @@ def _usd_modules():
             Bool="bool", Int="int", Float="float", String="string", Float2="float2", Float3="float3"
         )
     )
-    return Usd, Sdf
+    Gf = SimpleNamespace(Vec2f=_Vec2f, Vec3f=_Vec3f)
+    return Usd, Sdf, Gf
+
+
+def _Vec2f(*values):
+    return _as_vec(values)
+
+
+def _Vec3f(*values):
+    return _as_vec(values)
 
 
 def _pxr_modules():
-    """Module map for `from pxr import Sdf, Usd`, the only import shape Houdini supports."""
-    Usd, Sdf = _usd_modules()
+    """Module map for `from pxr import ...`, the only import shape Houdini supports."""
+    Usd, Sdf, Gf = _usd_modules()
     return {
-        "pxr": SimpleNamespace(Usd=Usd, Sdf=Sdf),
+        "pxr": SimpleNamespace(Usd=Usd, Sdf=Sdf, Gf=Gf),
         "pxr.Usd": Usd,
         "pxr.Sdf": Sdf,
+        "pxr.Gf": Gf,
     }
 
 
 def test_set_prim_attributes_writes_and_reads_back():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"density": 2.5, "label": "hero", "flag": True}
@@ -110,19 +158,21 @@ def test_set_prim_attributes_writes_and_reads_back():
 def test_set_prim_attributes_supports_vector_values():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"center": [1.0, 2.0, 3.0], "uv": [0.0, 1.0]}
         )
     assert result["success"]
-    assert result["context"]["applied_attributes"] == {"center": [1.0, 2.0, 3.0], "uv": [0.0, 1.0]}
+    context = result["context"]
+    # USD stores vectors as Gf values, not the raw lists the caller supplied.
+    assert context["applied_attributes"]["center"] == _as_vec([1.0, 2.0, 3.0])
+    assert context["applied_attributes"]["uv"] == _as_vec([0.0, 1.0])
+    assert context["readback_matches"] is True
 
 
 def test_set_prim_attributes_reports_skipped_writes():
     prim = _Prim(fail_for=("density",))
     hou = _hou_with_stage(_Stage(prim))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"density": 2.5})
     assert result["success"]
@@ -133,7 +183,6 @@ def test_set_prim_attributes_reports_skipped_writes():
 def test_set_prim_attributes_rejects_unsupported_value_types():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"nested": {"a": 1}, "ok": 1}
@@ -144,7 +193,6 @@ def test_set_prim_attributes_rejects_unsupported_value_types():
 
 def test_set_prim_attributes_rejects_unknown_prim():
     hou = _hou_with_stage(_Stage(_Prim()))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/missing", {"a": 1})
     assert not result["success"]
@@ -154,7 +202,6 @@ def test_set_prim_attributes_rejects_unknown_prim():
 @pytest.mark.parametrize("attributes", [{}, None, "density"])
 def test_set_prim_attributes_validates_attributes(attributes):
     hou = _hou_with_stage(_Stage(_Prim()))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", attributes)
     assert not result["success"]
@@ -163,7 +210,6 @@ def test_set_prim_attributes_validates_attributes(attributes):
 
 def test_set_prim_attributes_rejects_invalid_names():
     hou = _hou_with_stage(_Stage(_Prim()))
-    Usd, Sdf = _usd_modules()
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"bad name!": 1})
     assert not result["success"]
@@ -183,9 +229,10 @@ def test_set_prim_attributes_imports_usd_through_pxr():
     registers the wrong module name.
     """
     source = (_ROOT / "scripts" / "set_prim_attributes.py").read_text(encoding="utf-8")
-    assert "from pxr import Sdf, Usd" in source
+    assert "from pxr import" in source
     assert "\n    import Sdf" not in source
     assert "\n    import Usd" not in source
+    assert "\n    import Gf" not in source
 
 
 def test_set_prim_attributes_writes_nothing_when_one_entry_is_invalid():
@@ -211,3 +258,49 @@ def test_set_prim_attributes_writes_nothing_when_a_name_is_invalid():
         )
     assert not result["success"]
     assert prim.attributes == {}
+
+
+def test_mixed_scalar_and_vector_write_succeeds_together():
+    """Scalars and vectors in one call: both land, and readback matches."""
+    prim = _Prim()
+    hou = _hou_with_stage(_Stage(prim))
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1",
+            "/hero",
+            {"density": 2.5, "center": [1.0, 2.0, 3.0], "uv": [0.0, 1.0], "label": "hero"},
+        )
+    assert result["success"]
+    context = result["context"]
+    assert context["applied_attributes"]["density"] == 2.5
+    assert context["applied_attributes"]["label"] == "hero"
+    assert context["applied_attributes"]["center"] == _as_vec([1.0, 2.0, 3.0])
+    assert context["applied_attributes"]["uv"] == _as_vec([0.0, 1.0])
+    assert context["readback_matches"] is True
+    assert context["skipped_parameters"] == []
+
+
+def test_vector_write_rolls_back_when_a_later_scalar_is_refused():
+    """A Set-time failure must undo the earlier writes, including vectors.
+
+    Pre-validation cannot catch everything USD rejects at Set time, so the write
+    loop has to leave the prim as it found it rather than half-written.
+    """
+    prim = _Prim(raise_for=("density",))
+    hou = _hou_with_stage(_Stage(prim))
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/hero", {"center": [1.0, 2.0, 3.0], "density": 2.5}
+        )
+    assert not result["success"]
+    assert "stage refused the write" in skill_error_detail(result)
+    # The vector that was already written must be gone again.
+    assert prim.attributes == {}
+
+
+def test_vector_values_are_rejected_without_gf_conversion():
+    """Guards the Gf conversion: a raw list must never reach Set for a vector type."""
+    prim = _Prim()
+    attribute = prim.CreateAttribute("center", "float3")
+    with pytest.raises(TypeError, match="float3 expects a Gf value"):
+        attribute.Set([1.0, 2.0, 3.0], "default")
