@@ -16,6 +16,14 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.41.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.40.0...v0.41.0) (2026-09-19)
+
+
+### Features
+
+* **skills:** author MaterialX graphs, configure per-light shadows, apply review cleanups ([fe26571](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/fe26571751b5f04abf1278ae385dfab20436bab0))
+* **skills:** make texture baking UDIM-aware ([1b772a9](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/1b772a93eac9cdb149307f052623706951991348))
+
 ## [0.40.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.39.0...v0.40.0) (2026-09-19)
 
 
