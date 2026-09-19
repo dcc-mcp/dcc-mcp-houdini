@@ -60,7 +60,8 @@ def configure_light_shadow(light_path: str, settings) -> dict:
                 applied_parameters={},
                 skipped_parameters=skipped,
                 resolved_names=resolved,
-                valid=True,
+                # Nothing was applied, so this is not a valid configuration.
+                valid=not skipped,
                 validation_scope="parameter_presence",
             )
         applied = None
@@ -73,7 +74,9 @@ def configure_light_shadow(light_path: str, settings) -> dict:
             applied_parameters=applied,
             skipped_parameters=skipped,
             resolved_names=resolved,
-            valid=True,
+            # A partial configuration is not a valid one: some settings were
+            # skipped, so reporting valid=True would contradict both fields.
+            valid=not skipped,
             validation_scope="parameter_presence_and_readback",
         )
     except Exception as exc:

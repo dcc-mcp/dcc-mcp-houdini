@@ -234,12 +234,15 @@ def test_skill_package_registers_expected_tools() -> None:
         assert tool["input_schema"]["additionalProperties"] is False
 
 
-def test_pop_type_maps_and_base_type() -> None:
+def test_pop_type_maps_and_shared_base_node_type() -> None:
+    from dcc_mcp_houdini._domain_graph import base_node_type
+
     module = _load("_particles_common.py")
     assert set(module.FORCE_TYPES) == {"force", "wind", "drag", "vortex", "attract", "axis"}
     assert set(module.BEHAVIOR_TYPES) == {"kill", "replicate", "split", "limit", "collide", "steer"}
-    assert module.base_type("popsolver::3.0") == "popsolver"
-    assert module.base_type("popwind") == "popwind"
+    # Version stripping lives in the shared helper, not in a per-package copy.
+    assert base_node_type("popsolver::3.0") == "popsolver"
+    assert base_node_type("popwind") == "popwind"
 
 
 def test_particle_payloads_do_not_advertise_skipped_parameters():

@@ -436,3 +436,71 @@ tools:
             color:
               type: array
               items: {type: number}
+  - name: configure_light_bank
+    description: Configure light-bank membership (categories, selectable, enabled) on a light.
+    source_file: scripts/configure_light_bank.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [light_path, settings]
+      additionalProperties: false
+      properties:
+        light_path:
+          type: string
+          description: Absolute path of an existing light node.
+        settings:
+          type: object
+          description: Light bank settings to apply.
+          additionalProperties: false
+          properties:
+            categories:
+              type: string
+              description: Space or comma separated light bank categories.
+            selectable:
+              type: boolean
+            enabled:
+              type: boolean
+  - name: set_light_ies
+    description: Bind an IES photometric profile to a light and report whether the file resolves.
+    source_file: scripts/set_light_ies.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [light_path, ies_file]
+      additionalProperties: false
+      properties:
+        light_path:
+          type: string
+          description: Absolute path of an existing light node.
+        ies_file:
+          type: string
+          description: Path to the IES profile file; Houdini variables are expanded before the check.
+        settings:
+          type: object
+          description: Optional extra IES settings.
+          additionalProperties: false
+          properties:
+            ies_enabled:
+              type: boolean
+            ies_scale:
+              type: number
+            ies_rotate:
+              type: number

@@ -10,6 +10,7 @@ from contextlib import ExitStack
 from dcc_mcp_core.skill import skill_success
 
 from dcc_mcp_houdini._domain_graph import (
+    base_node_type,
     get_node,
     next_free_input,
     node_summary,
@@ -41,14 +42,6 @@ BEHAVIOR_TYPES = {
 }
 
 
-def base_type(type_name):
-    """Strip a Houdini ``name::version`` suffix so overrides stay comparable."""
-    parts = type_name.split("::")
-    if len(parts) > 1 and parts[-1][:1].isdigit():
-        parts.pop()
-    return parts[-1]
-
-
 def validate_choice(value, mapping, label):
     if value not in mapping:
         raise ValueError("Unsupported {}: {!r}".format(label, value))
@@ -58,7 +51,7 @@ def validate_choice(value, mapping, label):
 def find_pop_solver(network):
     """Return the first ``popsolver`` child, or ``None`` when there is none."""
     for child in network.children():
-        if base_type(child.type().name()) == SOLVER_NAME:
+        if base_node_type(child.type().name()) == SOLVER_NAME:
             return child
     return None
 

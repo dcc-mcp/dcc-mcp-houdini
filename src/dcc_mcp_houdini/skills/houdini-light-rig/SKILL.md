@@ -36,6 +36,7 @@ softboxes, rig grouping, and intensity controls.
   `group_lights`, `set_render_view_transform`.
 - **`light-rig-query`** (read-only): `get_lighting_summary`, `list_light_rigs`.
 - **`light-rig-shadow`:** `configure_light_shadow` — per-light shadow settings (enable, type, quality, softness, samples, distance, bias, color).
+- **`light-rig-filter`:** `configure_light_bank` (categories, selectable, enabled) and `set_light_ies` (IES profile binding).
 
 ## Naming: `skipped_parameters` is the only name for "not applied"
 
@@ -95,3 +96,49 @@ reports what it could not apply:
 
 An unsupported setting name (anything outside the eight supported keys) fails the
 call rather than being ignored.
+
+## Light bank and IES profiles
+
+Light bank and IES parameter names differ between Houdini versions and light
+types, so both tools resolve each setting against a small alias list rather
+than assuming a name:
+
+- `applied_parameters` — values that were set and read back, keyed by the Houdini
+  parameter name that actually matched.
+- `skipped_parameters` — settings the light has no parameter for. A missing entry
+  must not be read as "applied with a default".
+- `resolved_names` — which parameter name each setting mapped to.
+
+An unsupported setting name fails the call rather than being ignored.
+
+### `configure_light_bank`
+
+Keys: `categories`, `selectable`, `enabled`. It distinguishes **what the light
+had** from **what this call changed it to** — `found_categories` is read before
+any write, `applied_categories` is what the light carries afterwards, so a
+no-op is not mistaken for a change. When the light exposes none of the aliases,
+the call reports `setup_state="unchanged"` and `valid=false`.
+
+### `set_light_ies`
+
+`ies_file` is required; `settings` may add `ies_enabled`, `ies_scale` and
+`ies_rotate`. The file is stat-ed **separately** from binding it, following the
+same discipline as `inspect_bake_output`:
+
+| `ies_state` | Meaning |
+|---|---|
+| `resolved` | The path expands and exists on disk |
+| `missing` | The parameter was bound, but no file was found at the path |
+| `unresolved` | The light exposes no IES parameter, so nothing was bound |
+
+`ies_bound` is true only when the parameter was bound **and** the file exists. A
+path that does not resolve is never reported as bound, because a light that
+looks configured but renders as if no profile were set is the failure mode this
+is here to prevent.
+
+## Honesty contract
+
+- Every tool returns `setup_state` and, where setup remains, `required_setup`.
+- No tool reports anything that implies a render was verified: there is no
+  `render_verified` field, and a successful configure is not evidence about how
+  a frame renders — `required_setup` names that check explicitly.

@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 
-from dcc_mcp_houdini._domain_graph import node_summary, parameter_edit, validate_parameters
+from dcc_mcp_houdini._domain_graph import base_node_type, node_summary, parameter_edit, validate_parameters
 
 SOLVER_TYPES = {"pyro": "pyrosolver", "flip": "flipsolver", "rbd": "rbdsolver", "vellum": "vellumsolver"}
 
@@ -20,13 +20,6 @@ CONSTRAINT_TYPES = {
 }
 
 COLLISION_TYPES = {"static": "staticobject", "deforming": "staticobject"}
-
-
-def solver_base_type(type_name):
-    parts = type_name.split("::")
-    if len(parts) > 1 and parts[-1][:1].isdigit():
-        parts.pop()
-    return parts[-1]
 
 
 def validate_simulation_type(simulation_type):
@@ -49,7 +42,7 @@ def find_solver(network):
     """First child whose base type is a supported DOP solver, else ``None``."""
     solvers = set(SOLVER_TYPES.values())
     for child in network.children():
-        if solver_base_type(child.type().name()) in solvers:
+        if base_node_type(child.type().name()) in solvers:
             return child
     return None
 

@@ -73,10 +73,18 @@ are converted to `Gf.Vec2f` and `Gf.Vec3f` before the write, because OpenUSD map
 Float2/Float3 onto those types and rejects a raw Python list.
 
 All requested attributes are pre-validated before the first write, so a rejected
-entry never leaves a partial write on the stage. Pre-validation cannot cover
-everything USD may refuse at write time, so the write loop also removes the
-attributes it created if any write raises. A write the stage refuses is reported
-in `skipped_parameters`, and `readback_matches` tells the caller whether the
-values read back are the ones written.
+entry never leaves a partial write on the stage.
+
+Two failure shapes after that point, both cleaned up rather than left behind:
+
+- **A write the stage refuses** (`Set` returns false): that attribute is
+  **removed**, not left holding a default value. An attribute that exists with a
+  default reads as "written" to a caller who only checks the name is present.
+  Attributes written earlier in the same call are kept.
+- **A write that raises**: every attribute this call created is removed.
+
+Either way the names appear in `skipped_parameters` and nowhere else, so the
+caller cannot mistake them for applied values. `readback_matches` tells the
+caller whether the values read back are the ones written.
 
 Load `houdini-interchange` instead when the task is file import or export.
