@@ -44,9 +44,12 @@ def create_crowd_network(
             crowd_object = network.node(object_name)
             if crowd_object is None:
                 crowd_object = stack.enter_context(owned_node(network, "crowdobject", object_name))
-            # Crowd agents are the object the solver steps, as with other DOP families.
-            solver.setInput(0, crowd_object)
+            # Parameter edits roll themselves back, but rewiring a *reused* solver
+            # would not: the solver is not owned by this request, so a later
+            # failure would leave our input 0 on someone else's network. Validate
+            # by applying parameters first, and only then rewire.
             applied = stack.enter_context(parameter_edit(solver, parameters))
+            solver.setInput(0, crowd_object)
             return skill_success(
                 "Created crowd network skeleton",
                 network=node_summary(network),

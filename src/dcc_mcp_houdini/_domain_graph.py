@@ -16,6 +16,18 @@ _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _NODE_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z0-9_.]+)*$")
 
 
+def base_node_type(type_name):
+    """Strip a Houdini ``name::version`` suffix so node types stay comparable.
+
+    Houdini reports versioned types such as ``crowdsolver::2.0``; comparing those
+    against the bare name would silently fail to find the node.
+    """
+    parts = type_name.split("::")
+    if len(parts) > 1 and parts[-1][:1].isdigit():
+        parts.pop()
+    return parts[-1]
+
+
 def validate_identifier(value, label="node name"):
     if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
         raise ValueError("Invalid {}: {!r}".format(label, value))

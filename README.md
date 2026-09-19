@@ -415,6 +415,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-husk` | `render_with_husk`, `get_husk_job`, `cancel_husk_job`, `create_checkpoint`, `create_snapshot`, `set_husk_options` |
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `validate_loop_contract`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
 | `houdini-hda-automation` | `scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain` |
+| `houdini-crowds` | `create_crowd_network`, `add_crowd_behavior`, `inspect_crowd` |
 | `houdini-pdg` | `create_pdg_network`, `create_pdg_node`, `connect_pdg_nodes`, `inspect_pdg_graph`, `cook_pdg_graph` |
 | `houdini-simulation` | `create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source`, `create_pyro_source`, `add_pyro_post_process`, `add_gas_field` |
 | `houdini-particles` | `create_pop_network`, `configure_pop_source`, `add_particle_force`, `add_particle_behavior`, `inspect_particles` |
@@ -457,4 +458,3 @@ dcc-mcp-houdini/
 ## License
 
 MIT
-| `houdini-crowds` | `create_crowd_network`, `add_crowd_behavior`, `inspect_crowd` |

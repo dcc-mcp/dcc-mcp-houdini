@@ -6,6 +6,7 @@ from _crowd_common import validate_choice
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
+    base_node_type,
     get_node,
     hou_missing_error,
     next_free_input,
@@ -28,9 +29,9 @@ BEHAVIOR_TYPES = {
 
 
 def _find_solver(network):
+    """First crowdsolver child, ignoring any ``::version`` suffix."""
     for child in network.children():
-        name = child.type().name().split("::")[0]
-        if name == "crowdsolver":
+        if base_node_type(child.type().name()) == "crowdsolver":
             return child
     return None
 

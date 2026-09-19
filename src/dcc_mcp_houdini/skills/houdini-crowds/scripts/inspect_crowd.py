@@ -2,7 +2,13 @@
 
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
-from dcc_mcp_houdini._domain_graph import get_node, hou_missing_error, input_connections, node_summary
+from dcc_mcp_houdini._domain_graph import (
+    base_node_type,
+    get_node,
+    hou_missing_error,
+    input_connections,
+    node_summary,
+)
 
 
 def inspect_crowd(network_path: str, max_nodes: int = 64) -> dict:
@@ -22,9 +28,9 @@ def inspect_crowd(network_path: str, max_nodes: int = 64) -> dict:
             summary = node_summary(child)
             summary["inputs"] = input_connections(child)
             nodes.append(summary)
-        types = [node["type"] for node in nodes]
+        types = [base_node_type(node["type"]) for node in nodes]
         return skill_success(
-            "Inspected crowd network",
+            "Inspected crowd network structure",
             network_path=network.path(),
             node_count=len(nodes),
             nodes=nodes,

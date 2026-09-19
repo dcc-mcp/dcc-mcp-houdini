@@ -54,11 +54,14 @@ node is created unattached and reported with `setup_state="unattached"`.
 ## Honesty contract
 
 - `create_crowd_network` returns `setup_state="skeleton"` and never claims
-  `simulation_verified=true`; an agent definition, agent source geometry and a
-  cook are still required.
-- `inspect_crowd` reports structure only (`validation_scope="graph_structure"`):
-  it says whether a solver, a crowd object and behaviors exist, not whether the
-  crowd simulates.
+  `simulation_verified=true`. Building the network does not run or verify a crowd
+  simulation: an agent definition, agent source geometry and a cook are still
+  required, and none of them are performed here.
+- `inspect_crowd` reports structure only (`validation_scope="graph_structure"`).
+  It answers "is the graph wired up" — whether a solver, a crowd object and
+  behaviors are present — and **not** whether the crowd simulates. A clean
+  inspection is not evidence that agents move, and no tool here cooks, steps or
+  validates a crowd simulation.
 - This package has no `skipped_parameters` field: parameter overrides go through
   `parameter_edit`, so an override the node does not expose **fails the call and
   rolls back** rather than being skipped. See the naming rule in the bake and

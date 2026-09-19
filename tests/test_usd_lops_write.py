@@ -70,6 +70,7 @@ def _hou_with_stage(stage):
 
 
 def _usd_modules():
+    """USD doubles registered the way Houdini exposes them: as pxr.*."""
     Usd = SimpleNamespace(TimeCode=SimpleNamespace(Default=lambda: "default"))
     Sdf = SimpleNamespace(
         ValueTypeNames=SimpleNamespace(
@@ -79,11 +80,21 @@ def _usd_modules():
     return Usd, Sdf
 
 
+def _pxr_modules():
+    """Module map for `from pxr import Sdf, Usd`, the only import shape Houdini supports."""
+    Usd, Sdf = _usd_modules()
+    return {
+        "pxr": SimpleNamespace(Usd=Usd, Sdf=Sdf),
+        "pxr.Usd": Usd,
+        "pxr.Sdf": Sdf,
+    }
+
+
 def test_set_prim_attributes_writes_and_reads_back():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"density": 2.5, "label": "hero", "flag": True}
         )
@@ -100,7 +111,7 @@ def test_set_prim_attributes_supports_vector_values():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"center": [1.0, 2.0, 3.0], "uv": [0.0, 1.0]}
         )
@@ -112,7 +123,7 @@ def test_set_prim_attributes_reports_skipped_writes():
     prim = _Prim(fail_for=("density",))
     hou = _hou_with_stage(_Stage(prim))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"density": 2.5})
     assert result["success"]
     assert result["context"]["skipped_parameters"] == ["density"]
@@ -123,18 +134,18 @@ def test_set_prim_attributes_rejects_unsupported_value_types():
     prim = _Prim()
     hou = _hou_with_stage(_Stage(prim))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes(
             "/stage/lopnet1", "/hero", {"nested": {"a": 1}, "ok": 1}
         )
     assert not result["success"]
-    assert "Unsupported attribute value types" in skill_error_detail(result)
+    assert "Unsupported value type for attribute: nested" in skill_error_detail(result)
 
 
 def test_set_prim_attributes_rejects_unknown_prim():
     hou = _hou_with_stage(_Stage(_Prim()))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/missing", {"a": 1})
     assert not result["success"]
     assert "USD prim not found" in skill_error_detail(result)
@@ -144,7 +155,7 @@ def test_set_prim_attributes_rejects_unknown_prim():
 def test_set_prim_attributes_validates_attributes(attributes):
     hou = _hou_with_stage(_Stage(_Prim()))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", attributes)
     assert not result["success"]
     assert "attributes must be a non-empty object" in skill_error_detail(result)
@@ -153,7 +164,7 @@ def test_set_prim_attributes_validates_attributes(attributes):
 def test_set_prim_attributes_rejects_invalid_names():
     hou = _hou_with_stage(_Stage(_Prim()))
     Usd, Sdf = _usd_modules()
-    with patch.dict(sys.modules, {"hou": hou, "Usd": Usd, "Sdf": Sdf}):
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
         result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"bad name!": 1})
     assert not result["success"]
     assert "Invalid USD attribute name" in skill_error_detail(result)
@@ -163,3 +174,40 @@ def test_set_prim_attributes_requires_usd():
     result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"a": 1})
     assert not result["success"]
     assert result["message"] == "Houdini not available"
+
+
+def test_set_prim_attributes_imports_usd_through_pxr():
+    """Houdini exposes USD only as pxr.*; a bare `import Usd` would always fail.
+
+    This pins the import shape so a regression cannot be hidden by a mock that
+    registers the wrong module name.
+    """
+    source = (_ROOT / "scripts" / "set_prim_attributes.py").read_text(encoding="utf-8")
+    assert "from pxr import Sdf, Usd" in source
+    assert "\n    import Sdf" not in source
+    assert "\n    import Usd" not in source
+
+
+def test_set_prim_attributes_writes_nothing_when_one_entry_is_invalid():
+    """Pre-validation: a rejected entry must not leave earlier writes on the stage."""
+    prim = _Prim()
+    hou = _hou_with_stage(_Stage(prim))
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/hero", {"ok": 1, "nested": {"a": 1}}
+        )
+    assert not result["success"]
+    # The valid entry must never have been created on the prim.
+    assert "ok" not in prim.attributes
+    assert prim.attributes == {}
+
+
+def test_set_prim_attributes_writes_nothing_when_a_name_is_invalid():
+    prim = _Prim()
+    hou = _hou_with_stage(_Stage(prim))
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/hero", {"ok": 1, "bad name!": 2}
+        )
+    assert not result["success"]
+    assert prim.attributes == {}

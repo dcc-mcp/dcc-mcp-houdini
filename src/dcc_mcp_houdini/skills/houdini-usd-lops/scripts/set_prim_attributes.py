@@ -34,10 +34,9 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
     try:
-        import Sdf  # noqa: PLC0415
-        import Usd  # noqa: PLC0415
+        from pxr import Sdf, Usd  # noqa: PLC0415
     except ImportError:
-        return skill_error("USD not available", "Sdf and Usd could not be imported")
+        return skill_error("USD not available", "pxr.Sdf and pxr.Usd could not be imported")
     try:
         if not isinstance(attributes, dict) or not attributes:
             raise ValueError("attributes must be a non-empty object")
@@ -48,15 +47,21 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
         prim = resolve_prim(stage, prim_path)
         time = make_time_code(Usd, time_code)
 
-        applied, skipped, unsupported = {}, [], []
+        # Pre-validate every entry before writing anything: validating inside the
+        # write loop would leave the earlier attributes on the stage and then
+        # fail, which is a partial write the caller cannot undo.
+        planned = {}
         for name, value in attributes.items():
             if not str(name).replace(":", "_").replace("_", "").isalnum():
                 raise ValueError("Invalid USD attribute name: {}".format(name))
             type_name = _value_type(Usd, Sdf, value)
             if type_name is None:
-                unsupported.append(name)
-                continue
-            attribute = prim.CreateAttribute(str(name), type_name)
+                raise ValueError("Unsupported value type for attribute: {}".format(name))
+            planned[str(name)] = (type_name, value)
+
+        applied, skipped = {}, []
+        for name, (type_name, value) in planned.items():
+            attribute = prim.CreateAttribute(name, type_name)
             if not attribute.Set(value, time):
                 skipped.append(name)
                 continue
@@ -68,8 +73,6 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
             if attribute is not None:
                 readback[name] = attribute.Get(time)
 
-        if unsupported:
-            raise ValueError("Unsupported attribute value types: {}".format(", ".join(sorted(unsupported))))
         return skill_success(
             "Set USD prim attributes",
             lop_node_path=lop_node_path,

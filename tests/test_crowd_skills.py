@@ -182,3 +182,53 @@ def test_crowd_package_registers_expected_tools() -> None:
     ]
     for tool in tools:
         assert tool["input_schema"]["additionalProperties"] is False
+
+
+def test_reused_solver_is_not_rewired_when_parameters_fail():
+    """A reused solver is not owned, so a failed call must not change its wiring."""
+    root, _geo, hou = scene()
+    network = root.createNode("dopnet", "crowdsim1")
+    solver = network.createNode("crowdsolver", "crowdsolver1")
+    upstream = network.createNode("crowdobject", "existing_agents")
+    solver.setInput(0, upstream)
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_crowd_network.py").create_crowd_network(root.path(), parameters={"missing": 1})
+    assert not result["success"]
+    # The pre-existing connection must be untouched.
+    assert solver.inputs() == (upstream,)
+
+
+def test_reused_solver_is_rewired_on_success():
+    root, _geo, hou = scene()
+    network = root.createNode("dopnet", "crowdsim1")
+    solver = network.createNode("crowdsolver", "crowdsolver1")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_crowd_network.py").create_crowd_network(root.path())
+    assert result["success"]
+    crowd_object = hou.node(result["context"]["object_path"])
+    assert solver.inputs() == (crowd_object,)
+
+
+def test_solver_lookup_ignores_versioned_node_types():
+    """Houdini reports crowdsolver::2.0; the version suffix must not hide it."""
+    root, _geo, hou = scene()
+    network = root.createNode("dopnet")
+    solver = network.createNode("crowdsolver::2.0")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("add_crowd_behavior.py").add_crowd_behavior(network.path(), "steer")
+    assert result["success"]
+    assert result["context"]["attached_to"] == solver.path()
+
+
+def test_inspect_crowd_normalises_versioned_types():
+    root, _geo, hou = scene()
+    network = root.createNode("dopnet")
+    network.createNode("crowdsolver::2.0")
+    network.createNode("crowdobject::2.0")
+    network.createNode("crowd_steer::2.0")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_crowd.py").inspect_crowd(network.path())
+    context = result["context"]
+    assert context["has_solver"] is True
+    assert context["has_agents"] is True
+    assert context["behavior_count"] == 1
