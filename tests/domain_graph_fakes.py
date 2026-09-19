@@ -84,7 +84,13 @@ class Node:
         name = node_name or node_type.replace("::", "_") + "1"
         if name in self._children:
             name += "1"
-        child_category = {"copnet": "Cop", "cop2net": "Cop2", "topnet": "Top", "dopnet": "Dop"}.get(node_type)
+        child_category = {
+            "copnet": "Cop",
+            "cop2net": "Cop2",
+            "topnet": "Top",
+            "dopnet": "Dop",
+            "popnet": "Dop",
+        }.get(node_type)
         return Node(self.path() + "/" + name, node_type, self, child_category, self.child_category)
 
     def destroy(self):

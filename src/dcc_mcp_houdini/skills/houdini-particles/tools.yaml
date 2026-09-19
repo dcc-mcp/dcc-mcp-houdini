@@ -1,0 +1,161 @@
+tools:
+  - name: create_pop_network
+    description: Create or reuse a POP network skeleton (popnet, popsolver, popobject, popsource).
+    source_file: scripts/create_pop_network.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [parent_path]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute parent path such as /obj.
+        network_name:
+          type: string
+          default: popnet1
+        solver_name:
+          type: string
+          description: POP solver node name; defaults to popsolver1.
+        object_name:
+          type: string
+          description: POP object node name; defaults to popobject1.
+        source_name:
+          type: string
+          description: POP source node name; defaults to popsource1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides for the solver.
+  - name: configure_pop_source
+    description: Apply bounded parameter overrides to a POP node and optionally cook it.
+    source_file: scripts/configure_pop_source.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+          description: Absolute path of a DOP-category POP node.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+        cook:
+          type: boolean
+          default: false
+  - name: add_particle_force
+    description: Create a POP force node and attach it to the network's POP solver input.
+    source_file: scripts/add_particle_force.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [network_path, force_type]
+      additionalProperties: false
+      properties:
+        network_path:
+          type: string
+          description: Absolute path of a POP network (popnet).
+        force_type:
+          type: string
+          enum: [force, wind, drag, vortex, attract, axis]
+        node_name:
+          type: string
+          description: Node name; defaults to the POP node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+        connect_to:
+          type: string
+          description: Absolute path of the node to attach to; defaults to the network's popsolver.
+  - name: add_particle_behavior
+    description: Create a POP behavior node and attach it to the network's POP solver input.
+    source_file: scripts/add_particle_behavior.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [network_path, behavior_type]
+      additionalProperties: false
+      properties:
+        network_path:
+          type: string
+          description: Absolute path of a POP network (popnet).
+        behavior_type:
+          type: string
+          enum: [kill, replicate, split, limit, collide, steer]
+        node_name:
+          type: string
+          description: Node name; defaults to the POP node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+        connect_to:
+          type: string
+          description: Absolute path of the node to attach to; defaults to the network's popsolver.
+  - name: inspect_particles
+    description: Read particle counts, point attributes and bounds from cached geometry.
+    source_file: scripts/inspect_particles.py
+    execution: sync
+    affinity: main
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+          description: Absolute path of a POP or SOP node holding particles.
+        attributes:
+          type: array
+          description: Optional point attribute names to report; at most 32.
+          items:
+            type: string
+        max_attributes:
+          type: integer
+          default: 32
+          minimum: 1
+          maximum: 64

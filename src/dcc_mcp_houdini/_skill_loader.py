@@ -61,6 +61,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
         "houdini-texture-bake",
         "houdini-gsplat-relighting",
         "houdini-simulation",
+        "houdini-particles",
         "houdini-pdg",
     ),
 }
