@@ -9,7 +9,13 @@ from __future__ import annotations
 import os
 from typing import Any, List, Optional, Tuple
 
-from dcc_mcp_houdini._domain_graph import cooked_geometry, udim_tiles, uv_attribute_names, uv_values
+from dcc_mcp_houdini._domain_graph import (
+    UV_NAME_PREFIX,
+    cooked_geometry,
+    udim_tiles,
+    uv_attribute_names,
+    uv_values,
+)
 
 # Output-path token the bake writers replace with the concrete UDIM tile.
 UDIM_TOKEN = "%(UDIM)d"
@@ -151,6 +157,11 @@ def check_uvs(hou: Any, node_path: str) -> Optional[List[str]]:
     """Return UV attribute names on *node_path*'s display geometry, or None.
 
     When the node has no display geometry, returns None (not []).
+
+    Shares the UV convention used by :func:`uv_attribute_names`: vertex
+    attributes are reported before point attributes, and the name match is
+    anchored at the start of the name so ``Cd_uv`` or ``flowuv`` are not taken
+    for UV sets. Float attributes smaller than 2 components are skipped.
     """
     node = hou.node(node_path)
     if node is None:
@@ -163,14 +174,21 @@ def check_uvs(hou: Any, node_path: str) -> Optional[List[str]]:
         return None
 
     uv_names = []
-    for attr in geo.pointAttribs():
-        if attr.dataType() == hou.attribData.Float and attr.size() >= 2:
-            if "uv" in attr.name().lower():
-                uv_names.append(attr.name())
-    for attr in geo.vertexAttribs():
-        if attr.dataType() == hou.attribData.Float and attr.size() >= 2:
-            if "uv" in attr.name().lower():
-                uv_names.append(attr.name())
+    for accessor in ("vertexAttribs", "pointAttribs"):
+        method = getattr(geo, accessor, None)
+        if not callable(method):
+            continue
+        for attr in method():
+            try:
+                data_type = attr.dataType()
+                size = attr.size()
+                name = attr.name()
+            except Exception:
+                continue
+            if data_type != hou.attribData.Float or size < 2:
+                continue
+            if name.startswith(UV_NAME_PREFIX) and name not in uv_names:
+                uv_names.append(name)
     return uv_names
 
 
@@ -200,7 +218,12 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
     # first, making the guard report "clean" for a node that was never cooked.
     coverage = udim_info(hou, node_path)
     geo = cooked_geometry(display)
-    uv_layers = check_uvs(hou, node_path) or [] if geo is not None else []
+    # Derive uv_layers from the same geometry udim_info already resolved, so both
+    # UV fields in this payload come from one convention. Going back through
+    # check_uvs would re-read displayNode().geometry() a second time and cook a
+    # node that cooked_geometry just refused, giving has_uvs=true next to
+    # udim_detection=unavailable.
+    uv_layers = uv_attribute_names(geo) if geo is not None else []
     prim_count = len(geo.iterPrims()) if geo is not None else 0
 
     info = {

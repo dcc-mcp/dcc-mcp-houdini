@@ -112,8 +112,15 @@ UDIM coverage is resolved **before** any geometry read. A dirty node reports
 `geometry_available=false`, `udim_detection=unavailable`, `primitive_count=0`
 and `bake_ready=false` instead of being cooked implicitly — cook it first, then
 inspect. `configure_udim_bake` resolves the tile set before creating a ROP, and
-destroys a ROP it created if a later step fails; a pre-existing ROP is left
-untouched.
+destroys a ROP it created if a later step fails. A pre-existing ROP is not
+destroyed, so its parameter writes run as one transaction: every parameter name
+is validated before anything is written, and a write that fails part-way rolls
+the ROP back to the values it had on entry.
+
+`uv_layers`, `has_uvs` and `bake_ready` come from the same UV convention as
+`udim_detection` — vertex attributes first, name anchored at the start — so a
+payload can never claim `bake_ready=true` next to `udim_detection=no_uv_sets`.
+Attributes such as `Cd_uv` or `flowuv` are not UV sets.
 
 ## Context limitations
 
@@ -145,6 +152,6 @@ untouched.
 3. bake with the existing bake tools
 4. `inspect_bake_output(output_path="/tmp/hero.%(UDIM)d.exr", expected_tiles=[1001, 1002])`
 
-`configure_udim_bake` reports `unapplied_defaults` for the defaults it could
+`configure_udim_bake` reports `skipped_parameters` for the defaults it could
 not seed (bake writers differ in which parameters they expose); caller-supplied
 `parameters` are strict and fail the call on an unknown name.
