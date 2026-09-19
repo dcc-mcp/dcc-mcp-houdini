@@ -47,6 +47,20 @@ tools `list_presets` / `delete_preset` are `affinity: any`.
 - Presets store **evaluated parameter values** only (not node graphs); loading
   onto a different `material_type` is allowed but reported as a warning.
 
+## Parameter application: `errors` is a real list
+
+`set_material_parms` and `load_preset` apply overrides with this package's
+`set_parameters`, which probes each name against the node and returns
+`(applied, errors)`. Names the node does not expose are reported in `errors`
+with a reason.
+
+**Do not "clean up" `errors`.** It is populated, not a constant empty list. A
+parameter field is only dead when the tool routes overrides through a helper
+that returns an empty second list unconditionally while the underlying
+`parameter_edit` fails the call. `houdini-gsplat-relighting` reports the same
+genuine second list as `unsupported_parameters`. Neither package may be swept
+into a dead-field removal.
+
 ## Tracer-bullet flow
 
 1. `houdini_materials__create_material(material_name="clay")`

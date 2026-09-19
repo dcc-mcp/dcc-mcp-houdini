@@ -198,14 +198,6 @@ def _set_first(node: Any, names: Sequence[str], value: Any) -> Optional[str]:
     return None
 
 
-def _apply_parameters(node: Any, parameters: Dict[str, Any]) -> Tuple[List[str], List[str]]:
-    applied, unsupported = [], []
-    for name, value in (parameters or {}).items():
-        selected = _set_first(node, [str(name)], value)
-        (applied if selected else unsupported).append(str(name))
-    return applied, unsupported
-
-
 def _create(parent: Any, aliases: Sequence[str], name: str) -> Any:
     return parent.createNode(
         _find_node_type(parent, aliases),

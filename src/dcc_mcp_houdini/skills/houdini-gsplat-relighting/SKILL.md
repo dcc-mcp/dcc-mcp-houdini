@@ -67,6 +67,20 @@ but `anatomy_regions_passed` must equal the total evaluated count. The bounded
 public inputs accept at most 64 regions and 64 novel views; normalized metrics
 must be finite values in [0, 1].
 
+## Parameter application: `unsupported_parameters` is a real list
+
+This package applies parameter overrides with `_set_first`, which probes each
+requested name against the node and only records it as applied when a parameter
+actually accepted the value. Names the node does not expose land in
+`unsupported_parameters`.
+
+**Do not "clean up" `unsupported_parameters`.** It is populated, not a constant
+empty list. The dead-field pattern to remove elsewhere is different: a tool is
+only dead when it routes overrides through a helper such as `set_parameters`,
+which returns an empty second list unconditionally while the underlying
+`parameter_edit` fails the call. `houdini-lookdev` reports the same genuine
+second list as `errors`. Neither package may be swept into a dead-field removal.
+
 ## Trained checkpoint and subject-cleanup contract
 
 When the source is a trained Nerfstudio `splatfacto` checkpoint, preserve the
