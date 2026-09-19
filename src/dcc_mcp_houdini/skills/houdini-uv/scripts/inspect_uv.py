@@ -1,60 +1,16 @@
 """Bounded UV readback: UV sets and UDIM tiles without cooking."""
 
-import math
-
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
-from dcc_mcp_houdini._domain_graph import cooked_geometry, get_node, hou_missing_error, node_summary
-
-# Bounded so a dense mesh cannot turn an inspection into a long loop.
-MAX_SAMPLES = 20000
-
-
-def _attribute_names(geometry, max_sets):
-    names = []
-    for accessor in ("vertexAttribs", "pointAttribs"):
-        method = getattr(geometry, accessor, None)
-        if not callable(method):
-            continue
-        try:
-            attributes = method()
-        except Exception:
-            continue
-        for attribute in attributes:
-            try:
-                name = attribute.name()
-                if name.startswith("uv") and attribute.size() >= 2 and name not in names:
-                    names.append(name)
-            except Exception:
-                continue
-    return names[:max_sets]
-
-
-def _uv_values(geometry, name):
-    for accessor in ("vertexFloatAttribValues", "pointFloatAttribValues"):
-        method = getattr(geometry, accessor, None)
-        if not callable(method):
-            continue
-        try:
-            values = method(name)
-        except Exception:
-            continue
-        if isinstance(values, (list, tuple)) and values:
-            return values
-    return None
-
-
-def _udim_tiles(values):
-    """UDIM tile index for each sampled UV: 1001 + floor(u) + 10 * floor(v)."""
-    tiles = set()
-    limit = min(len(values) - 1, MAX_SAMPLES * 2)
-    for index in range(0, limit, 2):
-        try:
-            tile = 1001 + int(math.floor(float(values[index]))) + 10 * int(math.floor(float(values[index + 1])))
-        except (TypeError, ValueError):
-            continue
-        tiles.add(tile)
-    return sorted(tiles)
+from dcc_mcp_houdini._domain_graph import (
+    cooked_geometry,
+    get_node,
+    hou_missing_error,
+    node_summary,
+    udim_tiles,
+    uv_attribute_names,
+    uv_values,
+)
 
 
 def inspect_uv(node_path: str, max_sets: int = 8) -> dict:
@@ -82,15 +38,15 @@ def inspect_uv(node_path: str, max_sets: int = 8) -> dict:
                 valid=not summary["errors"],
                 validation_scope="node_diagnostics_only",
             )
-        names = _attribute_names(geometry, max_sets)
+        names = uv_attribute_names(geometry, max_names=max_sets)
         tiles = []
         detection = "no_uv_sets"
         if names:
-            values = _uv_values(geometry, names[0])
+            values = uv_values(geometry, names[0])
             if values is None:
                 detection = "no_values"
             else:
-                tiles = _udim_tiles(values)
+                tiles = udim_tiles(values)
                 detection = "computed"
         return skill_success(
             "Inspected UV node",

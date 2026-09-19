@@ -9,6 +9,14 @@ from __future__ import annotations
 import os
 from typing import Any, List, Optional, Tuple
 
+from dcc_mcp_houdini._domain_graph import cooked_geometry, udim_tiles, uv_attribute_names, uv_values
+
+# Output-path token the bake writers replace with the concrete UDIM tile.
+UDIM_TOKEN = "%(UDIM)d"
+
+# A single-tile bake needs no UDIM token in its output path.
+UDIM_OUTPUT_THRESHOLD = 1
+
 # Map-type vocabulary shared across bake_textures and transfer_maps.
 # Labs Maps Baker supports ~20+ types; Bake Texture ROP supports a subset.
 _MAP_TYPE_VOCABULARY = {
@@ -173,7 +181,7 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
         return None
     display = node.displayNode() if hasattr(node, "displayNode") else None
     if display is None:
-        return {
+        info = {
             "path": node_path,
             "name": node.name(),
             "type": "obj",
@@ -183,12 +191,14 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
             "primitive_count": 0,
             "bake_ready": False,
         }
+        info.update(udim_info(hou, node_path))
+        return info
 
     geo = display.geometry()
     uv_layers = check_uvs(hou, node_path) or []
     prim_count = len(geo.iterPrims()) if geo is not None else 0
 
-    return {
+    info = {
         "path": node_path,
         "name": node.name(),
         "type": "obj" if node_path.startswith("/obj") else "sop",
@@ -198,6 +208,53 @@ def bake_geometry_info(hou: Any, node_path: str) -> Optional[dict]:
         "primitive_count": prim_count,
         "bake_ready": bool(uv_layers) and prim_count > 0,
     }
+    info.update(udim_info(hou, node_path))
+    return info
+
+
+def udim_info(hou: Any, node_path: str) -> dict:
+    """UDIM coverage for a bake target, in the same terms ``inspect_uv`` uses.
+
+    Returns ``udim_tiles``, ``udim_tile_count`` and a ``udim_detection`` value of
+    ``computed``, ``no_values``, ``no_uv_sets`` or ``unavailable`` so a caller can
+    tell "no tiles" from "could not read the tiles".
+    """
+    empty = {
+        "udim_tiles": [],
+        "udim_tile_count": 0,
+        "udim_detection": "unavailable",
+        "needs_udim_output": False,
+        "sampled_uv_set": None,
+    }
+    node = hou.node(node_path)
+    if node is None:
+        return empty
+    display = node.displayNode() if hasattr(node, "displayNode") else None
+    target = display if display is not None else node
+    geometry = cooked_geometry(target)
+    if geometry is None:
+        return empty
+    names = uv_attribute_names(geometry, max_names=1)
+    if not names:
+        return dict(empty, udim_detection="no_uv_sets")
+    values = uv_values(geometry, names[0])
+    if values is None:
+        return dict(empty, udim_detection="no_values", sampled_uv_set=names[0])
+    tiles = udim_tiles(values)
+    return {
+        "udim_tiles": tiles,
+        "udim_tile_count": len(tiles),
+        "udim_detection": "computed",
+        "needs_udim_output": len(tiles) > UDIM_OUTPUT_THRESHOLD,
+        "sampled_uv_set": names[0],
+    }
+
+
+def bake_output_paths(output_path: str, tiles) -> List[str]:
+    """Concrete output paths for each UDIM tile, or the path itself when flat."""
+    if not output_path or UDIM_TOKEN not in output_path:
+        return [output_path] if output_path else []
+    return [output_path.replace(UDIM_TOKEN, str(tile)) for tile in tiles]
 
 
 def create_or_get_bake_rop(hou: Any, rop_path: str) -> Any:
