@@ -6,10 +6,11 @@ import ctypes
 import subprocess
 import time
 from ctypes import wintypes
-from typing import Any, Dict, Iterable, List, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 _TH32CS_SNAPPROCESS = 0x00000002
 _PROCESS_TERMINATE = 0x0001
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _SYNCHRONIZE = 0x00100000
 _WAIT_OBJECT_0 = 0x00000000
 _WAIT_TIMEOUT = 0x00000102
@@ -17,6 +18,10 @@ _ERROR_ACCESS_DENIED = 5
 _ERROR_NO_MORE_FILES = 18
 _ERROR_INVALID_PARAMETER = 87
 _MAX_PATH = 260
+
+
+class _FILETIME(ctypes.Structure):
+    _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
 
 
 class _ProcessEntry32W(ctypes.Structure):
@@ -50,6 +55,8 @@ def _kernel32() -> Any:
     kernel32.WaitForSingleObject.restype = wintypes.DWORD
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(_FILETIME)] * 4
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
     return kernel32
 
 
@@ -84,12 +91,56 @@ def _snapshot_processes(kernel32: Any) -> List[Tuple[int, int]]:
         kernel32.CloseHandle(snapshot)
 
 
-def _find_descendants(entries: Iterable[Tuple[int, int]], ancestor_pids: Set[int]) -> Set[int]:
-    descendants: Set[int] = set()
+def _filetime_to_int(value: _FILETIME) -> int:
+    return (int(value.dwHighDateTime) << 32) | int(value.dwLowDateTime)
+
+
+def _process_start_time(kernel32: Any, pid: int) -> Optional[int]:
+    """Return the creation time of *pid* in FILETIME units, or ``None`` when unknown.
+
+    ``None`` also covers the case where the process refuses even
+    ``PROCESS_QUERY_LIMITED_INFORMATION``: a protected process or a process that
+    belongs to another security context, neither of which we can have spawned.
+    """
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return None
+    try:
+        creation = _FILETIME()
+        exit_time = _FILETIME()
+        kernel_time = _FILETIME()
+        user_time = _FILETIME()
+        if not kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            return None
+        return _filetime_to_int(creation)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _cached_start_time(kernel32: Any, pid: int, start_times: Dict[int, Optional[int]]) -> Optional[int]:
+    if pid not in start_times:
+        start_times[pid] = _process_start_time(kernel32, pid)
+    return start_times[pid]
+
+
+def _find_descendants(entries: Iterable[Tuple[int, int]], ancestor_pids: Set[int]) -> Dict[int, int]:
+    """Map every pid in the snapshot to the parent pid it claims.
+
+    Windows never re-parents orphaned processes, so ``th32ParentProcessID`` keeps
+    pointing at a pid that may already be dead and recycled. The result is a set
+    of *candidates* that callers must still validate before acting on it.
+    """
+    descendants: Dict[int, int] = {}
     remaining = list(entries)
     while True:
         discovered = {
-            pid
+            pid: parent_pid
             for pid, parent_pid in remaining
             if pid not in ancestor_pids and pid not in descendants and parent_pid in ancestor_pids.union(descendants)
         }
@@ -98,16 +149,52 @@ def _find_descendants(entries: Iterable[Tuple[int, int]], ancestor_pids: Set[int
         descendants.update(discovered)
 
 
+def _is_recycled_pid(
+    kernel32: Any,
+    pid: int,
+    claimed_parent_pid: int,
+    root_start: Optional[int],
+    start_times: Dict[int, Optional[int]],
+) -> bool:
+    """Report whether *pid* only looks like a descendant because of PID reuse.
+
+    A process this adapter spawned cannot have been created before the job root
+    or before the parent it claims, so an older creation time proves the match is
+    an artefact of a recycled ``th32ParentProcessID`` rather than a real child.
+    Skipping such lookalikes keeps the fail-closed policy below honest: the tree
+    we terminate is the tree we own.
+    """
+    start_time = _cached_start_time(kernel32, pid, start_times)
+    if start_time is None:
+        return True
+    if root_start is not None and start_time < root_start:
+        return True
+    parent_start = _cached_start_time(kernel32, claimed_parent_pid, start_times)
+    if parent_start is not None and start_time < parent_start:
+        return True
+    return False
+
+
 def _capture_descendant_handles(
     kernel32: Any,
     known_pids: Set[int],
     handles: Dict[int, Any],
+    root_start: Optional[int] = None,
+    start_times: Optional[Dict[int, Optional[int]]] = None,
 ) -> int:
+    """Open every newly discovered descendant, skipping recycled-pid lookalikes.
+
+    Processes whose handles cannot be opened still fail closed: a real descendant
+    that refuses ``PROCESS_TERMINATE`` keeps raising instead of being ignored.
+    """
+    start_times = {} if start_times is None else start_times
     descendants = _find_descendants(_snapshot_processes(kernel32), known_pids)
-    new_pids = descendants.difference(known_pids)
+    new_pids = set(descendants).difference(known_pids)
     known_pids.update(descendants)
     opened = 0
     for pid in sorted(new_pids):
+        if _is_recycled_pid(kernel32, pid, descendants[pid], root_start, start_times):
+            continue
         handle = kernel32.OpenProcess(_PROCESS_TERMINATE | _SYNCHRONIZE, False, pid)
         if not handle:
             error_code = ctypes.get_last_error()
@@ -159,9 +246,11 @@ def terminate_process_tree(process: Any, timeout_secs: float) -> None:
     root_pid = int(process.pid)
     known_pids = {root_pid}
     handles: Dict[int, Any] = {}
+    start_times: Dict[int, Optional[int]] = {}
+    root_start = _cached_start_time(kernel32, root_pid, start_times)
     deadline = time.monotonic() + timeout_secs
     try:
-        _capture_descendant_handles(kernel32, known_pids, handles)
+        _capture_descendant_handles(kernel32, known_pids, handles, root_start, start_times)
         try:
             process.kill()
         except OSError:
@@ -174,7 +263,7 @@ def terminate_process_tree(process: Any, timeout_secs: float) -> None:
             raise RuntimeError("Background process tree did not exit") from exc
         _wait_for_handles(kernel32, handles, deadline)
 
-        while _capture_descendant_handles(kernel32, known_pids, handles):
+        while _capture_descendant_handles(kernel32, known_pids, handles, root_start, start_times):
             _terminate_handles(kernel32, handles)
             _wait_for_handles(kernel32, handles, deadline)
             if time.monotonic() >= deadline:
