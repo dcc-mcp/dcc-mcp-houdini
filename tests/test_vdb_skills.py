@@ -238,3 +238,35 @@ def test_inspect_vdb_distinguishes_empty_volume_from_unreadable_names():
         unreadable = _load("inspect_vdb.py").inspect_vdb(node.path())
     assert unreadable["context"]["volume_names"] == []
     assert unreadable["context"]["volume_names_available"] is False
+
+
+def test_inspect_vdb_does_not_cook_a_dirty_node():
+    """A read-only inspection must not trigger an implicit cook."""
+    root, geo, hou = scene()
+    node = geo.createNode("vdbfrompolygons")
+    geometry = _volume_geometry()
+    cooks = []
+
+    def geometry_with_cook_tracking():
+        cooks.append(1)
+        return geometry
+
+    node.needsToCook = lambda: True
+    node.geometry = geometry_with_cook_tracking
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_vdb.py").inspect_vdb(node.path())
+    assert result["success"]
+    assert result["context"]["geometry_available"] is False
+    assert result["context"]["volume_names_available"] is False
+    assert cooks == []
+
+
+def test_inspect_vdb_reads_when_no_cook_is_needed():
+    root, geo, hou = scene()
+    node = geo.createNode("vdbfrompolygons")
+    node.needsToCook = lambda: False
+    node.geometry = lambda: _volume_geometry()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_vdb.py").inspect_vdb(node.path())
+    assert result["context"]["geometry_available"] is True
+    assert result["context"]["volume_names"] == ["density", "temperature"]

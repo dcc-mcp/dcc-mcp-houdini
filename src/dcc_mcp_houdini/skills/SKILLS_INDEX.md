@@ -6,7 +6,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 |-------|--------|----------------|
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
-| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig`, `houdini-copernicus`, `houdini-vdb`, `houdini-terrain` | no |
+| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
 | `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg` | no |
 

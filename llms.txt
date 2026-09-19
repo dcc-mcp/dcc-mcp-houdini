@@ -86,8 +86,8 @@ server.list_skills()
 
 - `bootstrap`: `houdini-scripting` (default loaded)
 - `scene`: `houdini-scene`, `houdini-scene-edit` (partial default)
-- `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-chops`, `houdini-constraints`, `houdini-export-preset`, `houdini-kinefx`, `houdini-light-rig`, `houdini-material-library`, `houdini-texture-bake`, `houdini-copernicus`, `houdini-vdb`, `houdini-terrain`
-- `interchange`: `houdini-interchange`, `houdini-import-to-scene`
+- `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus`
+- `interchange`: `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`
 - `pipeline`: `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg`
 
 ## Dev (Windows)
