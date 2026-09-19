@@ -233,3 +233,111 @@ def test_next_free_input_is_shared_with_domain_graph() -> None:
     common = _load("_simulation_common.py")
     assert not hasattr(common, "next_free_input")
     assert hasattr(_domain_graph, "next_free_input")
+
+
+def test_create_pyro_source_wires_geometry():
+    root, geo, hou = scene()
+    sphere = geo.createNode("sphere")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pyro_source.py").create_pyro_source(geo.path(), source_path=sphere.path())
+    assert result["success"]
+    context = result["context"]
+    assert context["node_type"] == "pyrosource"
+    assert context["source_type"] == "sop"
+    assert context["wired"] is True
+    assert context["simulation_verified"] is False
+    assert hou.node(context["node_path"]).inputs() == (sphere,)
+
+
+def test_create_pyro_source_supports_volume_source():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pyro_source.py").create_pyro_source(geo.path(), source_type="volume")
+    assert result["success"]
+    assert result["context"]["node_type"] == "volumesource"
+    assert result["context"]["setup_state"] == "unwired"
+
+
+def test_create_pyro_source_rejects_unknown_source_type():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pyro_source.py").create_pyro_source(geo.path(), source_type="points")
+    assert not result["success"]
+    assert "Unsupported source_type" in skill_error_detail(result)
+    assert geo.children() == ()
+
+
+def test_create_pyro_source_requires_sop_parent():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pyro_source.py").create_pyro_source(root.path())
+    assert not result["success"]
+    assert "Sop" in skill_error_detail(result)
+
+
+def test_add_pyro_post_process_wires_dop_import():
+    root, geo, hou = scene()
+    dop_import = geo.createNode("dopimport")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("add_pyro_post_process.py").add_pyro_post_process(
+            geo.path(), source_path=dop_import.path(), parameters={"size": 2}
+        )
+    assert result["success"]
+    context = result["context"]
+    assert context["node_type"] == "pyropostprocess"
+    assert context["wired"] is True
+    assert context["applied_parameters"] == {"size": 2}
+    assert hou.node(context["node_path"]).inputs() == (dop_import,)
+
+
+def test_add_gas_field_attaches_to_pyro_solver():
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    solver = dopnet.createNode("pyrosolver")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("add_gas_field.py").add_gas_field(dopnet.path(), "turbulence")
+    assert result["success"]
+    context = result["context"]
+    assert context["node_type"] == "gasturbulence"
+    assert context["field_type"] == "turbulence"
+    assert context["attached_to"] == solver.path()
+    assert context["attached_input_index"] == 0
+    assert solver.inputs() == (hou.node(context["node_path"]),)
+
+
+def test_add_gas_field_honours_explicit_connect_to():
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    dopnet.createNode("pyrosolver")
+    other = dopnet.createNode("gasturbulence")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("add_gas_field.py").add_gas_field(dopnet.path(), "disturbance", connect_to=other.path())
+    assert result["success"]
+    assert result["context"]["node_type"] == "gasdisturbance"
+    assert result["context"]["attached_to"] == other.path()
+
+
+def test_add_gas_field_unattached_when_no_solver():
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("add_gas_field.py").add_gas_field(dopnet.path(), "resize")
+    assert result["success"]
+    assert result["context"]["setup_state"] == "unattached"
+    assert result["context"]["attached_to"] is None
+    assert result["context"]["required_setup"] == ["connect the micro-solver into the solver chain"]
+
+
+def test_add_gas_field_rejects_unknown_type_and_foreign_target():
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    dopnet.createNode("pyrosolver")
+    stray = geo.createNode("null")
+    with patch.dict(sys.modules, {"hou": hou}):
+        unknown = _load("add_gas_field.py").add_gas_field(dopnet.path(), "smoke")
+        foreign = _load("add_gas_field.py").add_gas_field(dopnet.path(), "turbulence", connect_to=stray.path())
+    assert not unknown["success"]
+    assert "Unsupported field_type" in skill_error_detail(unknown)
+    assert not foreign["success"]
+    assert "connect_to must name a node inside" in skill_error_detail(foreign)
+    assert stray.parent() is geo

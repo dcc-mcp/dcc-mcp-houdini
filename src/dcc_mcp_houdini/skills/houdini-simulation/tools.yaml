@@ -201,3 +201,100 @@ tools:
         parameters:
           type: object
           description: Bounded Houdini parameter name to value overrides.
+  - name: create_pyro_source
+    description: Create a pyro source SOP that turns geometry into volume source attributes.
+    source_file: scripts/create_pyro_source.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the source node.
+        source_path:
+          type: string
+          description: Absolute path of the geometry to convert into a source; wired into input 0.
+        source_type:
+          type: string
+          enum: [sop, volume]
+          default: sop
+        node_name:
+          type: string
+          description: Node name; defaults to the source node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: add_pyro_post_process
+    description: Create a pyro post-process SOP that reshapes a cached simulation after the fact.
+    source_file: scripts/add_pyro_post_process.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the post-process node.
+        source_path:
+          type: string
+          description: Absolute path of the upstream DOP import; wired into input 0.
+        node_name:
+          type: string
+          default: pyropostprocess1
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: add_gas_field
+    description: Create a DOP gas micro-solver (turbulence, disturbance, resize, ...) and attach it to the solver.
+    source_file: scripts/add_gas_field.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [dopnet_path, field_type]
+      additionalProperties: false
+      properties:
+        dopnet_path:
+          type: string
+          description: Absolute path of a DOP network.
+        field_type:
+          type: string
+          enum: [turbulence, disturbance, vortex_confinement, resize, dissipation, target_field]
+        node_name:
+          type: string
+          description: Node name; defaults to the gas node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+        connect_to:
+          type: string
+          description: Absolute path of the node to attach to; defaults to the first solver in the network.

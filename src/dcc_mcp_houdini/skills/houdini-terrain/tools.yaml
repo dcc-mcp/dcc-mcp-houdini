@@ -1,0 +1,99 @@
+tools:
+  - name: create_heightfield
+    description: Create a heightfield SOP, the entry node of a Houdini terrain chain.
+    source_file: scripts/create_heightfield.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the heightfield.
+        node_name:
+          type: string
+          default: heightfield1
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: add_terrain_layer
+    description: Add a heightfield layer SOP (noise, erode, terrace, scatter, ...) and wire it into the chain.
+    source_file: scripts/add_terrain_layer.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, layer_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the layer.
+        layer_type:
+          type: string
+          enum:
+            [
+              noise,
+              erode,
+              terrace,
+              distort,
+              scatter,
+              slump,
+              flowfield,
+              mask_noise,
+              copy_layer,
+              remap,
+            ]
+        source_path:
+          type: string
+          description: Absolute path of the upstream heightfield; wired into input 0.
+        node_name:
+          type: string
+          description: Node name; defaults to the layer SOP type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: inspect_heightfield
+    description: Read heightfield layer names, primitive counts and bounds from cached geometry.
+    source_file: scripts/inspect_heightfield.py
+    execution: sync
+    affinity: main
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+          description: Absolute path of a SOP node holding a heightfield.
+        max_names:
+          type: integer
+          default: 16
+          minimum: 1
+          maximum: 64
