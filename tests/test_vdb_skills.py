@@ -114,15 +114,32 @@ def test_create_vdb_node_rolls_back_on_missing_parameter():
     assert geo.children() == (source,)
 
 
-def test_combine_vdbs_requires_same_network():
+@pytest.mark.parametrize(
+    "script,call", [("combine_vdbs.py", "combine_vdbs"), ("create_vdb_node.py", "create_vdb_node")]
+)
+def test_vdb_tools_reject_sources_outside_parent(script, call):
     root, geo, hou = scene()
     other = root.createNode("geo")
     stray = other.createNode("box", "stray")
+    module = _load(script)
     with patch.dict(sys.modules, {"hou": hou}):
-        result = _load("combine_vdbs.py").combine_vdbs(geo.path(), stray.path(), stray.path())
+        if call == "combine_vdbs":
+            result = module.combine_vdbs(geo.path(), stray.path(), stray.path())
+        else:
+            result = module.create_vdb_node(geo.path(), "smooth", source_path=stray.path())
     assert not result["success"]
-    assert "both sources must be nodes in" in skill_error_detail(result)
+    assert "Inputs must be existing nodes in the same network" in skill_error_detail(result)
     assert geo.children() == ()
+
+
+def test_create_vdb_node_rejects_second_input_without_first():
+    root, geo, hou = scene()
+    second = geo.createNode("sphere")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_vdb_node.py").create_vdb_node(geo.path(), "combine", source_b_path=second.path())
+    assert not result["success"]
+    assert "source_b_path requires source_path" in skill_error_detail(result)
+    assert geo.children() == (second,)
 
 
 def test_combine_vdbs_wires_both_inputs():
@@ -150,6 +167,7 @@ def test_inspect_vdb_reads_grid_names_and_bounds():
     assert context["geometry_available"] is True
     assert context["volume_names"] == ["density", "temperature"]
     assert context["volume_count"] == 2
+    assert context["volume_names_available"] is True
     assert context["prim_count"] == 2
     assert context["point_count"] == 8
     assert context["bounding_box"] == {"min": (-1.0, -1.0, -1.0), "max": (1.0, 1.0, 1.0)}
@@ -164,6 +182,7 @@ def test_inspect_vdb_reports_missing_geometry_instead_of_guessing():
     context = result["context"]
     assert context["geometry_available"] is False
     assert context["volume_names"] == []
+    assert context["volume_names_available"] is False
     assert context["prim_count"] is None
     assert context["bounding_box"] is None
 
@@ -196,3 +215,26 @@ def test_tools_declare_strict_input_schema(tool) -> None:
     entry = next(item for item in tools if item["name"] == tool)
     assert entry["input_schema"]["additionalProperties"] is False
     assert entry["source_file"] == "scripts/{}.py".format(tool)
+
+
+def test_inspect_vdb_distinguishes_empty_volume_from_unreadable_names():
+    root, geo, hou = scene()
+    node = geo.createNode("vdbfrompolygons")
+    # The intrinsic answers with an empty string: the volume has no grids.
+    node.geometry = lambda: _volume_geometry(grid_names=())
+    with patch.dict(sys.modules, {"hou": hou}):
+        readable = _load("inspect_vdb.py").inspect_vdb(node.path())
+    assert readable["context"]["volume_names"] == []
+    assert readable["context"]["volume_names_available"] is True
+
+    # Neither the intrinsic nor a name attribute can be read.
+    node.geometry = lambda: SimpleNamespace(
+        numPoints=lambda: 0,
+        numPrims=lambda: 0,
+        intrinsicValue=lambda name: (_ for _ in ()).throw(ValueError(name)),
+        boundingBox=lambda: None,
+    )
+    with patch.dict(sys.modules, {"hou": hou}):
+        unreadable = _load("inspect_vdb.py").inspect_vdb(node.path())
+    assert unreadable["context"]["volume_names"] == []
+    assert unreadable["context"]["volume_names_available"] is False

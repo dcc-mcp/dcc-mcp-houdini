@@ -2,7 +2,7 @@
 
 from contextlib import ExitStack
 
-from _vdb_common import wire_inputs
+from _vdb_common import resolve_vdb_sources, wire_inputs
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
@@ -30,10 +30,7 @@ def combine_vdbs(
     try:
         validate_identifier(node_name)
         parent = require_category(get_node(hou, parent_path), "Sop", children=True)
-        source_a = get_node(hou, source_a_path)
-        source_b = get_node(hou, source_b_path)
-        if source_a.parent() is not parent or source_b.parent() is not parent:
-            raise ValueError("both sources must be nodes in {}".format(parent.path()))
+        source_a, source_b = resolve_vdb_sources(hou, parent, [source_a_path, source_b_path])
         with ExitStack() as stack:
             created = stack.enter_context(owned_node(parent, "vdbcombine", node_name))
             applied = stack.enter_context(parameter_edit(created, parameters))

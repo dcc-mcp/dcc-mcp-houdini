@@ -49,9 +49,13 @@ creating a different simulation.
 | `create_collision_source` | `staticobject` | DOP level; sets `soppath` and attaches to the first solver input |
 
 These three tools report parameters they cannot apply through
-`skipped_parameters`, because node types and Houdini builds differ in which
-parameters they expose and a missing optional override is not an authoring
-error. Every other tool in this package fails the call instead of skipping.
+`skipped_parameters`, because they seed best-effort defaults (`soppath`,
+`deforming`) that node types and Houdini builds may not expose, and a missing
+optional default is not an authoring error.
+
+Every other tool in this package has no `skipped_parameters` field: it applies
+caller overrides through `parameter_edit`, so an override the node does not
+expose **fails the call and rolls back** rather than being skipped silently.
 
 ## Tracer-bullet flow
 

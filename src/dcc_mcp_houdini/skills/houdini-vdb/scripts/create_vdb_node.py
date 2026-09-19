@@ -2,7 +2,7 @@
 
 from contextlib import ExitStack
 
-from _vdb_common import TWO_INPUT_TYPES, VDB_TYPES, validate_choice, wire_inputs
+from _vdb_common import TWO_INPUT_TYPES, VDB_TYPES, resolve_vdb_sources, validate_choice, wire_inputs
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
@@ -33,10 +33,10 @@ def create_vdb_node(
         node_name = validate_identifier(node_name or node_type + "1")
         if source_b_path is not None and vdb_type not in TWO_INPUT_TYPES:
             raise ValueError("source_b_path is only supported for: {}".format(", ".join(sorted(TWO_INPUT_TYPES))))
+        if source_b_path is not None and source_path is None:
+            raise ValueError("source_b_path requires source_path; input 0 must not be left dangling")
         parent = require_category(get_node(hou, parent_path), "Sop", children=True)
-        sources = [get_node(hou, source_path) if source_path else None]
-        if source_b_path is not None:
-            sources.append(get_node(hou, source_b_path))
+        sources = resolve_vdb_sources(hou, parent, [source_path, source_b_path])
         with ExitStack() as stack:
             created = stack.enter_context(owned_node(parent, node_type, node_name))
             applied = stack.enter_context(parameter_edit(created, parameters))

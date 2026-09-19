@@ -129,6 +129,7 @@ def test_inspect_heightfield_reads_layer_names():
     assert context["geometry_available"] is True
     assert context["layer_names"] == ["height", "mask"]
     assert context["layer_count"] == 2
+    assert context["layer_names_available"] is True
     assert context["prim_count"] == 2
     assert context["bounding_box"] == {"min": (0.0, 0.0, 0.0), "max": (1000.0, 0.0, 1000.0)}
 
@@ -142,6 +143,7 @@ def test_inspect_heightfield_reports_missing_geometry_instead_of_guessing():
     context = result["context"]
     assert context["geometry_available"] is False
     assert context["layer_names"] == []
+    assert context["layer_names_available"] is False
     assert context["prim_count"] is None
 
 
@@ -169,3 +171,35 @@ def test_layer_type_map_is_stable() -> None:
         "copy_layer",
         "remap",
     }
+
+
+def test_inspect_heightfield_distinguishes_no_layers_from_unreadable_names():
+    root, geo, hou = scene()
+    node = geo.createNode("heightfield")
+    node.geometry = lambda: _heightfield_geometry(layers=())
+    with patch.dict(sys.modules, {"hou": hou}):
+        readable = _load("inspect_heightfield.py").inspect_heightfield(node.path())
+    assert readable["context"]["layer_names"] == []
+    assert readable["context"]["layer_names_available"] is True
+
+    class Unreadable(SimpleNamespace):
+        def numPoints(self):
+            return 0
+
+        def numPrims(self):
+            return 0
+
+        def intrinsicValue(self, name):
+            raise ValueError(name)
+
+        def primStringAttribValues(self, name):
+            raise ValueError(name)
+
+        def boundingBox(self):
+            return None
+
+    node.geometry = lambda: Unreadable()
+    with patch.dict(sys.modules, {"hou": hou}):
+        unreadable = _load("inspect_heightfield.py").inspect_heightfield(node.path())
+    assert unreadable["context"]["layer_names"] == []
+    assert unreadable["context"]["layer_names_available"] is False
