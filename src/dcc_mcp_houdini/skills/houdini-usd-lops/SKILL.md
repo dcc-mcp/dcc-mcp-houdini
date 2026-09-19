@@ -53,6 +53,14 @@ narrow, typed write path for stage attributes.
 4. `set_prim_attributes` for writing a bounded set of attributes and reading them
    back. This is the only tool here that mutates the stage.
 
+```
+houdini_usd_lops__set_prim_attributes(
+    lop_node_path="/stage/lopnet1",
+    prim_path="/hero",
+    attributes={"density": 2.5, "center": [1.0, 2.0, 3.0]},
+)   # -> applied_attributes, attribute_readback, readback_matches
+```
+
 ## Write scope
 
 `set_prim_attributes` writes attributes on one existing prim. It does **not**
