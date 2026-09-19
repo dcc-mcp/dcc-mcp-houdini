@@ -1,8 +1,8 @@
-"""Create a DOP collision object bound to a SOP path."""
+"""Attach a DOP gas micro-solver to a fluid solver input."""
 
 from contextlib import ExitStack
 
-from _simulation_common import COLLISION_TYPES, apply_parameters, find_solver, validate_choice
+from _simulation_common import find_solver
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
@@ -11,35 +11,41 @@ from dcc_mcp_houdini._domain_graph import (
     next_free_input,
     node_summary,
     owned_node,
+    parameter_edit,
     require_category,
     validate_identifier,
 )
 
+GAS_FIELD_TYPES = {
+    "turbulence": "gasturbulence",
+    "disturbance": "gasdisturbance",
+    "vortex_confinement": "gasvortexconfinement",
+    "resize": "gasresizefluiddynamic",
+    "dissipation": "gasdissipation",
+    "target_field": "gastargetfield",
+}
 
-def create_collision_source(
+
+def add_gas_field(
     dopnet_path: str,
-    source_path: str,
-    collision_type: str = "static",
-    node_name: str = "staticobject1",
-    connect_to: str = None,
+    field_type: str,
+    node_name: str = None,
     parameters=None,
+    connect_to: str = None,
 ) -> dict:
     try:
         import hou
     except ImportError:
         return hou_missing_error()
     try:
-        node_type = validate_choice(collision_type, COLLISION_TYPES, "collision_type")
-        validate_identifier(node_name)
+        if field_type not in GAS_FIELD_TYPES:
+            raise ValueError("Unsupported field_type: {!r}".format(field_type))
+        node_type = GAS_FIELD_TYPES[field_type]
+        node_name = validate_identifier(node_name or node_type + "1")
         dopnet = require_category(get_node(hou, dopnet_path), "Dop", children=True)
-        source = get_node(hou, source_path)
         with ExitStack() as stack:
             created = stack.enter_context(owned_node(dopnet, node_type, node_name))
-            overrides = dict(parameters or {})
-            overrides.setdefault("soppath", source.path())
-            if collision_type == "deforming":
-                overrides.setdefault("deforming", 1)
-            applied, skipped = stack.enter_context(apply_parameters(created, overrides))
+            applied = stack.enter_context(parameter_edit(created, parameters))
             target = find_solver(dopnet) if connect_to is None else get_node(hou, connect_to)
             attached_index = None
             if target is not None:
@@ -48,29 +54,26 @@ def create_collision_source(
                 attached_index = next_free_input(target)
                 target.setInput(attached_index, created)
             return skill_success(
-                "Created collision source",
+                "Added gas micro-solver",
                 node=node_summary(created),
                 node_path=created.path(),
-                collision_type=collision_type,
-                source_path=source.path(),
+                node_type=created.type().name(),
+                field_type=field_type,
+                dopnet_path=dopnet.path(),
                 attached_to=target.path() if target is not None else None,
                 attached_input_index=attached_index,
                 applied_parameters=applied,
-                skipped_parameters=skipped,
                 setup_state="attached" if target is not None else "unattached",
                 simulation_verified=False,
-                required_setup=[
-                    "confirm the collision geometry resolution matches the solver",
-                    "simulation cook",
-                ],
+                required_setup=[] if target is not None else ["connect the micro-solver into the solver chain"],
             )
     except Exception as exc:
-        return skill_exception(exc, message="Failed to create collision source")
+        return skill_exception(exc, message="Failed to add gas field")
 
 
 @skill_entry
 def main(**kwargs):
-    return create_collision_source(**kwargs)
+    return add_gas_field(**kwargs)
 
 
 if __name__ == "__main__":

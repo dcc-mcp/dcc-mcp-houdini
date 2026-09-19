@@ -35,7 +35,7 @@ server.list_skills()
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 
-## Bundled tools (39 skills, 268 tools)
+## Bundled tools (41 skills, 277 tools)
 
 ### bootstrap (default)
 - `houdini_scripting__execute_python`, `get_session_info`
@@ -76,7 +76,7 @@ server.list_skills()
 - `houdini_animation__get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `validate_loop_contract`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation`
 - `houdini_hda_automation__scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain`
 - `houdini_pdg__create_pdg_network`, `create_pdg_node`, `connect_pdg_nodes`, `inspect_pdg_graph`, `cook_pdg_graph`
-- `houdini_simulation__create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source`
+- `houdini_simulation__create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source`, `create_pyro_source`, `add_pyro_post_process`, `add_gas_field`
 - `houdini_particles__create_pop_network`, `configure_pop_source`, `add_particle_force`, `add_particle_behavior`, `inspect_particles`
 - `houdini_pipeline__set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package`
 - `houdini_dev__attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action`
@@ -86,7 +86,7 @@ server.list_skills()
 
 - `bootstrap`: `houdini-scripting` (default loaded)
 - `scene`: `houdini-scene`, `houdini-scene-edit` (partial default)
-- `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-chops`, `houdini-constraints`, `houdini-export-preset`, `houdini-kinefx`, `houdini-light-rig`, `houdini-material-library`, `houdini-texture-bake`, `houdini-copernicus`
+- `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-chops`, `houdini-constraints`, `houdini-export-preset`, `houdini-kinefx`, `houdini-light-rig`, `houdini-material-library`, `houdini-texture-bake`, `houdini-copernicus`, `houdini-vdb`, `houdini-terrain`
 - `interchange`: `houdini-interchange`, `houdini-import-to-scene`
 - `pipeline`: `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg`
 
@@ -112,3 +112,5 @@ support Python 3.7+ on Windows/Linux and Python 3.8+ on macOS; unsupported
 runtime/wheel-tag pairs fail closed before extraction.
 
 See `docs/guide/local-mcp-debug.md`, `docs/ci/houdini-docker.md`, and `AGENTS.md`.
+- `houdini_vdb__create_vdb_node`, `combine_vdbs`, `inspect_vdb`
+- `houdini_terrain__create_heightfield`, `add_terrain_layer`, `inspect_heightfield`

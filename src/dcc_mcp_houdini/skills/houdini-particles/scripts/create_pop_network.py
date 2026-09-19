@@ -68,7 +68,6 @@ def create_pop_network(
                 created_network=created_network,
                 created_solver=created_solver,
                 applied_parameters=applied,
-                skipped_parameters=[],
                 setup_state="skeleton",
                 simulation_verified=False,
                 required_setup=[

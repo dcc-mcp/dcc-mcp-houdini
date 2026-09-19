@@ -1,4 +1,9 @@
-"""POP network authoring helpers shared by the particle skill tools."""
+"""POP network authoring helpers shared by the particle skill tools.
+
+Parameter overrides are applied through ``parameter_edit``: a parameter name the
+node does not expose fails the call instead of being silently skipped, so a
+mistyped override can never leave a caller believing it took effect.
+"""
 
 from contextlib import ExitStack
 
@@ -6,6 +11,7 @@ from dcc_mcp_core.skill import skill_success
 
 from dcc_mcp_houdini._domain_graph import (
     get_node,
+    next_free_input,
     node_summary,
     owned_node,
     parameter_edit,
@@ -57,17 +63,6 @@ def find_pop_solver(network):
     return None
 
 
-def next_free_input(node, limit=32):
-    """First free input index of a node, bounded so a bad graph cannot loop."""
-    used = set()
-    for connection in node.inputConnections():
-        used.add(connection.inputIndex())
-    for index in range(limit):
-        if index not in used:
-            return index
-    raise ValueError("No free input available on {}".format(node.path()))
-
-
 def connections_summary(node):
     return [
         {
@@ -110,7 +105,6 @@ def attach_pop_node(hou, network_path, node_type, node_name=None, parameters=Non
             attached_to=target.path() if target is not None else None,
             attached_input_index=attached_index,
             applied_parameters=applied,
-            skipped_parameters=[],
             connections=connections_summary(created),
             setup_state="attached" if target is not None else "unattached",
             simulation_verified=False,

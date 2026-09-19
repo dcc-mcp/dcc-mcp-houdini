@@ -151,6 +151,17 @@ def resolve_inputs(hou, network, input_nodes):
     return sources
 
 
+def next_free_input(node, limit=32):
+    """First free input index of a node, bounded so a bad graph cannot loop."""
+    used = set()
+    for connection in node.inputConnections():
+        used.add(connection.inputIndex())
+    for index in range(limit):
+        if index not in used:
+            return index
+    raise ValueError("No free input available on {}".format(node.path()))
+
+
 def node_summary(node):
     return {
         "path": node.path(),
@@ -174,3 +185,59 @@ def input_connections(node):
 
 def hou_missing_error():
     return skill_error("Houdini not available", "hou could not be imported")
+
+
+def cooked_geometry(node):
+    """Return cached geometry, or ``None``; never raise for an unreadable node."""
+    try:
+        return node.geometry()
+    except Exception:
+        return None
+
+
+def _guarded(method, default=None):
+    try:
+        return method()
+    except Exception:
+        return default
+
+
+def _bounding_box(geometry):
+    box = _guarded(geometry.boundingBox)
+    if box is None:
+        return None
+    return {
+        "min": tuple(float(value) for value in box.minvec()),
+        "max": tuple(float(value) for value in box.maxvec()),
+    }
+
+
+def volume_readback(geometry, max_names=16, name_attribute=None):
+    """Bounded volume/VDB readback shared by the volume and terrain skills.
+
+    Every read is guarded: a geometry that does not expose an accessor is
+    reported as ``None`` instead of turning into a skill failure, so the caller
+    can distinguish "no cached geometry" from "empty volume".
+    """
+    counts = {}
+    for key, accessor in (("point_count", "numPoints"), ("prim_count", "numPrims")):
+        method = getattr(geometry, accessor, None)
+        counts[key] = _guarded(method) if callable(method) else None
+    names = []
+    raw = None
+    intrinsic = getattr(geometry, "intrinsicValue", None)
+    if callable(intrinsic):
+        raw = _guarded(lambda: intrinsic("vdb_grids"))
+    if not (isinstance(raw, str) and raw):
+        values = getattr(geometry, "primStringAttribValues", None)
+        if name_attribute is not None and callable(values):
+            raw = _guarded(lambda: values(name_attribute))
+            raw = " ".join(raw) if isinstance(raw, (list, tuple)) else None
+    if isinstance(raw, str) and raw:
+        names = raw.split()[:max_names]
+    return {
+        "point_count": counts["point_count"],
+        "prim_count": counts["prim_count"],
+        "volume_names": names,
+        "bounding_box": _bounding_box(geometry),
+    }

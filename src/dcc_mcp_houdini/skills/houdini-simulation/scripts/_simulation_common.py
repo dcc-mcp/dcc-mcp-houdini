@@ -54,16 +54,6 @@ def find_solver(network):
     return None
 
 
-def next_free_input(node, limit=32):
-    used = set()
-    for connection in node.inputConnections():
-        used.add(connection.inputIndex())
-    for index in range(limit):
-        if index not in used:
-            return index
-    raise ValueError("No free input available on {}".format(node.path()))
-
-
 @contextmanager
 def apply_parameters(node, parameters):
     """Apply scalar overrides, reporting names the node does not expose.

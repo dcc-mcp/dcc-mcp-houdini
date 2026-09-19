@@ -1,0 +1,110 @@
+tools:
+  - name: create_vdb_node
+    description: Create a VDB SOP (convert, resample, smooth, clip, advect, ...) with optional input wiring.
+    source_file: scripts/create_vdb_node.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, vdb_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the node.
+        vdb_type:
+          type: string
+          enum:
+            [
+              from_polygons,
+              from_particles,
+              from_volume,
+              combine,
+              resample,
+              smooth,
+              convert,
+              analyze,
+              activate,
+              clip,
+              advect,
+              project_nonsampled,
+            ]
+        source_path:
+          type: string
+          description: Absolute path of the geometry wired into input 0.
+        source_b_path:
+          type: string
+          description: Second input, only supported for combine and advect.
+        node_name:
+          type: string
+          description: Node name; defaults to the VDB node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: combine_vdbs
+    description: Create a vdbcombine SOP wired to two grids in the same network.
+    source_file: scripts/combine_vdbs.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, source_a_path, source_b_path]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the node.
+        source_a_path:
+          type: string
+          description: Absolute path of the first grid; wired into input 0.
+        source_b_path:
+          type: string
+          description: Absolute path of the second grid; wired into input 1.
+        node_name:
+          type: string
+          default: vdbcombine1
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides, such as the boolean operation.
+  - name: inspect_vdb
+    description: Read VDB grid names, primitive counts and bounds from cached geometry.
+    source_file: scripts/inspect_vdb.py
+    execution: sync
+    affinity: main
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+          description: Absolute path of a SOP node holding a VDB volume.
+        max_names:
+          type: integer
+          default: 16
+          minimum: 1
+          maximum: 64

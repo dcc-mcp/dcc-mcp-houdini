@@ -51,6 +51,8 @@ explicit `connect_to` path when the automatic target is not the node you want.
   still required.
 - `inspect_particles` reports `geometry_available=false` instead of guessing
   when the node exposes no cached geometry.
-- Parameter writes are preflighted and rolled back (values, expressions and
-  animation) when a later step fails.
+- Parameter overrides never fail silently: a name the target node does not
+  expose fails the call and rolls the edit back, so a mistyped override can
+  never leave a caller believing it took effect. This package has no
+  `skipped_parameters` field and does not skip unsupported overrides.
 - Failed creation destroys only the nodes owned by that request.

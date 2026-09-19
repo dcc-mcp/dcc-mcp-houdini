@@ -112,6 +112,8 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-material-library` | `save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management` |
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
 | `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `inspect_cop_network`, `validate_cop_network` |
+| `houdini-vdb` | `create_vdb_node`, `combine_vdbs`, `inspect_vdb` |
+| `houdini-terrain` | `create_heightfield`, `add_terrain_layer`, `inspect_heightfield` |
 
 ### interchange stage (load on demand)
 | Skill | Key tools |
@@ -128,13 +130,13 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `validate_loop_contract`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
 | `houdini-hda-automation` | `scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain` |
 | `houdini-pdg` | `create_pdg_network`, `create_pdg_node`, `connect_pdg_nodes`, `inspect_pdg_graph`, `cook_pdg_graph` |
-| `houdini-simulation` | `create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source` |
+| `houdini-simulation` | `create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source`, `create_pyro_source`, `add_pyro_post_process`, `add_gas_field` |
 | `houdini-particles` | `create_pop_network`, `configure_pop_source`, `add_particle_force`, `add_particle_behavior`, `inspect_particles` |
 | `houdini-pipeline` | `set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package` |
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 39 skill packages, 268 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
+**Total: 41 skill packages, 277 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
 
 ## Key Env Vars
 
