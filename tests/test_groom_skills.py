@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from domain_graph_fakes import scene
 from skill_error_assertions import skill_error_detail
+from skill_loader import skill_script_import_context
 
 
 def _load_script():
@@ -225,3 +227,107 @@ def test_build_short_fur_groom_rolls_back_on_missing_node_type() -> None:
 
     assert result["success"] is False
     geo.createNode.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# add_groom_step
+# ---------------------------------------------------------------------------
+
+
+def _load_step():
+    path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "dcc_mcp_houdini"
+        / "skills"
+        / "houdini-groom"
+        / "scripts"
+        / "add_groom_step.py"
+    )
+    spec = importlib.util.spec_from_file_location("add_groom_step_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
+    return module
+
+
+def test_add_groom_step_wires_into_the_chain():
+    root, geo, hou = scene()
+    upstream = geo.createNode("hairgen")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(geo.path(), "clump", source_path=upstream.path())
+    assert result["success"]
+    context = result["context"]
+    assert context["node_type"] == "hairclump"
+    assert context["step_type"] == "clump"
+    assert context["wired"] is True
+    assert context["required_setup"] == []
+    assert hou.node(context["node_path"]).inputs() == (upstream,)
+
+
+def test_add_groom_step_defaults_node_name_from_type():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(geo.path(), "frizz")
+    assert result["success"]
+    assert result["context"]["node_path"].endswith("/frizz1")
+    assert result["context"]["setup_state"] == "unwired"
+    assert result["context"]["required_setup"] == ["wire the step into the groom chain"]
+
+
+def test_add_groom_step_applies_parameters():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(geo.path(), "generate", parameters={"size": 2})
+    assert result["success"]
+    assert result["context"]["applied_parameters"] == {"size": 2}
+
+
+def test_add_groom_step_fails_and_cleans_up_on_unknown_parameter():
+    root, geo, hou = scene()
+    preserved = geo.createNode("hairgen")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(geo.path(), "clump", parameters={"nope": 1})
+    assert not result["success"]
+    assert geo.children() == (preserved,)
+
+
+def test_add_groom_step_rejects_unknown_type():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(geo.path(), "comb")
+    assert not result["success"]
+    assert "Unsupported step_type" in str(result.get("error", "")) + str(result.get("_meta", ""))
+    assert geo.children() == ()
+
+
+def test_add_groom_step_requires_sop_parent():
+    root, geo, hou = scene()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_step().add_groom_step(root.path(), "clump")
+    assert not result["success"]
+
+
+def test_add_groom_step_hou_missing():
+    root, geo, _hou = scene()
+    assert "hou" not in sys.modules
+    result = _load_step().add_groom_step(geo.path(), "clump")
+    assert not result["success"]
+    assert result["message"] == "Houdini not available"
+
+
+def test_groom_step_types_are_stable() -> None:
+    module = _load_step()
+    assert module.GROOM_STEP_TYPES["generate"] == "hairgen"
+    assert module.GROOM_STEP_TYPES["guide_deform"] == "guidedeform"
+    assert set(module.GROOM_STEP_TYPES) == {
+        "generate",
+        "clump",
+        "guide_deform",
+        "frizz",
+        "brush",
+        "guide_groom",
+        "hair_card",
+        "copy",
+    }

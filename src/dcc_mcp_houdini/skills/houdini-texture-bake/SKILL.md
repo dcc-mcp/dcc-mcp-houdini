@@ -122,6 +122,17 @@ the ROP back to the values it had on entry.
 payload can never claim `bake_ready=true` next to `udim_detection=no_uv_sets`.
 Attributes such as `Cd_uv` or `flowuv` are not UV sets.
 
+## Naming: `skipped_parameters` is the only name for "not applied"
+
+Every tool in this adapter reports the things it could **not** apply under one
+field name: `skipped_parameters`. Historically three near-synonyms appeared
+(`skipped_parameters`, `unapplied_defaults`, `unsupported_settings`); they are
+equivalent and have been unified. **Do not introduce another name.**
+
+The field is only legitimate when something is actually reported. A tool whose
+parameter overrides go through `parameter_edit` has no skip path at all — the
+call fails instead — and must not carry the field.
+
 ## Context limitations
 
 - **UV requirement:** Bake Texture ROP and Labs Maps Baker both require the

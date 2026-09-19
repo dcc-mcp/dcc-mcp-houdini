@@ -26,7 +26,7 @@ def inspect_materialx_graph(material_path: str, max_nodes: int = 64) -> dict:
             nodes.append(summary)
             if not connections:
                 unwired.append(child.path())
-        outputs = [node["path"] for node in nodes if "output" in node["name"].lower()]
+        outputs = [node["path"] for node in nodes if node["name"].lower().startswith("output")]
         return skill_success(
             "Inspected MaterialX graph",
             material_path=material.path(),

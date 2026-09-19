@@ -18,6 +18,29 @@ metadata:
     tools: tools.yaml
 ---
 
+## Naming: `skipped_parameters` is the only name for "not applied"
+
+Overrides a node does not expose fail the call, so this package has no
+`skipped_parameters` field. If a later tool needs one, use that exact name.
+
+## Single grooming steps
+
+`build_short_fur_groom` assembles a complete fur chain. `add_groom_step` adds one
+SOP at a time into an existing chain, which is the shape an agent needs while
+iterating on a groom. Wire the returned `node_path` into the next step's
+`source_path`.
+
+| `step_type` | SOP |
+|---|---|
+| `generate` | `hairgen` |
+| `clump` | `hairclump` |
+| `guide_deform` | `guidedeform` |
+| `frizz` | `frizz` |
+| `brush` | `brush` |
+| `guide_groom` | `guidegroom` |
+| `hair_card` | `haircard` |
+| `copy` | `haircopy` |
+
 # Houdini groom
 
 Build bounded native SOP networks for renderable short fur. All tools use main

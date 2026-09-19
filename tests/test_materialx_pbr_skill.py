@@ -330,3 +330,17 @@ def test_inspect_materialx_graph_rejects_bad_max_nodes():
         assert not _load_script("inspect_materialx_graph.py").inspect_materialx_graph(
             "/mat/materialx_pbr", max_nodes="2"
         )["success"]
+
+
+def test_inspect_materialx_graph_output_candidates_are_prefix_matched():
+    """Only nodes named output* are candidates; `flow_output` must not match."""
+    material = _Container("/mat/materialx_pbr")
+    for name in ("output1", "surface_output", "flow_output", "basecolor_tex"):
+        material.createNode("mtlximage", name)
+    hou = SimpleNamespace(node=lambda path: material if path == "/mat/materialx_pbr" else None)
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load_script("inspect_materialx_graph.py").inspect_materialx_graph("/mat/materialx_pbr")
+    candidates = [path.rsplit("/", 1)[-1] for path in result["context"]["output_candidates"]]
+    assert candidates == ["output1"]
+    assert "flow_output" not in candidates
+    assert "basecolor_tex" not in candidates

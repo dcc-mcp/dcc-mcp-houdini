@@ -40,22 +40,25 @@ def configure_light_shadow(light_path: str, settings) -> dict:
         if unknown:
             raise ValueError("Unsupported shadow settings: {}".format(", ".join(unknown)))
         light = get_node(hou, light_path)
+        # Single pass: collect the resolved parameter name alongside the value so
+        # every setting is resolved exactly once.
         overrides = {}
         skipped = []
+        resolved = {}
         for key, value in settings.items():
-            name, resolved, miss = _resolve(light, key, value)
+            name, resolved_value, miss = _resolve(light, key, value)
+            resolved[key] = name
             if miss is not None:
                 skipped.append(miss)
             else:
-                overrides[name] = resolved
-        resolved = {key: _resolve(light, key, value)[0] for key, value in settings.items()}
+                overrides[name] = resolved_value
         if not overrides:
             return skill_success(
                 "No shadow parameters to apply",
                 light=node_summary(light),
                 light_path=light.path(),
                 applied_parameters={},
-                unsupported_settings=skipped,
+                skipped_parameters=skipped,
                 resolved_names=resolved,
                 valid=True,
                 validation_scope="parameter_presence",
@@ -68,7 +71,7 @@ def configure_light_shadow(light_path: str, settings) -> dict:
             light=node_summary(light),
             light_path=light.path(),
             applied_parameters=applied,
-            unsupported_settings=skipped,
+            skipped_parameters=skipped,
             resolved_names=resolved,
             valid=True,
             validation_scope="parameter_presence_and_readback",

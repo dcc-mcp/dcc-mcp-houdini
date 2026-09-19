@@ -62,3 +62,36 @@ tools:
         - houdini_geometry__get_cook_status
       on-failure:
         - houdini_scene__get_node_info
+  - name: add_groom_step
+    description: Add a single grooming SOP step (hairgen, hairclump, frizz, brush, ...) to a fur or hair chain.
+    source_file: scripts/add_groom_step.py
+    execution: sync
+    affinity: main
+    group: authoring
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [geo_path, step_type]
+      additionalProperties: false
+      properties:
+        geo_path:
+          type: string
+          description: Absolute path of a SOP network that will host the step.
+        step_type:
+          type: string
+          enum: [generate, clump, guide_deform, frizz, brush, guide_groom, hair_card, copy]
+        source_path:
+          type: string
+          description: Absolute path of the upstream groom node; wired into input 0.
+        node_name:
+          type: string
+          description: Node name; defaults to the groom SOP type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
