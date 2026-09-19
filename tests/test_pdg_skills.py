@@ -98,3 +98,23 @@ def test_type_error_does_not_retry_or_drop_block():
         result = _load("cook_pdg_graph.py").cook_pdg_graph(task.path(), block=False)
     assert not result["success"]
     assert calls == [False]
+
+
+def test_create_pdg_node_has_no_dead_skipped_parameters():
+    """parameter_edit hard-fails, so the payload must not claim a skip path."""
+    root, geo, hou = scene()
+    network = root.createNode("topnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pdg_node.py").create_pdg_node(network.path(), "ropfetch", parameters={"service": "farm"})
+    assert result["success"]
+    assert result["context"]["applied_parameters"] == {"service": "farm"}
+    assert "skipped_parameters" not in result["context"]
+
+
+def test_create_pdg_node_fails_and_cleans_up_on_unknown_parameter():
+    root, geo, hou = scene()
+    network = root.createNode("topnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_pdg_node.py").create_pdg_node(network.path(), "ropfetch", parameters={"nope": 1})
+    assert not result["success"]
+    assert network.children() == ()

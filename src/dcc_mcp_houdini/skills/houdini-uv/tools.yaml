@@ -1,0 +1,93 @@
+tools:
+  - name: unwrap_uv
+    description: Create a UV unwrap SOP (uvunwrap, uvlayout, uvflatten, uvpelt) and wire it into the chain.
+    source_file: scripts/unwrap_uv.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, unwrap_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the node.
+        unwrap_type:
+          type: string
+          enum: [auto, atlas, flatten, pelt, quick]
+        source_path:
+          type: string
+          description: Absolute path of the geometry to unwrap; wired into input 0.
+        node_name:
+          type: string
+          description: Node name; defaults to the UV node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: transform_uv
+    description: Create a UV transform SOP (uvtransform, uvedit, uvfuse, uvfit, uvlayout) and wire it in.
+    source_file: scripts/transform_uv.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, transform_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the node.
+        transform_type:
+          type: string
+          enum: [transform, edit, fuse, fit, layout]
+        source_path:
+          type: string
+          description: Absolute path of the geometry carrying the UVs; wired into input 0.
+        node_name:
+          type: string
+          description: Node name; defaults to the UV node type plus 1.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: inspect_uv
+    description: Read UV sets and UDIM tiles from cached geometry without cooking.
+    source_file: scripts/inspect_uv.py
+    execution: sync
+    affinity: main
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path]
+      additionalProperties: false
+      properties:
+        node_path:
+          type: string
+          description: Absolute path of a SOP node carrying UVs.
+        max_sets:
+          type: integer
+          default: 8
+          minimum: 1
+          maximum: 32

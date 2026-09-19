@@ -39,6 +39,21 @@ def _validate_steps(steps):
     return normalized
 
 
+OUTPUT_NODE_TYPES = ("rop_image", "rop_comp", "rop")
+
+
+def _required_setup(created, wired):
+    """Report what a freshly built chain still needs before it produces a file."""
+    steps = []
+    if not wired:
+        steps.append("wire an image source into the first node's input 0")
+    if not any(item["node_type"] in OUTPUT_NODE_TYPES for item in created):
+        steps.append('add an output node (filter_type="output" → rop_image)')
+    steps.append("cook the chain")
+    steps.append("render with houdini_render__render_rop and verify with inspect_cop_output")
+    return steps
+
+
 def build_composite_chain(network_path: str, steps, source_path: str = None) -> dict:
     try:
         import hou
@@ -78,6 +93,7 @@ def build_composite_chain(network_path: str, steps, source_path: str = None) -> 
                 last_node_path=created[-1]["node_path"],
                 source_path=source.path() if source is not None else None,
                 setup_state="wired" if source is not None else "unwired",
+                required_setup=_required_setup(created, source is not None),
             )
     except Exception as exc:
         return skill_exception(exc, message="Failed to build composite chain")

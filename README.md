@@ -355,7 +355,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (41 packages, 280 tools)
+## Bundled Skills (42 packages, 283 tools)
 
 See [domain coverage and acceptance](docs/guide/domain-capability-coverage.md)
 for implemented behavior, real-host evidence, and remaining domain work.
@@ -397,6 +397,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
 | `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network` |
 | `houdini-vdb` | `create_vdb_node`, `combine_vdbs`, `inspect_vdb` |
+| `houdini-uv` | `unwrap_uv`, `transform_uv`, `inspect_uv` |
 | `houdini-terrain` | `create_heightfield`, `add_terrain_layer`, `inspect_heightfield` |
 
 ### interchange (load on demand)

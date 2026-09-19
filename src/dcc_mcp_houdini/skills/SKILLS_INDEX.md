@@ -6,7 +6,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 |-------|--------|----------------|
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
-| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
+| `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
 | `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg` | no |
 
@@ -27,6 +27,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Model typed SOP geometry | `load_skill("houdini-mesh-ops")` → `loft_sections` / `lathe_profile` / `extrude_faces` / `bevel_edges` / `bridge_edges` / `boolean_op` / `add_edge_loop` / `array_instances` / `mirror` / `auto_uv` / `uv_project` → inspect returned readback → `houdini_geometry__get_cook_status` |
 | Create a DOP solver skeleton | `load_skill("houdini-simulation")` → `create_simulation_network(simulation_type="pyro"|"flip"|"rbd"|"vellum")` → `configure_simulation_solver` → `inspect_simulation_network` → `validate_simulation_setup` |
 | Fracture & constrain rigid bodies | `load_skill("houdini-simulation")` → `create_fracture` → `create_simulation_network(simulation_type="rbd")` → `create_constraint_network` → `create_collision_source` → `validate_simulation_setup` |
+| Unwrap and pack UVs | `load_skill("houdini-uv")` → `unwrap_uv` → `transform_uv` (layout) → `inspect_uv` |
 | Build a VDB volume chain | `load_skill("houdini-vdb")` → `create_vdb_node` → `combine_vdbs` → `inspect_vdb` |
 | Build a heightfield terrain | `load_skill("houdini-terrain")` → `create_heightfield` → `add_terrain_layer` (noise → erode → scatter) → `inspect_heightfield` |
 | Set up a pyro simulation | `load_skill("houdini-simulation")` → `create_pyro_source` → `create_simulation_network(simulation_type="pyro")` → `add_gas_field` → `add_pyro_post_process` |

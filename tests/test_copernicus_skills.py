@@ -134,6 +134,11 @@ def test_build_composite_chain_wires_each_step_into_the_previous():
     assert result["success"]
     context = result["context"]
     assert context["node_count"] == 3
+    # The chain ends in an output node and is wired, so only the cook/render steps remain.
+    assert context["required_setup"] == [
+        "cook the chain",
+        "render with houdini_render__render_rop and verify with inspect_cop_output",
+    ]
     # `composite` maps to the Copernicus `blend` node type.
     assert [item["node_type"] for item in context["nodes"]] == ["blur", "blend", "rop_image"]
     assert all(item["wired"] for item in context["nodes"])
@@ -191,11 +196,11 @@ def test_cook_cop_node_reports_cook_state_and_diagnostics():
     assert node.cooks == [("node", True)]
 
 
-def test_cook_cop_node_reports_failure_without_raising():
+def test_cook_cop_node_fails_the_call_when_the_cook_fails():
+    """success mirrors cooked: a failed cook must not read as success."""
     root, geo, hou = scene()
     network = geo.createNode("copnet")
     node = network.createNode("blur")
-    node.reject_create = True
 
     def reject(force=False):
         raise RuntimeError("cook exploded")
@@ -204,7 +209,7 @@ def test_cook_cop_node_reports_failure_without_raising():
     node.error_messages = ["stale error"]
     with patch.dict(sys.modules, {"hou": hou}):
         result = _load("cook_cop_node.py").cook_cop_node(node.path())
-    assert result["success"]
+    assert not result["success"]
     assert result["context"]["cooked"] is False
     assert result["context"]["valid"] is False
     assert "stale error" in result["context"]["errors"]
@@ -266,3 +271,50 @@ def test_inspect_cop_output_reports_unresolved_path():
     assert result["context"]["output_path"] is None
     assert result["context"]["output_path_source"] is None
     assert result["context"]["artifact_exists"] is False
+
+
+def test_build_composite_chain_reports_missing_output_node():
+    root, geo, hou = scene()
+    network = geo.createNode("copnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("build_composite_chain.py").build_composite_chain(
+            network.path(), steps=[{"filter_type": "blur"}]
+        )
+    assert result["success"]
+    assert result["context"]["setup_state"] == "unwired"
+    required = result["context"]["required_setup"]
+    assert "wire an image source into the first node's input 0" in required
+    assert 'add an output node (filter_type="output" → rop_image)' in required
+
+
+def test_inspect_cop_output_expands_frame_tokens(tmp_path):
+    """A path with $F4 is a pattern; stat-ing the literal string would lie."""
+    root, geo, hou = scene()
+    network = geo.createNode("copnet")
+    node = network.createNode("rop_image")
+    for frame in (1, 2, 3):
+        (tmp_path / "comp.{:04d}.exr".format(frame)).write_bytes(b"x" * frame)
+    pattern = str(tmp_path / "comp.$F4.exr")
+    hou.expandString = lambda value: value.replace("$F4", "*")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_cop_output.py").inspect_cop_output(node.path(), output_path=pattern)
+    assert result["success"]
+    context = result["context"]
+    assert context["artifact_exists"] is True
+    assert context["artifact_count"] == 3
+    assert context["expanded_output_path"].endswith("comp.*.exr")
+    assert len(context["artifact_paths"]) == 3
+
+
+def test_inspect_cop_output_survives_unexpandable_tokens(tmp_path):
+    root, geo, hou = scene()
+    network = geo.createNode("copnet")
+    node = network.createNode("rop_image")
+    artifact = tmp_path / "still.exr"
+    artifact.write_bytes(b"abc")
+    hou.expandString = lambda value: (_ for _ in ()).throw(RuntimeError("no expand"))
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("inspect_cop_output.py").inspect_cop_output(node.path(), output_path=str(artifact))
+    assert result["success"]
+    assert result["context"]["expanded_output_path"] == str(artifact)
+    assert result["context"]["artifact_exists"] is True
