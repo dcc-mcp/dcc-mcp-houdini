@@ -38,12 +38,12 @@ def test_configure_light_shadow_applies_first_matching_alias():
     assert result["success"]
     context = result["context"]
     assert context["applied_parameters"] == {"shadowenable": 1, "vm_shadowquality": 4}
-    assert context["unsupported_settings"] == []
+    assert context["skipped_parameters"] == []
     assert context["resolved_names"] == {"enable": "shadowenable", "quality": "vm_shadowquality"}
     assert light.parm("shadowenable").eval() == 1
 
 
-def test_configure_light_shadow_reports_unsupported_settings():
+def test_configure_light_shadow_reports_skipped_parameters():
     root, _geo, hou = scene()
     light = _light(root)
     with patch.dict(sys.modules, {"hou": hou}):
@@ -51,7 +51,7 @@ def test_configure_light_shadow_reports_unsupported_settings():
     assert result["success"]
     context = result["context"]
     assert context["applied_parameters"] == {}
-    assert context["unsupported_settings"] == ["bias"]
+    assert context["skipped_parameters"] == ["bias"]
     assert context["resolved_names"] == {"bias": None}
     assert context["validation_scope"] == "parameter_presence"
 
@@ -66,7 +66,7 @@ def test_configure_light_shadow_mixes_applied_and_unsupported():
         )
     assert result["success"]
     assert result["context"]["applied_parameters"] == {"shadowblur": 0.5}
-    assert result["context"]["unsupported_settings"] == ["distance"]
+    assert result["context"]["skipped_parameters"] == ["distance"]
 
 
 def test_configure_light_shadow_rejects_unknown_setting_name():

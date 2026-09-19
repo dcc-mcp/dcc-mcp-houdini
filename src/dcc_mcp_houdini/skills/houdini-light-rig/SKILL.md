@@ -37,6 +37,17 @@ softboxes, rig grouping, and intensity controls.
 - **`light-rig-query`** (read-only): `get_lighting_summary`, `list_light_rigs`.
 - **`light-rig-shadow`:** `configure_light_shadow` — per-light shadow settings (enable, type, quality, softness, samples, distance, bias, color).
 
+## Naming: `skipped_parameters` is the only name for "not applied"
+
+Every tool in this adapter reports the things it could **not** apply under one
+field name: `skipped_parameters`. Historically three near-synonyms appeared
+(`skipped_parameters`, `unapplied_defaults`, `unsupported_settings`); they are
+equivalent and have been unified. **Do not introduce another name.**
+
+The field is only legitimate when something is actually reported. A tool whose
+parameter overrides go through `parameter_edit` has no skip path at all — the
+call fails instead — and must not carry the field.
+
 ## Rig conventions
 
 - A **light rig** is a null node at `/obj` level whose children are `hlight::2.0`
@@ -78,7 +89,7 @@ reports what it could not apply:
 
 - `applied_parameters` — values that were set and read back, keyed by the Houdini
   parameter name that actually matched.
-- `unsupported_settings` — settings the light has no parameter for. A caller must
+- `skipped_parameters` — settings the light has no parameter for. A caller must
   not read a missing entry as "applied with a default".
 - `resolved_names` — which parameter name each setting mapped to.
 
