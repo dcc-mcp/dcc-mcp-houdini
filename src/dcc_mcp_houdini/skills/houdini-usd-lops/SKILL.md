@@ -36,6 +36,20 @@ metadata:
     tools: tools.yaml
 ---
 
+## Naming: `skipped_parameters` is the only name for "not applied"
+
+Writes that the stage refused are reported as `skipped_parameters`, the same
+field name every other package uses. Do not introduce a synonym.
+
+## Writing to the stage
+
+`set_prim_attributes` closes the read-only gap: the other three tools inspect a
+composed stage, and this one writes attributes and reads them back. Supported
+value types are bool, int, float, string, float2 and float3; anything else fails
+the call rather than being coerced. A write the stage refuses is reported in
+`skipped_parameters`, and `readback_matches` tells the caller whether the values
+read back are the ones written.
+
 # houdini-usd-lops
 
 Read-only inspection of the composed USD Stage returned by a LOP node.

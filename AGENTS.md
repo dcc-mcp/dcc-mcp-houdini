@@ -97,7 +97,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-parameters` | `list_parms`, `get_parms`, `get_parm_templates`, `get_expression`, `set_parms`, `add_spare_parm`, `remove_spare_parm`, `set_expression`, `clear_expression` |
 | `houdini-node-graph` | `get_connections`, `connect_input`, `disconnect_input` |
 | `houdini-geometry` | `create_primitive`, `create_curve_guides`, `get_geometry_info`, `list_attributes`, `get_attribute_values`, `get_primitive_intrinsics`, `list_groups`, `get_cook_status` |
-| `houdini-groom` | `build_short_fur_groom` |
+| `houdini-groom` | `build_short_fur_groom`, `add_groom_step` |
 | `houdini-mesh-ops` | `loft_sections`, `lathe_profile`, `extrude_faces`, `bevel_edges`, `inset`, `bridge_edges`, `boolean_op`, `add_edge_loop`, `array_instances`, `mirror`, `auto_uv`, `uv_project`, `transform_geometry`, `merge_geometry`, `blast_geometry`, `group_geometry`, `add_normals`, `triangulate_geometry`, `convert_geometry` |
 | `houdini-vex` | `create_wrangle`, `update_vex_snippet`, `validate_vex_syntax`, `cook_wrangle`, `diagnose_wrangle`, `get_vex_info`, `list_wrangles` |
 | `houdini-camera-light` | `list_cameras`, `create_camera`, `update_camera`, `frame_view`, `get_view_state`, `create_light`, `update_light` |
@@ -137,7 +137,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 42 skill packages, 288 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
+**Total: 43 skill packages, 293 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
 
 ## Key Env Vars
 
@@ -173,3 +173,4 @@ When adding or changing bundled skills, load the project skill:
 | `packaging/assemble_houdini_package.py` | Quickinstall ZIP builder |
 | `.github/workflows/e2e.yml` | Optional licensed Houdini Docker smoke |
 | `tools/houdini-dev-build-link-core-win.ps1` | Windows dev link |
+| `houdini-crowds` | `create_crowd_network`, `add_crowd_behavior`, `inspect_crowd` |

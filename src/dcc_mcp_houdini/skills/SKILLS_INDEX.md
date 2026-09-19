@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
 | `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
-| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg` | no |
+| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-crowds`, `houdini-pdg` | no |
 
 ## Common chains
 
@@ -29,6 +29,9 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Fracture & constrain rigid bodies | `load_skill("houdini-simulation")` → `create_fracture` → `create_simulation_network(simulation_type="rbd")` → `create_constraint_network` → `create_collision_source` → `validate_simulation_setup` |
 | Bake a UDIM texture set | `load_skill("houdini-uv")` → `inspect_uv` → `load_skill("houdini-texture-bake")` → `list_bake_targets` → `configure_udim_bake` → bake → `inspect_bake_output` |
 | Unwrap and pack UVs | `load_skill("houdini-uv")` → `unwrap_uv` → `transform_uv` (layout) → `inspect_uv` |
+| Simulate a crowd | `load_skill("houdini-crowds")` → `create_crowd_network` → `add_crowd_behavior` (steer → avoid) → `inspect_crowd` |
+| Write USD attributes | `load_skill("houdini-usd-lops")` → `list_stage_prims` → `set_prim_attributes` → `get_prim_attributes` to verify |
+| Add a grooming step | `load_skill("houdini-groom")` → `add_groom_step` |
 | Build a VDB volume chain | `load_skill("houdini-vdb")` → `create_vdb_node` → `combine_vdbs` → `inspect_vdb` |
 | Build a heightfield terrain | `load_skill("houdini-terrain")` → `create_heightfield` → `add_terrain_layer` (noise → erode → scatter) → `inspect_heightfield` |
 | Set up a pyro simulation | `load_skill("houdini-simulation")` → `create_pyro_source` → `create_simulation_network(simulation_type="pyro")` → `add_gas_field` → `add_pyro_post_process` |

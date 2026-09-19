@@ -140,3 +140,33 @@ tools:
     next-tools:
       on-failure:
         - houdini_usd_lops__get_prim_info
+  - name: set_prim_attributes
+    description: Set USD attributes on a stage prim and read them back to confirm the write.
+    source_file: scripts/set_prim_attributes.py
+    execution: sync
+    affinity: main
+    group: authoring
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path, prim_path, attributes]
+      additionalProperties: false
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute path of a LOP node with a composed USD stage.
+        prim_path:
+          type: string
+          description: Absolute USD prim path to write to.
+        attributes:
+          type: object
+          description: Attribute name to value map; bool, int, float, string, float2 and float3 values.
+        time_code:
+          type: number
+          description: USD time code for the write; defaults to Usd.TimeCode.Default().

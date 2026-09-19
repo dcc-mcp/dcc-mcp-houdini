@@ -419,6 +419,7 @@ def test_scan_load_tools_list_and_call_integration(monkeypatch, tmp_path: Path) 
         "houdini_usd_lops__list_stage_prims",
         "houdini_usd_lops__get_prim_info",
         "houdini_usd_lops__get_prim_attributes",
+        "houdini_usd_lops__set_prim_attributes",
     }
 
     host.start()
