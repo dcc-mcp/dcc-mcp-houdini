@@ -37,6 +37,15 @@ def _typed_value(Gf: Any, Sdf: Any, value: Any):
     return None
 
 
+def _remove_properties(prim: Any, names) -> None:
+    """Remove *names* from *prim*, ignoring failures so cleanup cannot throw."""
+    for name in names:
+        try:
+            prim.RemoveProperty(name)
+        except Exception:
+            pass
+
+
 def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, time_code=None) -> dict:
     try:
         import hou
@@ -75,17 +84,19 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
                 attribute = prim.CreateAttribute(name, type_name)
                 created.append(name)
                 if not attribute.Set(usd_value, time):
+                    # A refused write must not leave an attribute that exists
+                    # with a default value: that reads as "written" to a caller
+                    # who only checks that the name is there. Only this one goes;
+                    # the writes that did succeed stay.
                     skipped.append(name)
+                    created.remove(name)
+                    _remove_properties(prim, [name])
                     continue
                 applied[name] = usd_value
         except BaseException:
             # Pre-validation cannot cover everything USD rejects at Set time, and
             # an exception here would otherwise leave the earlier writes in place.
-            for name in reversed(created):
-                try:
-                    prim.RemoveProperty(name)
-                except Exception:
-                    pass
+            _remove_properties(prim, reversed(created))
             raise
 
         readback = {}

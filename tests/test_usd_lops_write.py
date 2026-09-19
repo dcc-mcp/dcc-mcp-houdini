@@ -170,7 +170,12 @@ def test_set_prim_attributes_supports_vector_values():
     assert context["readback_matches"] is True
 
 
-def test_set_prim_attributes_reports_skipped_writes():
+def test_set_prim_attributes_removes_an_attribute_that_could_not_be_written():
+    """A refused write must not leave an attribute holding a default value.
+
+    An attribute that exists with a default reads as "written" to a caller who
+    only checks that the name is present, so it is removed and reported.
+    """
     prim = _Prim(fail_for=("density",))
     hou = _hou_with_stage(_Stage(prim))
     with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
@@ -178,6 +183,21 @@ def test_set_prim_attributes_reports_skipped_writes():
     assert result["success"]
     assert result["context"]["skipped_parameters"] == ["density"]
     assert result["context"]["applied_attributes"] == {}
+    assert prim.attributes == {}
+
+
+def test_set_prim_attributes_keeps_earlier_writes_when_a_later_one_is_refused():
+    """Only the refused attribute is removed; the successful ones stay."""
+    prim = _Prim(fail_for=("density",))
+    hou = _hou_with_stage(_Stage(prim))
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/hero", {"label": "hero", "density": 2.5}
+        )
+    assert result["success"]
+    assert result["context"]["skipped_parameters"] == ["density"]
+    assert result["context"]["applied_attributes"] == {"label": "hero"}
+    assert list(prim.attributes) == ["label"]
 
 
 def test_set_prim_attributes_rejects_unsupported_value_types():
