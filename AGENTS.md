@@ -111,7 +111,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-light-rig` | `create_three_point_light_rig`, `create_area_softbox`, `create_hdri_world`, `list_light_rigs`, `set_light_rig_intensity`, `aim_light_at_object`, `group_lights`, `set_render_view_transform`, `get_lighting_summary` |
 | `houdini-material-library` | `save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management` |
 | `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
-| `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `inspect_cop_network`, `validate_cop_network` |
+| `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network` |
 | `houdini-vdb` | `create_vdb_node`, `combine_vdbs`, `inspect_vdb` |
 | `houdini-terrain` | `create_heightfield`, `add_terrain_layer`, `inspect_heightfield` |
 
@@ -136,7 +136,7 @@ When adding or changing bundled skills, load the project skill:
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
 
-**Total: 41 skill packages, 277 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
+**Total: 41 skill packages, 280 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
 
 ## Key Env Vars
 
