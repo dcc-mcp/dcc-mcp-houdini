@@ -149,30 +149,59 @@ def _find_descendants(entries: Iterable[Tuple[int, int]], ancestor_pids: Set[int
         descendants.update(discovered)
 
 
+def _forget_untrusted_start_times(start_times: Dict[int, Optional[int]], known_pids: Set[int]) -> None:
+    """Drop cached creation times for pids that are not trusted ancestors.
+
+    A cached time only describes the process that held the pid when it was read,
+    and this dictionary lives across snapshots. Once the OS recycles such a pid,
+    a stale entry would reject the genuine descendant that is allocated it next.
+    """
+    for cached_pid in set(start_times).difference(known_pids):
+        del start_times[cached_pid]
+
+
 def _is_recycled_pid(
     kernel32: Any,
     pid: int,
-    claimed_parent_pid: int,
+    descendants: Dict[int, int],
     root_start: Optional[int],
     start_times: Dict[int, Optional[int]],
 ) -> bool:
-    """Report whether *pid* only looks like a descendant because of PID reuse.
+    """Report whether *pid*, or any ancestor it claims, fails the identity check.
 
     A process this adapter spawned cannot have been created before the job root
     or before the parent it claims, so an older creation time proves the match is
     an artefact of a recycled ``th32ParentProcessID`` rather than a real child.
-    Skipping such lookalikes keeps the fail-closed policy below honest: the tree
-    we terminate is the tree we own.
+
+    The check walks the whole claimed chain instead of a single hop: a rejected
+    ancestor has to reject everything below it, otherwise an unrelated orphan's
+    own children would still look like descendants of the job and would still be
+    terminated. The root hop stays permissive when the root creation time cannot
+    be read, because ``subprocess.Popen`` keeps the authoritative root handle and
+    rejecting there would skip every direct child of a healthy job.
     """
     start_time = _cached_start_time(kernel32, pid, start_times)
     if start_time is None:
         return True
-    if root_start is not None and start_time < root_start:
-        return True
-    parent_start = _cached_start_time(kernel32, claimed_parent_pid, start_times)
-    if parent_start is not None and start_time < parent_start:
-        return True
-    return False
+    current = pid
+    current_start = start_time
+    seen = {pid}
+    while True:
+        parent = descendants.get(current)
+        if parent is None:
+            return True
+        parent_start = _cached_start_time(kernel32, parent, start_times)
+        if parent_start is not None and current_start < parent_start:
+            return True
+        if parent not in descendants:
+            return root_start is not None and current_start < root_start
+        if parent_start is None:
+            return True
+        if parent in seen:
+            return True
+        seen.add(parent)
+        current = parent
+        current_start = parent_start
 
 
 def _capture_descendant_handles(
@@ -184,23 +213,31 @@ def _capture_descendant_handles(
 ) -> int:
     """Open every newly discovered descendant, skipping recycled-pid lookalikes.
 
+    Only a pid whose whole claimed ancestry passed the identity check *and*
+    whose handle is held here joins the trusted set used to expand the tree on
+    the next snapshot. A pid that was rejected, or that exited before its handle
+    could be opened, is never treated as an ancestor: its pid can be recycled by
+    the OS between snapshots, and trusting it would capture unrelated processes.
     Processes whose handles cannot be opened still fail closed: a real descendant
     that refuses ``PROCESS_TERMINATE`` keeps raising instead of being ignored.
     """
     start_times = {} if start_times is None else start_times
     descendants = _find_descendants(_snapshot_processes(kernel32), known_pids)
-    new_pids = set(descendants).difference(known_pids)
-    known_pids.update(descendants)
     opened = 0
-    for pid in sorted(new_pids):
-        if _is_recycled_pid(kernel32, pid, descendants[pid], root_start, start_times):
+    for pid in descendants:
+        if pid in known_pids:
+            continue
+        if _is_recycled_pid(kernel32, pid, descendants, root_start, start_times):
+            _forget_untrusted_start_times(start_times, known_pids)
             continue
         handle = kernel32.OpenProcess(_PROCESS_TERMINATE | _SYNCHRONIZE, False, pid)
         if not handle:
             error_code = ctypes.get_last_error()
             if error_code == _ERROR_INVALID_PARAMETER:
+                _forget_untrusted_start_times(start_times, known_pids)
                 continue
             _raise_windows_error("Failed to open an owned background process", error_code)
+        known_pids.add(pid)
         handles[pid] = handle
         opened += 1
     return opened
