@@ -16,6 +16,19 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.40.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.39.0...v0.40.0) (2026-09-19)
+
+
+### Features
+
+* **skills:** add composite chain, cook and output verification to Copernicus ([8457b9b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8457b9b463136bc13bce95f1f8336ae04d17d524))
+* **skills:** add UV package, expand frame tokens in Cop output check, tighten contracts ([c9ed383](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c9ed3837e71e46e382319358cebf9eb9953b415e))
+
+
+### Bug Fixes
+
+* **skills:** drop dead skipped_parameters fields and tighten volume name readback ([7579ef8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7579ef8e36147353639d2d4924844e2bbfbf62e1))
+
 ## [0.39.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.38.0...v0.39.0) (2026-09-19)
 
 
