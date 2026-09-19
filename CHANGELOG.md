@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.43.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.42.0...v0.43.0) (2026-09-19)
+
+
+### Features
+
+* **skills:** light bank and IES configuration, USD write cleanup and shared-helper cleanup ([#316](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/316)) ([44c29b1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/44c29b17c0edebabe3f7d1711f7a4fa599c4fa58))
+
 ## [0.42.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.2...v0.42.0) (2026-09-19)
 
 
