@@ -253,6 +253,50 @@ def test_exited_pid_does_not_anchor_the_next_snapshot() -> None:
     assert known_pids == {100}
 
 
+def test_stale_start_time_does_not_reject_the_recycled_pid_owner() -> None:
+    """A cached creation time must not survive for a pid we never trusted.
+
+    The pid of a rejected lookalike can be recycled by a genuine descendant
+    before the next snapshot. Reusing the stale time would then reject that real
+    descendant and leave it running while the cancellation reports success.
+    """
+    kernel32 = _stub_kernel32(openable=[200])
+    known_pids = {100}
+    start_times: Dict[int, Optional[int]] = {100: 9000}
+    live_times = {200: 1000}
+
+    def _times(_kernel32, pid):
+        return live_times.get(pid, 9500)
+
+    with patch.object(_windows_process, "_process_start_time", side_effect=_times):
+        # First snapshot: 200 is an unrelated process that predates the job.
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100)],
+            known_pids,
+            start_times,
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+        assert opened == 0
+        assert handles == {}
+
+        # Second snapshot: the same pid now belongs to a genuine descendant.
+        live_times[200] = 9500
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100)],
+            known_pids,
+            start_times,
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+
+    assert opened == 1
+    assert sorted(handles) == [200]
+    assert 200 in known_pids
+
+
 def test_rejected_pid_never_becomes_a_trusted_ancestor() -> None:
     """The trusted set may only grow with pids that passed the identity check."""
     kernel32 = _stub_kernel32(openable=[200, 300])

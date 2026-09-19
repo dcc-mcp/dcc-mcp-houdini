@@ -149,6 +149,17 @@ def _find_descendants(entries: Iterable[Tuple[int, int]], ancestor_pids: Set[int
         descendants.update(discovered)
 
 
+def _forget_untrusted_start_times(start_times: Dict[int, Optional[int]], known_pids: Set[int]) -> None:
+    """Drop cached creation times for pids that are not trusted ancestors.
+
+    A cached time only describes the process that held the pid when it was read,
+    and this dictionary lives across snapshots. Once the OS recycles such a pid,
+    a stale entry would reject the genuine descendant that is allocated it next.
+    """
+    for cached_pid in set(start_times).difference(known_pids):
+        del start_times[cached_pid]
+
+
 def _is_recycled_pid(
     kernel32: Any,
     pid: int,
@@ -217,11 +228,13 @@ def _capture_descendant_handles(
         if pid in known_pids:
             continue
         if _is_recycled_pid(kernel32, pid, descendants, root_start, start_times):
+            _forget_untrusted_start_times(start_times, known_pids)
             continue
         handle = kernel32.OpenProcess(_PROCESS_TERMINATE | _SYNCHRONIZE, False, pid)
         if not handle:
             error_code = ctypes.get_last_error()
             if error_code == _ERROR_INVALID_PARAMETER:
+                _forget_untrusted_start_times(start_times, known_pids)
                 continue
             _raise_windows_error("Failed to open an owned background process", error_code)
         known_pids.add(pid)
