@@ -355,7 +355,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (42 packages, 283 tools)
+## Bundled Skills (42 packages, 285 tools)
 
 See [domain coverage and acceptance](docs/guide/domain-capability-coverage.md)
 for implemented behavior, real-host evidence, and remaining domain work.
@@ -394,7 +394,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-kinefx` | `create_rig`, `set_rig_pose`, `capture_joints`, `deform_gsplat_with_rig`, `apply_mocap` |
 | `houdini-light-rig` | `create_three_point_light_rig`, `create_area_softbox`, `create_hdri_world`, `list_light_rigs`, `set_light_rig_intensity`, `aim_light_at_object`, `group_lights`, `set_render_view_transform`, `get_lighting_summary` |
 | `houdini-material-library` | `save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management` |
-| `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps` |
+| `houdini-texture-bake` | `list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps`, `configure_udim_bake`, `inspect_bake_output` |
 | `houdini-copernicus` | `create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network` |
 | `houdini-vdb` | `create_vdb_node`, `combine_vdbs`, `inspect_vdb` |
 | `houdini-uv` | `unwrap_uv`, `transform_uv`, `inspect_uv` |

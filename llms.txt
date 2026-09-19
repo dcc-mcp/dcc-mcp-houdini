@@ -35,7 +35,7 @@ server.list_skills()
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 
-## Bundled tools (42 skills, 283 tools)
+## Bundled tools (42 skills, 285 tools)
 
 ### bootstrap (default)
 - `houdini_scripting__execute_python`, `get_session_info`
@@ -62,7 +62,7 @@ server.list_skills()
 - `houdini_kinefx__create_rig`, `set_rig_pose`, `capture_joints`, `apply_mocap`
 - `houdini_light_rig__create_three_point_light_rig`, `create_area_softbox`, `create_hdri_world`, `list_light_rigs`, `set_light_rig_intensity`, `aim_light_at_object`, `group_lights`, `set_render_view_transform`, `get_lighting_summary`
 - `houdini_material_library__save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management`
-- `houdini_texture_bake__list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps`
+- `houdini_texture_bake__list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps`, `configure_udim_bake`, `inspect_bake_output`
 - `houdini_copernicus__create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network`
 
 ### interchange (load on demand)

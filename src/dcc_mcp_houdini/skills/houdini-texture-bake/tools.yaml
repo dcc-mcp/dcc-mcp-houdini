@@ -222,3 +222,62 @@ tools:
           type: number
           default: 0.1
           description: "Ray search distance when transfer_mode is 'raytrace'."
+  - name: configure_udim_bake
+    description: Configure a bake output for UDIM tiles so a multi-tile bake cannot collapse into one file.
+    source_file: scripts/configure_udim_bake.py
+    execution: sync
+    affinity: main
+    group: bake-setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [rop_path]
+      additionalProperties: false
+      properties:
+        rop_path:
+          type: string
+          description: Absolute path of the bake ROP or Labs Maps Baker node.
+        target_path:
+          type: string
+          description: Geometry to read UDIM tiles from; required when tile_range is omitted.
+        output_path:
+          type: string
+          description: Output path template; the UDIM token is inserted before the extension when absent.
+        tile_range:
+          type: array
+          description: Explicit UDIM tile indices; takes precedence over target_path.
+          items: {type: integer}
+        parameters:
+          type: object
+          description: Strict Houdini parameter overrides; an unknown name fails the call.
+  - name: inspect_bake_output
+    description: Verify baked textures exist on disk, expanding the UDIM token and reporting missing tiles.
+    source_file: scripts/inspect_bake_output.py
+    execution: sync
+    affinity: main
+    group: bake-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [output_path]
+      additionalProperties: false
+      properties:
+        output_path:
+          type: string
+          description: Bake output template, such as /tmp/hero.%(UDIM)d.exr.
+        expected_tiles:
+          type: array
+          description: UDIM tiles that must exist; each is resolved and stat-ed individually.
+          items: {type: integer}

@@ -268,3 +268,59 @@ def volume_readback(geometry, max_names=16, name_attribute=None):
         "names_available": names_available,
         "bounding_box": _bounding_box(geometry),
     }
+
+
+UV_NAME_PREFIX = "uv"
+
+# Bounded so a dense mesh cannot turn an inspection into a long loop.
+MAX_UV_SAMPLES = 20000
+
+
+def uv_attribute_names(geometry, max_names=8):
+    """Names of float UV attributes (size >= 2) on point or vertex, in order."""
+    names = []
+    for accessor in ("pointAttribs", "vertexAttribs"):
+        method = getattr(geometry, accessor, None)
+        if not callable(method):
+            continue
+        try:
+            attributes = method()
+        except Exception:
+            continue
+        for attribute in attributes:
+            try:
+                name = attribute.name()
+                size = attribute.size()
+            except Exception:
+                continue
+            if UV_NAME_PREFIX in name.lower() and size >= 2 and name not in names:
+                names.append(name)
+    return names[:max_names]
+
+
+def uv_values(geometry, name):
+    """Float values of a UV attribute, or ``None`` when they cannot be read."""
+    for accessor in ("pointFloatAttribValues", "vertexFloatAttribValues"):
+        method = getattr(geometry, accessor, None)
+        if not callable(method):
+            continue
+        try:
+            values = method(name)
+        except Exception:
+            continue
+        if isinstance(values, (list, tuple)) and values:
+            return values
+    return None
+
+
+def udim_tiles(values):
+    """UDIM tile indices for sampled UVs: ``1001 + floor(u) + 10 * floor(v)``."""
+    tiles = set()
+    limit = min(len(values) - 1, MAX_UV_SAMPLES * 2)
+    for index in range(0, limit, 2):
+        try:
+            tile = 1001 + int(math.floor(float(values[index]))) + 10 * int(math.floor(float(values[index + 1])))
+        except (TypeError, ValueError):
+            continue
+        tiles.add(tile)
+    return sorted(tiles)

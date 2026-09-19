@@ -3,7 +3,8 @@ name: houdini-texture-bake
 description: >-
   Pipeline stage — bake ambient occlusion, lighting, texture maps (diffuse,
   normals, cavity, curvature etc.) from geometry to image files, list
-  bake-compatible geometry with UV info, and transfer maps from high-res source
+  bake-compatible geometry with UV and UDIM info, configure multi-tile UDIM
+  output, verify baked files landed, and transfer maps from high-res source
   to low-res target. Pair with houdini-render for render output and
   houdini-materials for shader assignment.
 license: MIT
@@ -15,8 +16,8 @@ metadata:
     layer: domain
     stage: pipeline
     version: "1.0.0"
-    tags: [houdini, bake, texture, ao, ambient-occlusion, lighting, normals, transfer-maps, maps-baker, cop, rop]
-    search-hint: "bake texture map, ao ambient occlusion, normal map, transfer maps, high to low, lighting bake, texture baking, list bake targets"
+    tags: [houdini, bake, texture, ao, ambient-occlusion, lighting, normals, transfer-maps, maps-baker, cop, rop, udim]
+    search-hint: "bake texture map, ao ambient occlusion, normal map, transfer maps, high to low, lighting bake, texture baking, list bake targets, udim tile output verify"
     search-aliases: [bake textures, bake lighting, bake ambient occlusion, transfer maps, list bake targets]
     example-prompts:
       - "Bake ambient occlusion for all geometry in the scene"
@@ -75,14 +76,44 @@ When no bake method is detected, tools return a structured diagnostic payload
   or Bake Texture ROP (async, 1800s timeout)
 - **`bake-query`:** `list_bake_targets` — scan geometry for UV-equipped,
   bake-compatible nodes (sync, read-only)
+- **`bake-setup`:** `configure_udim_bake` — configure a bake output for UDIM
+  tiles (sync)
 - **`bake-transfer`:** `transfer_maps` — transfer normals/displacement/diffuse
   from high-res source to low-res target (async, 1200s timeout)
+- **`bake-verify`:** `inspect_bake_output` — verify baked files exist on disk,
+  expanding the UDIM token and naming missing tiles (sync, read-only)
+
+## UDIM support
+
+`list_bake_targets` reports UDIM coverage per target in the same terms
+`houdini_uv__inspect_uv` uses, so the two packages agree on what a tile is:
+
+| Field | Meaning |
+|---|---|
+| `udim_tiles` | Tile indices computed as `1001 + floor(u) + 10 * floor(v)` |
+| `udim_tile_count` | Number of distinct tiles |
+| `udim_detection` | `computed`, `no_values`, `no_uv_sets` or `unavailable` |
+| `needs_udim_output` | True when the geometry spans more than one tile |
+
+When `needs_udim_output` is true, a flat output path silently collapses every
+tile into one file. Use `configure_udim_bake` before baking: it resolves the
+tile set (from `target_path` geometry, or an explicit `tile_range`), inserts the
+`%(UDIM)d` token into the output path when it is missing, and returns the
+concrete per-tile paths. After the bake, `inspect_bake_output` expands the
+token, globs the result and names any tile from `expected_tiles` that is
+missing.
+
+A tile count of 1 is not an error: `needs_udim_output` stays false and the
+output path is left flat.
 
 ## Context limitations
 
 - **UV requirement:** Bake Texture ROP and Labs Maps Baker both require the
   target geometry to have non-degenerate UVs. `list_bake_targets` reports
   `has_uvs` so callers can verify before baking.
+- **UDIM requires explicit configuration:** the bake writers do not infer tile
+  layout from the geometry, so `configure_udim_bake` must run before a
+  multi-tile bake.
 - **Renderer selection:** `bake_lighting` supports `mantra` (default) and
   `karma`. Karma requires a valid XPU/CPU license.
 - **Labs Maps Baker:** Install via `sidefx_labs` package or Houdini Game Dev
@@ -96,3 +127,15 @@ When no bake method is detected, tools return a structured diagnostic payload
 3. `bake_textures(rop_path="/out/bake_maps", objects=["/obj/character"], map_types=["normals", "cavity", "diffuse"])`
 4. `bake_lighting(rop_path="/out/bake_light", camera="/obj/rendercam", objects=["/obj/building"])`
 5. `transfer_maps(source="/obj/high_res", target="/obj/low_res", map_types=["normals", "displacement"])`
+
+## UDIM flow
+
+1. `list_bake_targets()` → pick targets whose `needs_udim_output` is true
+2. `configure_udim_bake(rop_path="/out/bake_maps", target_path="/obj/character", output_path="/tmp/hero.exr")`
+   → reports `output_paths` such as `/tmp/hero.1001.exr`, `/tmp/hero.1002.exr`
+3. bake with the existing bake tools
+4. `inspect_bake_output(output_path="/tmp/hero.%(UDIM)d.exr", expected_tiles=[1001, 1002])`
+
+`configure_udim_bake` reports `unapplied_defaults` for the defaults it could
+not seed (bake writers differ in which parameters they expose); caller-supplied
+`parameters` are strict and fail the call on an unknown name.
