@@ -16,6 +16,14 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.39.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.38.0...v0.39.0) (2026-09-19)
+
+
+### Features
+
+* **skills:** add POP particle package and rigid-body simulation building blocks ([467a359](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/467a359eaa17800f3c4c3db539adb6dfa7c94b47))
+* **skills:** add VDB volume and heightfield terrain packages with pyro building blocks ([e1818b5](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e1818b568ffd0c1292de247fde6308f713e3e41d))
+
 ## [0.38.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.37.0...v0.38.0) (2026-09-10)
 
 
