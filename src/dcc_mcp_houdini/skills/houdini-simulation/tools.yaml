@@ -95,3 +95,109 @@ tools:
         simulation_type:
           type: string
           enum: [pyro, flip, rbd, vellum]
+  - name: create_fracture
+    description: Create a fracture SOP (voronoi, boolean or RBD material fracture) and optionally wire its source.
+    source_file: scripts/create_fracture.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, fracture_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: Absolute path of a SOP network that will host the fracture node.
+        fracture_type:
+          type: string
+          enum: [voronoi, boolean, material]
+        source_path:
+          type: string
+          description: Absolute path of the geometry to fracture; wired into input 0 when given.
+        node_name:
+          type: string
+          default: fracture1
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: create_constraint_network
+    description: Create a DOP constraint network with an optional glue, soft, wire or cone-twist relationship SOP.
+    source_file: scripts/create_constraint_network.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [dopnet_path, constraint_type]
+      additionalProperties: false
+      properties:
+        dopnet_path:
+          type: string
+          description: Absolute path of a DOP network.
+        constraint_type:
+          type: string
+          enum: [glue, soft, wire, cone]
+        network_name:
+          type: string
+          default: constraintnetwork1
+        relationship_parent:
+          type: string
+          description: Absolute path of a SOP network that hosts the relationship SOP.
+        relationship_name:
+          type: string
+          description: Relationship SOP name; defaults to the constraint type.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.
+  - name: create_collision_source
+    description: Create a DOP collision object bound to a SOP path and attach it to the solver.
+    source_file: scripts/create_collision_source.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [dopnet_path, source_path]
+      additionalProperties: false
+      properties:
+        dopnet_path:
+          type: string
+          description: Absolute path of a DOP network.
+        source_path:
+          type: string
+          description: Absolute SOP path of the collision geometry.
+        collision_type:
+          type: string
+          enum: [static, deforming]
+          default: static
+        node_name:
+          type: string
+          default: staticobject1
+        connect_to:
+          type: string
+          description: Absolute path of the node to attach to; defaults to the first solver in the network.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides.

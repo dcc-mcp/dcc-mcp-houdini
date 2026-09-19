@@ -8,7 +8,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-mesh-ops`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-material-library`, `houdini-hda`, `houdini-light-rig`, `houdini-copernicus` | no |
 | `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
-| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-pdg` | no |
+| `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-pdg` | no |
 
 ## Common chains
 
@@ -26,6 +26,8 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Create & inspect geometry | `load_skill("houdini-geometry")` → `houdini_geometry__create_primitive` or bounded `houdini_geometry__create_curve_guides` → `houdini_geometry__get_geometry_info` → `houdini_geometry__list_attributes` / `houdini_geometry__list_groups` |
 | Model typed SOP geometry | `load_skill("houdini-mesh-ops")` → `loft_sections` / `lathe_profile` / `extrude_faces` / `bevel_edges` / `bridge_edges` / `boolean_op` / `add_edge_loop` / `array_instances` / `mirror` / `auto_uv` / `uv_project` → inspect returned readback → `houdini_geometry__get_cook_status` |
 | Create a DOP solver skeleton | `load_skill("houdini-simulation")` → `create_simulation_network(simulation_type="pyro"|"flip"|"rbd"|"vellum")` → `configure_simulation_solver` → `inspect_simulation_network` → `validate_simulation_setup` |
+| Fracture & constrain rigid bodies | `load_skill("houdini-simulation")` → `create_fracture` → `create_simulation_network(simulation_type="rbd")` → `create_constraint_network` → `create_collision_source` → `validate_simulation_setup` |
+| Build a POP particle network | `load_skill("houdini-particles")` → `create_pop_network` → `configure_pop_source` → `add_particle_force` / `add_particle_behavior` → `inspect_particles` |
 | Create & debug VEX wrangles | `load_skill("houdini-vex")` → `houdini_vex__validate_vex_syntax` → `houdini_vex__create_wrangle` → `houdini_vex__cook_wrangle` → `houdini_vex__diagnose_wrangle` / `houdini_vex__get_vex_info` |
 | Set up cameras & lights | `load_skill("houdini-camera-light")` → `houdini_camera_light__create_camera` → `houdini_camera_light__create_light` → `houdini_camera_light__frame_view` |
 | Three-point studio lighting | `load_skill("houdini-light-rig")` → `create_three_point_light_rig` → `aim_light_at_object` → `set_light_rig_intensity` → `get_lighting_summary` |

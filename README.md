@@ -355,7 +355,7 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
-## Bundled Skills (38 packages, 259 tools)
+## Bundled Skills (39 packages, 268 tools)
 
 See [domain coverage and acceptance](docs/guide/domain-capability-coverage.md)
 for implemented behavior, real-host evidence, and remaining domain work.
@@ -413,7 +413,8 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-animation` | `get_timeline`, `set_timeline`, `set_keyframe`, `get_keyframes`, `delete_keyframes`, `list_animated_parms`, `validate_loop_contract`, `get_channel_info`, `export_channels`, `import_channels`, `bake_channels`, `cache_simulation` |
 | `houdini-hda-automation` | `scan_hda_libraries`, `inspect_hda_definition`, `instantiate_hda`, `validate_hda`, `cook_top_network`, `execute_rop_chain` |
 | `houdini-pdg` | `create_pdg_network`, `create_pdg_node`, `connect_pdg_nodes`, `inspect_pdg_graph`, `cook_pdg_graph` |
-| `houdini-simulation` | `create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup` |
+| `houdini-simulation` | `create_simulation_network`, `configure_simulation_solver`, `inspect_simulation_network`, `validate_simulation_setup`, `create_fracture`, `create_constraint_network`, `create_collision_source` |
+| `houdini-particles` | `create_pop_network`, `configure_pop_source`, `add_particle_force`, `add_particle_behavior`, `inspect_particles` |
 | `houdini-pipeline` | `set_project`, `get_project`, `tag_asset_metadata`, `get_asset_metadata`, `validate_scene`, `collect_dependencies`, `export_shot_package` |
 | `houdini-dev` | `attach_project`, `reload_modules`, `run_entrypoint`, `run_script`, `start_debugpy`, `introspect_hom`, `ui_snapshot`, `ui_action` |
 | `houdini-automation` | `run_python_file`, `set_frame_range`, `save_hip_file`, `load_hip_file`, `build_node_chain` |
