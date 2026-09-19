@@ -202,11 +202,13 @@ def _capture_descendant_handles(
 ) -> int:
     """Open every newly discovered descendant, skipping recycled-pid lookalikes.
 
-    Only a pid whose whole claimed ancestry passed the identity check joins the
-    trusted set used to expand the tree on the next snapshot; a rejected pid is
-    never treated as an ancestor. Processes whose handles cannot be opened still
-    fail closed: a real descendant that refuses ``PROCESS_TERMINATE`` keeps
-    raising instead of being ignored.
+    Only a pid whose whole claimed ancestry passed the identity check *and*
+    whose handle is held here joins the trusted set used to expand the tree on
+    the next snapshot. A pid that was rejected, or that exited before its handle
+    could be opened, is never treated as an ancestor: its pid can be recycled by
+    the OS between snapshots, and trusting it would capture unrelated processes.
+    Processes whose handles cannot be opened still fail closed: a real descendant
+    that refuses ``PROCESS_TERMINATE`` keeps raising instead of being ignored.
     """
     start_times = {} if start_times is None else start_times
     descendants = _find_descendants(_snapshot_processes(kernel32), known_pids)
@@ -216,13 +218,13 @@ def _capture_descendant_handles(
             continue
         if _is_recycled_pid(kernel32, pid, descendants, root_start, start_times):
             continue
-        known_pids.add(pid)
         handle = kernel32.OpenProcess(_PROCESS_TERMINATE | _SYNCHRONIZE, False, pid)
         if not handle:
             error_code = ctypes.get_last_error()
             if error_code == _ERROR_INVALID_PARAMETER:
                 continue
             _raise_windows_error("Failed to open an owned background process", error_code)
+        known_pids.add(pid)
         handles[pid] = handle
         opened += 1
     return opened

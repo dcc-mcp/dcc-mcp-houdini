@@ -194,6 +194,65 @@ def test_root_hop_stays_permissive_when_the_root_time_is_unknown() -> None:
     assert sorted(handles) == [200]
 
 
+def test_pid_that_exited_before_opening_is_not_a_trusted_ancestor() -> None:
+    """A pid whose handle never opened must not join the trusted ancestor set.
+
+    ``ERROR_INVALID_PARAMETER`` means the process exited between the snapshot and
+    ``OpenProcess``. The deadline loop reuses the same ``known_pids``, so a pid
+    kept here after a failed open can be recycled by the OS and then anchor the
+    next snapshot with unrelated processes below it.
+    """
+    kernel32 = _stub_kernel32()
+    known_pids = {100}
+
+    with patch.object(_windows_process, "_process_start_time", return_value=9500):
+        opened, handles = _capture(
+            kernel32,
+            [(200, 100)],
+            known_pids,
+            {100: 9000},
+            _windows_process._ERROR_INVALID_PARAMETER,
+            root_start=9000,
+        )
+
+    assert opened == 0
+    assert handles == {}
+    assert known_pids == {100}
+
+
+def test_exited_pid_does_not_anchor_the_next_snapshot() -> None:
+    """The next snapshot must not discover anything below an exited pid.
+
+    First pass: 200 clears the ancestry check but exits before its handle opens.
+    Second pass: 300 claims 200 as parent. Because 200 was never trusted, 300 is
+    not part of the job tree and must not be opened or terminated.
+    """
+    kernel32 = _stub_kernel32(openable=[300])
+    known_pids = {100}
+
+    with patch.object(_windows_process, "_process_start_time", return_value=9500):
+        _capture(
+            kernel32,
+            [(200, 100)],
+            known_pids,
+            {100: 9000},
+            _windows_process._ERROR_INVALID_PARAMETER,
+            root_start=9000,
+        )
+        opened, handles = _capture(
+            kernel32,
+            [(300, 200)],
+            known_pids,
+            {100: 9000},
+            _windows_process._ERROR_ACCESS_DENIED,
+            root_start=9000,
+        )
+
+    assert opened == 0
+    assert handles == {}
+    assert known_pids == {100}
+
+
 def test_rejected_pid_never_becomes_a_trusted_ancestor() -> None:
     """The trusted set may only grow with pids that passed the identity check."""
     kernel32 = _stub_kernel32(openable=[200, 300])
