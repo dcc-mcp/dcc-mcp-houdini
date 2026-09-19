@@ -205,6 +205,9 @@ def test_configure_udim_bake_keeps_flat_path_for_single_tile():
     assert result["context"]["udim_tiles"] == [1001]
     assert result["context"]["needs_udim_output"] is False
     assert result["context"]["output_path"] == "/tmp/hero.exr"
+    # Unseedable defaults are reported under the repo-wide field name.
+    assert result["context"]["skipped_parameters"] == ["output_path"]
+    assert "unapplied_defaults" not in result["context"]
 
 
 def test_configure_udim_bake_honours_explicit_tile_range():
@@ -493,3 +496,68 @@ def uv_attribute_names_fn(geometry):
     from dcc_mcp_houdini._domain_graph import uv_attribute_names
 
     return uv_attribute_names(geometry)
+
+
+# ---------------------------------------------------------------------------
+# Regressions: one UV convention across the bake payload, and atomic parm writes
+# ---------------------------------------------------------------------------
+
+
+def test_bake_geometry_info_rejects_a_substring_uv_match():
+    """`flowuv` is not a UV set, so the payload must not claim bake_ready.
+
+    bake_geometry_info used to derive uv_layers with a substring test that
+    accepted `flowuv`, which produced bake_ready=true sitting next to
+    udim_detection=no_uv_sets in the same payload.
+    """
+    root, _geo, hou = _scene_with_attrib_data()
+    node = root.createNode("geo", "flowy")
+    node.displayNode = lambda: _DisplayNode(
+        SimpleNamespace(
+            pointAttribs=lambda: [_attribute("P", 3), _attribute("flowuv", 3)],
+            vertexAttribs=list,
+            iterPrims=lambda: [object()],
+        )
+    )
+    common = _load("_texture_bake_common.py")
+    with patch.dict(sys.modules, {"hou": hou}):
+        info = common.bake_geometry_info(hou, node.path())
+    assert info["uv_layers"] == []
+    assert info["has_uvs"] is False
+    assert info["bake_ready"] is False
+    assert info["primitive_count"] == 1
+    assert info["udim_detection"] == "no_uv_sets"
+
+
+def test_configure_udim_bake_does_not_partially_write_a_pre_existing_rop():
+    """An unknown parameter name must fail the call before anything is written."""
+    root, _geo, hou = scene()
+    existing = _bake_rop(root)
+    before = existing.parm("size").eval()
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("configure_udim_bake.py").configure_udim_bake(
+            "/obj/out/bake_maps", tile_range=[1001], parameters={"size": 2, "bogus": 1}
+        )
+    assert not result["success"]
+    assert "bogus" in skill_error_detail(result)
+    assert existing.parm("size").eval() == before
+
+
+def test_configure_udim_bake_rolls_back_a_pre_existing_rop_when_a_write_fails():
+    """A parm that rejects its value must not leave the earlier writes behind."""
+    root, _geo, hou = scene()
+    out = root.createNode("ropnet", "out")
+    existing = out.createNode("baker", "bake_maps")
+    before = existing.parm("size").eval()
+    existing.parm("timescale").fail_next_set = True
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("configure_udim_bake.py").configure_udim_bake(
+            "/obj/out/bake_maps", tile_range=[1001], parameters={"size": 2, "timescale": 3}
+        )
+    assert not result["success"]
+    assert "parameter rejected" in skill_error_detail(result)
+    # The ROP survives and carries its entry values, not a half-applied config.
+    assert out.children() == (existing,)
+    assert existing.destroyed is False
+    assert existing.parm("size").eval() == before
+    assert existing.parm("timescale").eval() == 1

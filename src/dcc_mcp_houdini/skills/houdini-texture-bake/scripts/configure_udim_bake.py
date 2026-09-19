@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, List, Optional, Tuple
 
 from _texture_bake_common import (
     UDIM_TOKEN,
@@ -50,24 +50,108 @@ def _resolved_output(output_path: str, tiles) -> str:
     return (root if dot else output_path) + "." + UDIM_TOKEN + (dot + extension if dot else "")
 
 
+def _parm_exists(rop: Any, name: str, value: Any) -> bool:
+    """True when *rop* exposes *name* as a parm of the shape *value* needs."""
+    if isinstance(value, (list, tuple)):
+        return rop.parmTuple(name) is not None
+    return rop.parm(name) is not None
+
+
+def _first_existing(rop: Any, names: Tuple[str, ...]) -> Optional[str]:
+    """First name in *names* that *rop* exposes, or None."""
+    for name in names:
+        if rop.parm(name) is not None:
+            return name
+    return None
+
+
+def _parm_value(rop: Any, name: str, value: Any) -> Any:
+    """Current value of *name*, so a failed write can put it back."""
+    if isinstance(value, (list, tuple)):
+        return tuple(rop.parmTuple(name).eval())
+    return rop.parm(name).eval()
+
+
+def _restore_parms(rop: Any, entries) -> List[str]:
+    """Restore every snapshotted parm; return the names that could not be.
+
+    Keeps going after a failure so one stubborn parm does not leave the others
+    half-restored.
+    """
+    unrestored = []
+    for name, value, original in entries:
+        try:
+            if isinstance(value, (list, tuple)):
+                rop.parmTuple(name).set(original)
+            else:
+                rop.parm(name).set(original)
+        except Exception:
+            unrestored.append(name)
+    return unrestored
+
+
+def _plan_writes(rop: Any, overrides: dict, resolved_output: str, tiles) -> Tuple[list, List[str]]:
+    """Resolve the writes this request will make, before making any of them.
+
+    Returns ``(planned, skipped_parameters)``. Caller overrides come first and
+    are strict; the seeded defaults only take the first parm the ROP actually
+    exposes, and a default with no home is reported instead of failing.
+    """
+    planned = list(overrides.items())
+    skipped = []
+    if resolved_output:
+        output_parm = _first_existing(rop, OUTPUT_PATH_PARMS)
+        if output_parm is None:
+            skipped.append("output_path")
+        else:
+            planned.append((output_parm, resolved_output))
+        if len(tiles) > 1:
+            range_parm = _first_existing(rop, BAKE_RANGE_PARMS)
+            if range_parm is None:
+                skipped.append("bake_range")
+            else:
+                planned.append((range_parm, 1))
+    return planned, skipped
+
+
+def _apply_writes(rop: Any, planned) -> None:
+    """Write every planned parm as one transaction.
+
+    Every name is validated before anything is written, so an unknown caller
+    name fails the call without touching the ROP. Each parm's previous value is
+    snapshotted first, so a setter that raises part-way leaves a pre-existing
+    ROP exactly as it was found instead of half-configured.
+    """
+    missing = [str(name) for name, value in planned if not _parm_exists(rop, name, value)]
+    if missing:
+        raise ValueError("Parameter not found: {}".format(", ".join(sorted(missing))))
+
+    entries = [(name, value, _parm_value(rop, name, value)) for name, value in planned]
+    try:
+        for name, value, _original in entries:
+            set_parm_if_exists(rop, name, value)
+    except BaseException as exc:
+        unrestored = _restore_parms(rop, entries)
+        if unrestored:
+            raise ValueError(
+                "Failed to configure UDIM bake ({}) and could not roll back: {}".format(
+                    exc, ", ".join(sorted(str(name) for name in unrestored))
+                )
+            ) from exc
+        raise
+
+
 def _apply(rop: Any, tiles, source: str, target_path: str, output_path: str, overrides: dict, methods: dict) -> dict:
     """Apply the resolved configuration.
 
     Runs inside the caller's rollback: any exception propagates so a ROP this
-    request created is destroyed, while a pre-existing ROP is left alone.
+    request created is destroyed. A pre-existing ROP is not destroyed, so the
+    parm writes here are their own transaction and are rolled back to the values
+    they had on entry.
     """
-    # Caller overrides are strict: an unknown name fails the call.
-    for name, value in overrides.items():
-        if not set_parm_if_exists(rop, name, value):
-            raise ValueError("Parameter not found: {}".format(name))
-
     resolved_output = _resolved_output(output_path, tiles)
-    unapplied_defaults = []
-    if output_path:
-        if not any(set_parm_if_exists(rop, name, resolved_output) for name in OUTPUT_PATH_PARMS):
-            unapplied_defaults.append("output_path")
-        if len(tiles) > 1 and not any(set_parm_if_exists(rop, name, 1) for name in BAKE_RANGE_PARMS):
-            unapplied_defaults.append("bake_range")
+    planned, skipped_parameters = _plan_writes(rop, overrides, resolved_output, tiles)
+    _apply_writes(rop, planned)
 
     paths = bake_output_paths(resolved_output, tiles) if resolved_output else []
     return skill_success(
@@ -80,7 +164,7 @@ def _apply(rop: Any, tiles, source: str, target_path: str, output_path: str, ove
         needs_udim_output=len(tiles) > 1,
         output_path=resolved_output,
         output_paths=paths,
-        unapplied_defaults=unapplied_defaults,
+        skipped_parameters=skipped_parameters,
         available_methods=methods.get("available_methods", []),
     )
 
