@@ -2,10 +2,11 @@
 
 from contextlib import ExitStack
 
-from _simulation_common import SOLVER_TYPES, solver_base_type, validate_simulation_type
+from _simulation_common import SOLVER_TYPES, validate_simulation_type
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
+    base_node_type,
     get_node,
     hou_missing_error,
     owned_node,
@@ -40,7 +41,7 @@ def create_simulation_network(
             if created_solver:
                 solver = stack.enter_context(owned_node(network, SOLVER_TYPES[kind], solver_name))
             require_category(solver, "Dop")
-            if solver_base_type(solver.type().name()) != SOLVER_TYPES[kind]:
+            if base_node_type(solver.type().name()) != SOLVER_TYPES[kind]:
                 raise ValueError("Existing solver has a different type")
             applied = stack.enter_context(parameter_edit(solver, parameters))
             return skill_success(

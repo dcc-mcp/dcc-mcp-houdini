@@ -2,10 +2,11 @@
 
 from contextlib import ExitStack
 
-from _particles_common import SOLVER_NAME, base_type
+from _particles_common import SOLVER_NAME
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 from dcc_mcp_houdini._domain_graph import (
+    base_node_type,
     get_node,
     hou_missing_error,
     node_summary,
@@ -46,7 +47,7 @@ def create_pop_network(
             created_solver = solver is None
             if created_solver:
                 solver = stack.enter_context(owned_node(network, SOLVER_NAME, solver_name))
-            if base_type(solver.type().name()) != SOLVER_NAME:
+            if base_node_type(solver.type().name()) != SOLVER_NAME:
                 raise ValueError("Existing node is not a POP solver: {}".format(solver.path()))
             pop_object = network.node(object_name)
             if pop_object is None:

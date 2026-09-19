@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from _simulation_common import SOLVER_TYPES, solver_base_type, validate_simulation_type
+from _simulation_common import SOLVER_TYPES, validate_simulation_type
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
-from dcc_mcp_houdini._domain_graph import get_node, hou_missing_error, node_summary, require_category
+from dcc_mcp_houdini._domain_graph import base_node_type, get_node, hou_missing_error, node_summary, require_category
 
 
 def validate_simulation_setup(network_path: str, simulation_type: str = None) -> dict:
@@ -24,7 +24,7 @@ def validate_simulation_setup(network_path: str, simulation_type: str = None) ->
             summary = node_summary(child)
             child_errors.extend("{}: {}".format(child.path(), error) for error in summary["errors"])
             child_warnings.extend("{}: {}".format(child.path(), warning) for warning in summary["warnings"])
-            if solver_base_type(summary["type"]).lower().endswith("solver"):
+            if base_node_type(summary["type"]).lower().endswith("solver"):
                 solver_children.append(summary)
                 if not child.inputs() or not any(child.inputs()):
                     child_errors.append("{}: solver has no object/source input".format(child.path()))
@@ -34,7 +34,7 @@ def validate_simulation_setup(network_path: str, simulation_type: str = None) ->
         warnings.extend(child_warnings)
         if not solver_children:
             errors.append("No simulation solver found in DOP network")
-        if expected and not any(solver_base_type(item["type"]) == SOLVER_TYPES[expected] for item in solver_children):
+        if expected and not any(base_node_type(item["type"]) == SOLVER_TYPES[expected] for item in solver_children):
             errors.append("Expected {} solver ({}) was not found".format(expected, SOLVER_TYPES[expected]))
         return skill_success(
             "Validated simulation setup",
