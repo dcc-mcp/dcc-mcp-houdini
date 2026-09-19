@@ -35,6 +35,7 @@ softboxes, rig grouping, and intensity controls.
 - **`light-rig-edit`:** `aim_light_at_object`, `set_light_rig_intensity`,
   `group_lights`, `set_render_view_transform`.
 - **`light-rig-query`** (read-only): `get_lighting_summary`, `list_light_rigs`.
+- **`light-rig-shadow`:** `configure_light_shadow` — per-light shadow settings (enable, type, quality, softness, samples, distance, bias, color).
 
 ## Rig conventions
 
@@ -68,3 +69,18 @@ softboxes, rig grouping, and intensity controls.
 6. `set_render_view_transform(view_transform="ACES 1.0 - SDR Video")`
 7. `set_light_rig_intensity(rig_group="/obj/studio_rig", intensity=1.5, multiply=true)`
 8. Hand off to `houdini-render` for viewport capture / ROP render
+
+## Shadow configuration
+
+Light types differ in which shadow parameters they expose, so
+`configure_light_shadow` resolves each setting against a small alias list and
+reports what it could not apply:
+
+- `applied_parameters` — values that were set and read back, keyed by the Houdini
+  parameter name that actually matched.
+- `unsupported_settings` — settings the light has no parameter for. A caller must
+  not read a missing entry as "applied with a default".
+- `resolved_names` — which parameter name each setting mapped to.
+
+An unsupported setting name (anything outside the eight supported keys) fails the
+call rather than being ignored.

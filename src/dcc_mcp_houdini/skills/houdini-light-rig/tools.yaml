@@ -393,3 +393,46 @@ tools:
       on-success:
         - houdini_light_rig__aim_light_at_object
         - houdini_light_rig__get_lighting_summary
+  - name: configure_light_shadow
+    description: Apply bounded shadow settings (enable, type, quality, softness, samples, distance, bias, color) to a light.
+    source_file: scripts/configure_light_shadow.py
+    execution: sync
+    affinity: main
+    group: setup
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [light_path, settings]
+      additionalProperties: false
+      properties:
+        light_path:
+          type: string
+          description: Absolute path of an existing light node.
+        settings:
+          type: object
+          description: Shadow settings to apply.
+          additionalProperties: false
+          properties:
+            enable:
+              type: [boolean, integer]
+            type:
+              type: string
+            quality:
+              type: number
+            softness:
+              type: number
+            samples:
+              type: number
+            distance:
+              type: number
+            bias:
+              type: number
+            color:
+              type: array
+              items: {type: number}

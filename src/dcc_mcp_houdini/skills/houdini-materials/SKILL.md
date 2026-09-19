@@ -44,6 +44,25 @@ metadata:
 
 # houdini-materials
 
+## Authoring an arbitrary MaterialX graph
+
+`build_materialx_pbr` produces a fixed standard-surface material. To go beyond
+that preset, add nodes into the MaterialX subnetwork and wire them with the
+existing lookdev tools:
+
+1. `create_materialx_node(material_path="/mat/materialx_pbr", node_type="mtlximage")`
+2. `houdini_lookdev__connect_shader(node_path=..., source_path=...)` to wire the
+   node into the surface graph
+3. `inspect_materialx_graph(material_path="/mat/materialx_pbr")` to read back the
+   node inventory, the input wiring and any node that is still unwired
+4. `validate_materialx_pbr(material_path=...)` to confirm the material still
+   compiles for Karma
+
+`inspect_materialx_graph` inspects structure only: it reports
+`validation_scope="graph_structure"` and `compiled=false`, because reading a node
+list does not tell you whether the material renders.
+
+
 Typed material authoring for Houdini scenes. Use `create_material` for material
 network nodes and `assign_material` for renderable OBJ/SOP nodes with a material
 path parameter. Use `build_materialx_pbr` for a complete MaterialX Builder with
