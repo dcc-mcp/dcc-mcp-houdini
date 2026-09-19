@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.42.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.2...v0.42.0) (2026-09-19)
+
+
+### Features
+
+* **skills:** add crowd package, USD attribute writes and single grooming steps ([49f7fae](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/49f7faebe3d99e04863cb05a172cb9cec47c7f6a))
+
 ## [0.41.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.1...v0.41.2) (2026-09-19)
 
 
