@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.41.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.1...v0.41.2) (2026-09-19)
+
+
+### Bug Fixes
+
+* **windows:** validate the claimed ancestry and trust a pid only once its handle is open ([7bfa7f7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/7bfa7f7b29dd8cfa63541bc6721c2d8b51e32c23))
+
 ## [0.41.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.41.0...v0.41.1) (2026-09-19)
 
 
