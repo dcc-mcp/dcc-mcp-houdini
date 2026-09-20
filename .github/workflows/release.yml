@@ -1,8 +1,20 @@
 name: Release
 
+# Batched release cadence.
+#
+# release-please runs on a fixed daily window instead of on every push to main,
+# so a single version carries every feat/fix merged since the previous tag
+# rather than one version per merge. `workflow_dispatch` stays available as the
+# emergency release and asset-backfill channel.
+#
+# release-please creates tags from merged-but-untagged release PRs, so the
+# GitHub Release is cut on the first window after the release PR is merged
+# instead of on the merge push itself.
 on:
-  push:
-    branches: [main]
+  schedule:
+    # 05:37 UTC daily. Deliberately off the hour: GitHub queues scheduled runs
+    # and on-the-hour crons are the most delayed during peak load.
+    - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:
       tag_name:
