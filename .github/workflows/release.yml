@@ -14,6 +14,11 @@ on:
   schedule:
     # 05:37 UTC daily. Deliberately off the hour: GitHub queues scheduled runs
     # and on-the-hour crons are the most delayed during peak load.
+    #
+    # CONTRACT: this window must stay AFTER the dcc-mcp-core release window
+    # (01:13 UTC). Quickinstall assets resolve the newest compatible core from
+    # PyPI, so moving this window ahead of core would silently package a stale
+    # core. Re-check both crons together when either one changes.
     - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:

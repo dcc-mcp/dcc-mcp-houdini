@@ -355,6 +355,14 @@ manually with `tag_name=vX.Y.Z` and `publish_to_pypi=true`. Publishing uses
 PyPI trusted publishing when configured, or `PYPI_API_TOKEN` when that secret is
 available.
 
+`release-please` runs on a **daily batch window** (05:37 UTC) rather than on
+every push to `main`, so one version carries every `feat` / `fix` merged since
+the previous tag instead of cutting a version per merge. Merging the release
+pull request does not tag immediately: the tag, GitHub Release, PyPI upload and
+quickinstall assets are produced on the first window after the merge, up to 24
+hours later. To ship sooner, trigger the Release workflow manually with
+`workflow_dispatch` after merging the release PR.
+
 ## Bundled Skills (43 packages, 295 tools)
 
 See [domain coverage and acceptance](docs/guide/domain-capability-coverage.md)
