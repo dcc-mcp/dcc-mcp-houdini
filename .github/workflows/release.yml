@@ -16,9 +16,11 @@ on:
     # and on-the-hour crons are the most delayed during peak load.
     #
     # CONTRACT: this window must stay AFTER the dcc-mcp-core release window
-    # (01:13 UTC). Quickinstall assets resolve the newest compatible core from
-    # PyPI, so moving this window ahead of core would silently package a stale
-    # core. Re-check both crons together when either one changes.
+    # (01:13 UTC, defined by the schedule cron in dcc-mcp-core's own
+    # .github/workflows/release.yml). Quickinstall assets resolve the newest
+    # compatible core from PyPI, so moving this window ahead of core would
+    # silently package a stale core. Re-check both crons together when either
+    # one changes.
     - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:
