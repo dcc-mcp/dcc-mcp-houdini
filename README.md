@@ -359,9 +359,10 @@ available.
 every push to `main`, so one version carries every `feat` / `fix` merged since
 the previous tag instead of cutting a version per merge. Merging the release
 pull request does not tag immediately: the tag, GitHub Release, PyPI upload and
-quickinstall assets are produced on the first window after the merge, up to 24
-hours later. To ship sooner, trigger the Release workflow manually with
-`workflow_dispatch` after merging the release PR.
+quickinstall assets are produced on the **next daily window** after the merge
+(typically within 24 hours, plus any GitHub scheduling delay — GitHub queues
+and can drop scheduled runs under load). To ship sooner, trigger the Release
+workflow manually with `workflow_dispatch` after merging the release PR.
 
 ## Bundled Skills (43 packages, 295 tools)
 
