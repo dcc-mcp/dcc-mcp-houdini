@@ -435,6 +435,33 @@ def test_report_schema_version_survives_schema_read_failure(monkeypatch, error):
     assert _installer.report_schema_version() == _installer.FALLBACK_REPORT_SCHEMA_VERSION
 
 
+@pytest.mark.parametrize(
+    "document",
+    [
+        None,
+        [],
+        '{"properties": {}}',
+        {},
+        {"properties": []},
+        {"properties": {"schema_version": []}},
+        {"properties": {"schema_version": {}}},
+        {"properties": {"schema_version": {"const": "1"}}},
+        {"properties": {"schema_version": {"const": True}}},
+    ],
+)
+def test_report_schema_version_survives_malformed_document(monkeypatch, document):
+    """A schema document of the wrong shape must degrade, not raise.
+
+    Core 0.20.14 -- the floor of this adapter's pin -- loads the schema with a bare
+    ``json.loads``: no type check, no digest check. So a document that is perfectly valid
+    JSON can still be shaped unlike a schema, and walking it blindly raises AttributeError
+    outside the read ``except`` above, which no caller catches.
+    """
+    monkeypatch.setattr(_installer, "load_install_sop_schema", lambda: document)
+
+    assert _installer.report_schema_version() == _installer.FALLBACK_REPORT_SCHEMA_VERSION
+
+
 def _raise(error: Exception):
     def _raiser():
         raise error
@@ -453,14 +480,21 @@ def test_receipt_schema_version_is_a_separate_contract():
 
 
 def test_core_dependency_stays_pinned_below_the_next_minor():
-    """``<1.0.0`` admits any future Core minor, which is how 0.20.34 shipped unannounced."""
+    """``<1.0.0`` admits any future Core minor, which is how 0.20.34 shipped unannounced.
+
+    Both bounds are derived from ``MIN_CORE_VERSION`` rather than spelled out, so a
+    legitimate Core bump only moves that constant instead of turning this assertion red.
+    """
     import re
 
     pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
-    core = re.search(r'"dcc-mcp-core>=[0-9.]+,<(?P<upper>[0-9.]+)"', pyproject)
+    floor = _installer._version_tuple(_installer.MIN_CORE_VERSION)
+    assert floor is not None
+    core = re.search(r'"dcc-mcp-core>=(?P<lower>[0-9.]+),<(?P<upper>[0-9.]+)"', pyproject)
 
     assert core is not None
-    assert core.group("upper") == "0.21.0"
+    assert core.group("lower") == _installer.MIN_CORE_VERSION
+    assert core.group("upper") == "{}.{}.0".format(floor[0], floor[1] + 1)
 
 
 def _ci_workflow():
