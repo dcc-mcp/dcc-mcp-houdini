@@ -922,9 +922,10 @@ def report_schema_version() -> int:
     field; the two merely happened to agree while both were 1. Populating the report from that
     constant is the defect this function exists to avoid.
 
-    If the document cannot be read -- a partially installed, tampered, or otherwise unhealthy
-    Core -- the value falls back to ``FALLBACK_REPORT_SCHEMA_VERSION`` rather than propagating,
-    because this CLI's job is to keep emitting a report when the installation is broken.
+    If the document cannot be read, or is not shaped like a schema -- a partially installed,
+    tampered, or otherwise unhealthy Core -- the value falls back to
+    ``FALLBACK_REPORT_SCHEMA_VERSION`` rather than propagating, because this CLI's job is to
+    keep emitting a report when the installation is broken.
     """
     try:
         document = load_install_sop_schema()
@@ -933,7 +934,16 @@ def report_schema_version() -> int:
         # unreadable files with OSError, and a corrupt document with ValueError. None of them
         # may stop this CLI from reporting.
         return FALLBACK_REPORT_SCHEMA_VERSION
-    declared = document.get("properties", {}).get("schema_version", {}).get("const")
+    # Core at this adapter's floor loads the schema with a bare ``json.loads`` -- no type and
+    # no digest validation -- so every node on the way to the ``const`` is checked before it
+    # is traversed. Valid JSON of the wrong shape would otherwise raise AttributeError out
+    # here, above the caller's own ``except Exception``, and take the whole report with it.
+    node: Any = document
+    for key in ("properties", "schema_version", "const"):
+        if not isinstance(node, Mapping):
+            return FALLBACK_REPORT_SCHEMA_VERSION
+        node = node.get(key)
+    declared = node
     if isinstance(declared, bool) or not isinstance(declared, int):
         return FALLBACK_REPORT_SCHEMA_VERSION
     return declared
