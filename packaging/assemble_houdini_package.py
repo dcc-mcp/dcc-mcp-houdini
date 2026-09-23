@@ -37,6 +37,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 CORE_PACKAGE = "dcc-mcp-core"
 MIN_CORE_VERSION = "0.20.14"
+MAX_CORE_VERSION_EXCLUSIVE = "0.21.0"
 PLATFORMS = ("win64", "linux", "macos")
 QUICKINSTALL_PYTHON_FLOORS = {"win64": (3, 7), "linux": (3, 7), "macos": (3, 8)}
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
@@ -85,7 +86,7 @@ def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
         v
         for v in available
         if v >= Version(min_version)
-        and v < Version("1.0.0")
+        and v < Version(MAX_CORE_VERSION_EXCLUSIVE)
         and all(
             any(
                 _wheel_has_abi3(str(item.get("filename", "")))
@@ -114,12 +115,13 @@ def resolve_core_version(min_version: str = MIN_CORE_VERSION) -> str:
 
 def validate_core_version(version: str, min_version: str = MIN_CORE_VERSION) -> str:
     parsed = Version(version)
-    if parsed.is_prerelease or parsed < Version(min_version) or parsed >= Version("1.0.0"):
+    if parsed.is_prerelease or parsed < Version(min_version) or parsed >= Version(MAX_CORE_VERSION_EXCLUSIVE):
         raise RuntimeError(
-            "Requested {} version {!r} is outside the supported range >= {},<1.0.0".format(
+            "Requested {} version {!r} is outside the supported range >= {},<{}".format(
                 CORE_PACKAGE,
                 version,
                 min_version,
+                MAX_CORE_VERSION_EXCLUSIVE,
             )
         )
     return str(parsed)
@@ -1086,9 +1088,8 @@ def _readme(version: str, core_version: str, platform: str, explicit_core_versio
         core_policy = "explicit validated dcc-mcp-core {}.".format(core_version)
     else:
         core_policy = (
-            "latest non-prerelease dcc-mcp-core >= {},<1.0.0 with abi3 wheels "
-            "for every release platform at assembly time."
-        ).format(MIN_CORE_VERSION)
+            "latest non-prerelease dcc-mcp-core >= {},<{} with abi3 wheels for every release platform at assembly time."
+        ).format(MIN_CORE_VERSION, MAX_CORE_VERSION_EXCLUSIVE)
     python_floor = ".".join(str(part) for part in QUICKINSTALL_PYTHON_FLOORS[platform])
     return """dcc-mcp-houdini quick install package
 ======================================

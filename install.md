@@ -8,7 +8,7 @@ entry point is `dcc-mcp-houdini`.
 
 - SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
 - Python 3.7 or newer in that Houdini build for the wheel-first lifecycle.
-- `dcc-mcp-core >= 0.20.14,<1.0.0` and the same `dcc-mcp-houdini` version
+- `dcc-mcp-core >= 0.20.14,<0.21.0` and the same `dcc-mcp-houdini` version
   installed in the selected `hython` environment.
 - Write access to the matching user profile. The installer never edits the
   Houdini application directory.

@@ -1661,7 +1661,7 @@ def _failure_result(
             "pip",
             "install",
             "--upgrade",
-            "dcc-mcp-core>={},<1.0.0".format(MIN_CORE_VERSION),
+            "dcc-mcp-core>={},<0.21.0".format(MIN_CORE_VERSION),
         ]
         remediation_id = "upgrade_core_in_selected_hython"
         remediation_description = "Install the supported Core floor into the selected Hython interpreter."

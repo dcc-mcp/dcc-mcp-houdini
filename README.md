@@ -459,8 +459,8 @@ dcc-mcp-houdini/
 ## Requirements
 
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
-- `dcc-mcp-core >= 0.20.14`
-- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.20.14,<1.0.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
+- `dcc-mcp-core >= 0.20.14,<0.21.0`
+- Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.20.14,<0.21.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
 - Bundled Core wheel matrix: Python 3.7+ on Windows/Linux and Python 3.8+ on macOS; unsupported runtime/tag pairs fail before extraction.
 - See `pyproject.toml` for full dependencies
 

@@ -57,7 +57,7 @@ def test_published_install_sop_floor_is_projected_everywhere() -> None:
     assert _extract_pyproject_core_floor() == expected
     assert _extract_packaging_min_core_version() == expected
     assert 'MIN_CORE_VERSION = "{}"'.format(expected) in INSTALLER.read_text(encoding="utf-8")
-    assert "dcc-mcp-core >= {},<1.0.0".format(expected) in RUNBOOK.read_text(encoding="utf-8")
+    assert "dcc-mcp-core >= {},<0.21.0".format(expected) in RUNBOOK.read_text(encoding="utf-8")
     ci = CI_WORKFLOW.read_text(encoding="utf-8")
     assert 'DCC_MCP_CORE_FLOOR: "{}"'.format(expected) in ci
     assert "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}" in ci

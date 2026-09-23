@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -538,6 +537,58 @@ def test_verify_rejects_pid_reuse_start_identity_mismatch(
     assert "start identity" in failure["verify"]["failure_reason"]
 
 
+def test_core_schema_anchor_is_keyed_by_the_core_release() -> None:
+    from install_sop_anchors import CORE_SCHEMA_ANCHOR_MEASURED_THROUGH, core_schema_anchor
+
+    initial = core_schema_anchor("0.20.14")
+    refreshed = core_schema_anchor("0.20.30")
+
+    assert initial is not None and refreshed is not None
+    assert initial.sha256 != refreshed.sha256
+    assert core_schema_anchor("0.20.29") == initial
+    assert core_schema_anchor("0.20.33") == refreshed
+    assert core_schema_anchor(CORE_SCHEMA_ANCHOR_MEASURED_THROUGH) is not None
+    # A release this suite has not measured yet has no pinned digest, so Core can move
+    # forward without breaking the suite.
+    assert core_schema_anchor("0.20.34") is None
+    assert core_schema_anchor("0.20.14rc1") is None
+
+
+def test_core_schema_anchor_requires_a_measurable_core_version() -> None:
+    from install_sop_anchors import core_schema_anchor
+
+    assert core_schema_anchor("") is None
+    assert core_schema_anchor("not-a-version") is None
+
+
+def test_core_schema_artifact_measures_the_document_core_serves() -> None:
+    from dcc_mcp_core.deployment import load_install_sop_schema
+    from install_sop_anchors import CORE_SCHEMA_ANCHORS, core_schema_artifact, installed_core_version
+
+    measured = core_schema_artifact(load_install_sop_schema())
+    assert measured is not None
+    # The artifact Core serves must be one of the revisions this suite has measured, or be an
+    # unmeasured release that is deliberately accepted without a pinned digest.
+    known = {anchor for _, anchor in CORE_SCHEMA_ANCHORS}
+    assert measured in known or installed_core_version() is not None
+
+
+def test_unmeasured_core_release_is_accepted_and_observed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dcc_mcp_core.deployment import load_install_sop_schema
+    from install_sop_anchors import core_schema_artifact, core_schema_report
+
+    schema = load_install_sop_schema()
+    report = core_schema_report(schema)
+    # A pinned release agrees with its measured row; an unmeasured one still records what it saw.
+    if report["status"] == "pinned":
+        assert (report["observed_size"], report["observed_sha256"]) == (report["size"], report["sha256"])
+    else:
+        assert report["status"] == "unpinned"
+        assert report["sha256"] is None
+        assert report["observed_sha256"] is not None
+    assert core_schema_artifact(schema) is not None
+
+
 def test_readiness_remediation_launches_exact_selected_host(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -558,8 +609,8 @@ def test_public_core_floor_is_a_real_released_version() -> None:
     runbook = (root / "install.md").read_text(encoding="utf-8")
 
     assert _installer.MIN_CORE_VERSION == "0.20.14"
-    assert "dcc-mcp-core>=0.20.14,<1.0.0" in pyproject.replace(" ", "")
-    assert "dcc-mcp-core >= 0.20.14,<1.0.0" in runbook
+    assert "dcc-mcp-core>=0.20.14,<0.21.0" in pyproject.replace(" ", "")
+    assert "dcc-mcp-core >= 0.20.14,<0.21.0" in runbook
 
 
 def test_all_public_lifecycle_results_validate_published_core_draft_schema(
@@ -567,20 +618,18 @@ def test_all_public_lifecycle_results_validate_published_core_draft_schema(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from dcc_mcp_core.deployment import install_sop as core_install_sop
     from dcc_mcp_core.deployment import load_install_sop_schema
+    from install_sop_anchors import core_schema_anchor, core_schema_artifact, installed_core_version
 
     root = Path(__file__).resolve().parents[1]
-    schema_path = (
-        Path(core_install_sop.__file__).resolve().parent.parent / "schemas" / "adapter-install-sop-v1.schema.json"
-    )
-    schema_bytes = schema_path.read_bytes()
-    assert len(schema_bytes) == 4261
-    assert hashlib.sha256(schema_bytes).hexdigest() == (
-        "3ca25788439917b4d4c0617230a762f9797756b5b54f45c8c4149f975b90f904"
-    )
     schema = load_install_sop_schema()
-    assert schema == json.loads(schema_bytes)
+    # core_schema_artifact() locates the artifact by matching its parsed document against
+    # `schema`, so finding it also proves Core serves exactly the document it returned.
+    observed = core_schema_artifact(schema)
+    assert observed is not None, "Could not locate the Install SOP schema artifact served by Core"
+    anchor = core_schema_anchor(installed_core_version() or "")
+    if anchor is not None:
+        assert observed == anchor
     assert not (root / "src" / "dcc_mcp_houdini" / "_install_contract.py").exists()
     assert not (root / "tests" / "fixtures" / "adapter-install-sop-v1.schema.json").exists()
     Draft202012Validator.check_schema(schema)

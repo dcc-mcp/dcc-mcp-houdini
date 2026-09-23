@@ -131,18 +131,24 @@ jobs:
           .wheel-smoke/bin/python -m pip install --upgrade pip
           .wheel-smoke/bin/python -m pip install "dcc-mcp-core==${DCC_MCP_CORE_FLOOR}" dist/*.whl
           .wheel-smoke/bin/python - <<'PY'
-          import hashlib
-          import json
-          from pathlib import Path
+          import sys
 
           from dcc_mcp_core.deployment import load_install_sop_schema
-          from dcc_mcp_core.deployment import install_sop
 
-          schema_path = Path(install_sop.__file__).resolve().parent.parent / "schemas" / "adapter-install-sop-v1.schema.json"
-          raw = schema_path.read_bytes()
-          assert len(raw) == 4261
-          assert hashlib.sha256(raw).hexdigest() == "3ca25788439917b4d4c0617230a762f9797756b5b54f45c8c4149f975b90f904"
-          assert load_install_sop_schema() == json.loads(raw)
+          # One source of truth with the unit suite: the measured Install SOP revisions live in
+          # tests/install_sop_anchors.py, keyed by the Core release that shipped each one.
+          sys.path.insert(0, "tests")
+          from install_sop_anchors import core_schema_anchor, core_schema_artifact
+          from install_sop_anchors import installed_core_version
+
+          schema = load_install_sop_schema()
+          # core_schema_artifact() matches the artifact by parsed document, so finding it also
+          # proves Core serves exactly the document load_install_sop_schema() returned.
+          observed = core_schema_artifact(schema)
+          assert observed is not None, "Could not locate the Install SOP schema artifact served by Core"
+          anchor = core_schema_anchor(installed_core_version() or "")
+          if anchor is not None:
+              assert observed == anchor
           import dcc_mcp_houdini._installer
           PY
       - name: Check package

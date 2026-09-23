@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
     # 0.20.14 is the first release with the canonical Install SOP schema API.
-    "dcc-mcp-core>=0.20.14,<1.0.0",
+    "dcc-mcp-core>=0.20.14,<0.21.0",
 ]
 
 [project.optional-dependencies]
