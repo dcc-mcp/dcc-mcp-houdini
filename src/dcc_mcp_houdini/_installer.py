@@ -31,7 +31,7 @@ from dcc_mcp_core.deployment import (
     INSTALL_EXIT_PREFLIGHT,
     INSTALL_EXIT_REQUIRES_RESTART,
     INSTALL_EXIT_VERIFY,
-    INSTALL_SOP_SCHEMA_VERSION,
+    load_install_sop_schema,
 )
 
 from dcc_mcp_houdini.__version__ import __version__
@@ -39,6 +39,16 @@ from dcc_mcp_houdini.__version__ import __version__
 DCC_TYPE = "houdini"
 COMMAND = "dcc-mcp-houdini"
 MIN_CORE_VERSION = "0.20.14"
+RECEIPT_SCHEMA_VERSION = 1
+# Last-resort value for the report's own ``schema_version`` field, used only when Core's
+# schema document cannot be read at all. See ``report_schema_version()``.
+#
+# This is deliberately NOT Core's ``INSTALL_SOP_SCHEMA_VERSION``. That constant is the
+# revision of the published schema *artifact* (``-vN``); Core documents it as separate from
+# the report field, which stays at 1 because v2 only adds the optional ``catalog`` object.
+# The two values coincided at 1 through Core 0.20.33, which is why copying the constant
+# into the report looked correct right up until 0.20.34 bumped the artifact revision to 2.
+FALLBACK_REPORT_SCHEMA_VERSION = 1
 MIN_HOUDINI_VERSION = (18, 5, 0)
 LIFECYCLE_COMMANDS = frozenset(("install", "status", "verify", "uninstall", "upgrade"))
 
@@ -829,7 +839,7 @@ def _state(
         receipt = _load_json(receipt_path)
     except LifecycleFailure:
         return "partial", None
-    if receipt.get("schema_version") != 1 or receipt.get("dcc_type") != DCC_TYPE:
+    if receipt.get("schema_version") != RECEIPT_SCHEMA_VERSION or receipt.get("dcc_type") != DCC_TYPE:
         return "partial", receipt
     if Path(str(receipt.get("install_root", ""))).resolve() != install_root.resolve():
         return "partial", receipt
@@ -900,9 +910,38 @@ def _resolve_context(
     )
 
 
+def report_schema_version() -> int:
+    """Return the ``schema_version`` value every emitted report must carry.
+
+    Core enforces this value as the ``const`` of the ``schema_version`` property in the schema
+    document it ships, so that document is the authoritative source -- emitting anything else
+    produces reports Core's own validator rejects.
+
+    Core's exported ``INSTALL_SOP_SCHEMA_VERSION`` is deliberately NOT used. It is the revision
+    of the published schema *artifact* (``-vN``), a separate quantity from the report's own
+    field; the two merely happened to agree while both were 1. Populating the report from that
+    constant is the defect this function exists to avoid.
+
+    If the document cannot be read -- a partially installed, tampered, or otherwise unhealthy
+    Core -- the value falls back to ``FALLBACK_REPORT_SCHEMA_VERSION`` rather than propagating,
+    because this CLI's job is to keep emitting a report when the installation is broken.
+    """
+    try:
+        document = load_install_sop_schema()
+    except (RuntimeError, OSError, ValueError):
+        # Core signals schema_unavailable / schema_digest_mismatch with RuntimeError,
+        # unreadable files with OSError, and a corrupt document with ValueError. None of them
+        # may stop this CLI from reporting.
+        return FALLBACK_REPORT_SCHEMA_VERSION
+    declared = document.get("properties", {}).get("schema_version", {}).get("const")
+    if isinstance(declared, bool) or not isinstance(declared, int):
+        return FALLBACK_REPORT_SCHEMA_VERSION
+    return declared
+
+
 def _base_result(ctx: InstallContext, status: str) -> dict[str, Any]:
     return {
-        "schema_version": INSTALL_SOP_SCHEMA_VERSION,
+        "schema_version": report_schema_version(),
         "status": status,
         "dcc_type": DCC_TYPE,
         "adapter_version": __version__,
@@ -983,7 +1022,7 @@ def _receipt(ctx: InstallContext, installed_at: float) -> dict[str, Any]:
     compatibility_files.append(package_record)
     previous = ctx.receipt or {}
     return {
-        "schema_version": 1,
+        "schema_version": RECEIPT_SCHEMA_VERSION,
         "dcc_type": DCC_TYPE,
         "adapter_version": __version__,
         "core_version": ctx.core_version,
@@ -1677,7 +1716,7 @@ def _failure_result(
         remediation_id = "repair_selected_hython"
         remediation_description = "Install this adapter and its dependencies into the selected Hython interpreter."
     result = {
-        "schema_version": INSTALL_SOP_SCHEMA_VERSION,
+        "schema_version": report_schema_version(),
         "status": "requires_restart" if failure.exit_code == INSTALL_EXIT_REQUIRES_RESTART else "failed",
         "dcc_type": DCC_TYPE,
         "adapter_version": __version__,
