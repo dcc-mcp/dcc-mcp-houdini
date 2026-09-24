@@ -16,6 +16,19 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.43.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.43.0...v0.43.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* pin the Core Install SOP schema per Core release ([#322](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/322)) ([55a279c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/55a279c233481a5f7cadb5f415002c7b315b93ac))
+
+
+### Documentation
+
+* **release:** document the batch window contract and its tag latency ([8800d11](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8800d1176daf145f8df6c0943495d29f77e1723b))
+* **release:** tighten the batch window wording and the cron contract ([#320](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/320)) ([e643f5b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e643f5bd1bd36626e80d9eb6a4283f206a613ab8))
+
 ## [0.43.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.42.0...v0.43.0) (2026-09-19)
 
 
