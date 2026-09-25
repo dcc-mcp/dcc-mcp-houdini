@@ -21,7 +21,7 @@ env:
   # Commit in dcc-mcp-core that defines the shared VFX Platform baseline. Pinned
   # rather than tracking a branch: the baseline is the source of truth for a hard
   # gate, so it must not change under an adapter build without an explicit bump.
-  DCC_MCP_CORE_BASELINE_REF: "9b838a1bab6f5b21e9e1a1b46ccc74c30c7381f4"
+  DCC_MCP_CORE_BASELINE_REF: "bbc29c7f5b25c00b4b0c8a3775aed964e87202dc"
 
 jobs:
   lint:
@@ -64,6 +64,9 @@ jobs:
       - name: Check declared dependencies against the VFX Platform baseline
         run: |
           set -euo pipefail
+          # Installed explicitly so this step does not silently rely on
+          # packaging arriving as a transitive dev dependency.
+          pip install "packaging>=23.0"
           base="https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/${DCC_MCP_CORE_BASELINE_REF}"
           mkdir -p .vfx-baseline
           # A missing file must fail loudly rather than leave the gate unenforced.
