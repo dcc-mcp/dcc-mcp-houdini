@@ -18,6 +18,10 @@ permissions:
 
 env:
   DCC_MCP_CORE_FLOOR: "0.20.14"
+  # Commit in dcc-mcp-core that defines the shared VFX Platform baseline. Pinned
+  # rather than tracking a branch: the baseline is the source of truth for a hard
+  # gate, so it must not change under an adapter build without an explicit bump.
+  DCC_MCP_CORE_BASELINE_REF: "761bae7f6ba4f78e5271e9cac41ffa452cc117a7"
 
 jobs:
   lint:
@@ -56,6 +60,21 @@ jobs:
         run: python tools/lint_skills.py --require-cli --warnings-as-errors
       - name: Python 3.7 syntax check
         run: python tools/check_py37_syntax.py src tests tools packaging
+
+      - name: Check declared dependencies against the VFX Platform baseline
+        run: |
+          set -euo pipefail
+          # Installed explicitly so this step does not silently rely on
+          # packaging arriving as a transitive dev dependency.
+          pip install "packaging>=23.0"
+          base="https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/${DCC_MCP_CORE_BASELINE_REF}"
+          mkdir -p .vfx-baseline
+          # A missing file must fail loudly rather than leave the gate unenforced.
+          curl -fsSL "${base}/config/vfx-platform-baseline.json" -o .vfx-baseline/baseline.json
+          curl -fsSL "${base}/scripts/ci/check_vfx_baseline.py" -o .vfx-baseline/check_vfx_baseline.py
+          python .vfx-baseline/check_vfx_baseline.py \
+            --baseline .vfx-baseline/baseline.json \
+            --pyproject pyproject.toml
 
   test:
     name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}

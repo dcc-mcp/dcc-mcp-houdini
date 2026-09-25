@@ -63,6 +63,16 @@ dcc-mcp-houdini = "dcc_mcp_houdini.cli:main"
 [project.entry-points."dcc_mcp.adapters"]
 houdini = "dcc_mcp_houdini:HoudiniMcpServer"
 
+# VFX Reference Platform alignment. Houdini is an embedded-host adapter: it is
+# imported by the interpreter Houdini ships, which includes Python 3.7 builds,
+# so it declares the py37 tier alongside the CY2026 baseline. The baseline file
+# and checker are the ones published by dcc-mcp-core; they are pinned by commit
+# in .github/workflows/ci.yml so an adapter build cannot drift from the source
+# of truth without a deliberate pin bump.
+[tool.dcc-mcp.vfx-platform]
+year = ["CY2026", "py37"]
+host = "houdini"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/dcc_mcp_houdini"]
 artifacts = [
