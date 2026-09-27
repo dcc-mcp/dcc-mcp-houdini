@@ -140,7 +140,93 @@ When adding or changing bundled skills, load the project skill:
 
 **Total: 43 skill packages, 295 tools** — See `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md` for the authoritative package and tool index.
 
-## Key Env Vars
+## Agent Contract Files
+
+`AGENTS.md` is the **only** agent contract file at the repository root. It is the
+native instruction file for Codex, OpenCode, Cursor, GitHub Copilot, Windsurf,
+Cline, Roo Code, Kiro, Trae, and Augment, and Claude Code falls back to it when
+no `CLAUDE.md` exists. Guidance that used to live in `CLAUDE.md` and `GEMINI.md` has been folded
+into [**Client Integration Notes**](#client-integration-notes) below.
+
+**Gemini CLI exception:** Gemini CLI defaults its context file to `GEMINI.md`. To
+make it read `AGENTS.md`, set `context.fileName` once in `~/.gemini/settings.json`:
+
+```json
+{
+  "context": {
+    "fileName": ["AGENTS.md", "GEMINI.md"]
+  }
+}
+```
+
+
+---
+
+## Client Integration Notes
+
+All MCP clients use the same endpoint — `http://127.0.0.1:9765/mcp` (MCP
+Streamable HTTP, spec `2025-03-26`), in both direct and gateway mode.
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "houdini": {
+      "url": "http://127.0.0.1:9765/mcp"
+    }
+  }
+}
+```
+
+File locations:
+
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Restart Claude Desktop after editing.
+
+**Progressive loading.** By default the server starts in **minimal mode** with
+only 2 skills loaded — `houdini-scripting` and `houdini-scene`. **All other
+skills must be loaded on demand:**
+
+1. Call `load_skill("houdini-nodes")` to expand the skill.
+2. Then call the typed tool (e.g. `houdini_nodes__create_node`).
+
+**Claude-specific tips.**
+
+- **Viewport feedback:** ask the model to call `houdini_render__capture_viewport` after scene changes — the base64 PNG lets it "see" the current state.
+- **Node networks:** SOP/OBJ networks chain well as `create_node` → `set_node_parms` → `connect_nodes` → `cook_node`.
+- **Code execution:** prefer `search_skills` → `load_skill` → typed tools. Use `execute_python` only as a last resort.
+- **HDA automation:** use `houdini_hda_automation__instantiate_hda` and `houdini_hda_automation__cook_top_network` for HDA workflows.
+- **Cancellation:** the client can send `notifications/cancelled` for long renders.
+
+**Quick test prompts.**
+
+> “List all OBJ nodes in the current Houdini scene”
+> “Create a sphere, connect it to a null, and cook the network”
+> “Capture the viewport so I can see the current state”
+> “Load the animation skill and set a keyframe on the sphere's ty at frame 24”
+
+### Gemini
+
+- **Code-first workflows:** Gemini generates structured Houdini networks well — ask it to build complete SOP chains with `houdini_nodes__create_node` → `connect_nodes` → `cook_node`.
+- **Lookdev & materials:** structured output handling suits `houdini-lookdev` chains — set material parameters, save and load presets.
+- **Viewport capture:** feed `capture_viewport` base64 PNGs back for visual state verification.
+- **Pipeline automation:** use the `houdini-pipeline` skills for shot packaging and scene validation.
+
+**Quick test prompts.**
+
+> “Create a camera and a three-point lighting setup”
+> “List all materials in the scene and export their presets”
+> “Import an alembic cache from /path/to/file.abc”
+> “Validate the scene and collect all dependencies”
+
+---
+
+## ## Key Env Vars
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
