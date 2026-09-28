@@ -125,15 +125,20 @@ When adding or changing bundled skills, load the project skill:
 ## Release
 
 - release-please drives versioning from Conventional Commits on `main`.
-- `feat:` → minor, `fix:` → patch. Every other prefix still lands on **patch**:
-  `DefaultVersioningStrategy.determineReleaseType()` falls back to
-  `PatchVersionUpdate` when the batch has no `feat:` and no breaking change, so
-  `chore:`/`docs:`/`ci:` are **not** “no release”.
-- What those prefixes change is the changelog: `chore:`/`ci:`/`style`/`refactor`/
-  `test`/`build` are `hidden: true` sections, while `docs:` is a **visible**
-  `Documentation` section (`release-type: python`).
-- Use `chore:` for config and doc work: it still bumps the version, but keeps
-  the changelog free of valueless entries.
+- Whether a release is cut at all is a changelog question, not a prefix question: if every
+  commit in the batch lands in a `hidden: true` section the changelog entry is empty, and
+  release-please skips the whole batch — no release pull request, **no version bump**
+  (`strategies/base.ts` logs “No user facing commits found since … - skipping” when
+  `changelogEmpty()` finds only the heading line).
+- For `release-type: python`: `chore:`/`ci:`/`style`/`refactor:`/`test:`/`build:` are
+  `hidden: true`; `docs:` is a **visible** `Documentation` section.
+- Only once a release *is* cut does the prefix choose the bump: breaking → major,
+  `feat:` → minor, anything else → patch
+  (`DefaultVersioningStrategy.determineReleaseType()`).
+- Use `chore:` when the batch should **not** cut a release; use `docs:` when doc-only work
+  should cut a patch release.
+- Use `chore:` for config and doc work: a `chore:`-only batch produces an empty changelog
+  entry, so release-please skips it and the version stays put.
 
 ## Do / Don't
 
