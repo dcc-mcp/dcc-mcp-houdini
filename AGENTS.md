@@ -125,9 +125,15 @@ When adding or changing bundled skills, load the project skill:
 ## Release
 
 - release-please drives versioning from Conventional Commits on `main`.
-- `feat:` → minor, `fix:` → patch, `chore:`/`docs:`/`ci:` → **no release**.
-- Use `chore:`/`docs:` for config and doc work so release-please does not cut a
-  valueless version.
+- `feat:` → minor, `fix:` → patch. Every other prefix still lands on **patch**:
+  `DefaultVersioningStrategy.determineReleaseType()` falls back to
+  `PatchVersionUpdate` when the batch has no `feat:` and no breaking change, so
+  `chore:`/`docs:`/`ci:` are **not** “no release”.
+- What those prefixes change is the changelog: `chore:`/`ci:`/`style`/`refactor`/
+  `test`/`build` are `hidden: true` sections, while `docs:` is a **visible**
+  `Documentation` section (`release-type: python`).
+- Use `chore:` for config and doc work: it still bumps the version, but keeps
+  the changelog free of valueless entries.
 
 ## Do / Don't
 
