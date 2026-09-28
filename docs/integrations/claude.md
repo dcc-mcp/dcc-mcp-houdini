@@ -12,7 +12,8 @@ execution, rendering, and more.
 
 ## Claude Desktop configuration
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json` — this is the shared **gateway** endpoint on `9765`,
+which auto-discovers the running Houdini instance:
 
 ```json
 {
@@ -29,7 +30,9 @@ Add to `claude_desktop_config.json`:
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-If running gateway mode, use `http://127.0.0.1:9765/mcp` instead.
+To target a single Houdini instance directly instead of through the gateway, use the
+OS-assigned URL printed by `server.mcp_url` (see [`AGENTS.md`](../../AGENTS.md)). It is
+not a fixed port and changes on every launch.
 
 Restart Claude Desktop after editing.
 
