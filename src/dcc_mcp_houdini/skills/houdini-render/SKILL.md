@@ -14,9 +14,9 @@ metadata:
     dcc: houdini
     layer: domain
     stage: pipeline
-    version: "1.0.0"
-    tags: [houdini, render, rop, karma, mantra, viewport, flipbook, capture, pipeline, aov, render_layer, takes]
-    search-hint: "render rop karma mantra viewport capture flipbook screenshot render settings resolution output aov render layer takes stats"
+    version: "1.0.1"
+    tags: [houdini, render, rop, karma, mantra, viewport, flipbook, capture, pipeline, aov, render_layer, takes, denoise, oidn]
+    search-hint: "render rop karma mantra viewport capture flipbook screenshot render settings resolution output aov render layer takes stats denoise idenoise oidn optix exr"
     tools: tools.yaml
 ---
 
@@ -43,6 +43,8 @@ or Karma/Husk for batch rendering.
   externally validated staged EXRs without replacing finals), `cancel_render_job` (cancels only jobs
   owned by the current adapter process), `configure_aovs` (add/remove Solaris
   RenderVars or native Mantra auxiliary planes with renderer-correct processing),
+  `denoise_image` (official OIDN/OptiX EXR postprocess with source preservation
+  and no-clobber output publication),
   `validate_karma_stage` (read-only USD/Karma
   preflight), `get_render_stats` (read resolution/samples/renderer/output).
 - **`render_layer`:** `create_render_layer` (Solaris RenderProduct or cloned
@@ -67,6 +69,34 @@ externally, then pass the identity-bound receipts to
 `finalize_render_outputs(job_id, validator_receipts)`. The worker discovers and
 temporarily overrides the exact EXR output parameter only in its loaded HIP
 copy. Final paths are created only by the no-clobber finalize step.
+
+### EXR denoising
+
+After the render job completes, call
+`denoise_image(input_path="/renders/beauty.001.exr", output_path="/renders/beauty.001.denoised.exr", force_cpu=true)`.
+The output directory must already exist and the output file must be new. The
+tool resolves `idenoise` only from the adapter host's absolute `HFS/bin`, never
+from `PATH` or a caller-provided executable. It performs one image operation
+off the scene thread through a Core async job, with a 1–300 second subprocess
+timeout; it does not modify the HIP, render settings, or source EXR.
+
+For guides already present in the source, pass `albedo_plane="basecolor"` and
+`normal_plane="hitN"`. Omitted guides remain unused. `aovs=["diffuse","indirectDiffuse"]`
+selects explicit planes; omitted AOVs use the utility's `C`, `Cf`, `color` defaults.
+OIDN is the default; `denoiser="optix"` requires the host's supported NVIDIA
+runtime. `force_cpu` applies only to OIDN. No library download, temporal mode,
+upscaling, or arbitrary CLI options are exposed.
+
+Inputs are bounded to 512 MiB, 16 megapixels, 8192 pixels per side, and a
+64 KiB flat single-part OpenEXR header. Success requires official exit zero,
+matching input/output data-window dimensions, unchanged source identity,
+and verified output byte hashes after no-clobber publication. The returned
+identity receipt distinguishes this from full pixel decoding:
+`pixel_decode_verified=false`. Decode the new EXR externally before visual
+acceptance, retain the original, and disclose denoising in media provenance.
+This is per-image filtering; it does not promise temporal consistency.
+
+Official utility reference: [SideFX idenoise](https://www.sidefx.com/docs/houdini/ref/utils/idenoise.html).
 
 ### Render Layers & AOVs
 

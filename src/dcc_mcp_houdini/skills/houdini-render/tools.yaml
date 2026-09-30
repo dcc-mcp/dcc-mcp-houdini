@@ -1,4 +1,63 @@
 tools:
+  - name: denoise_image
+    description: >-
+      Denoise one existing flat single-part EXR through the official HFS/bin/idenoise
+      utility using OIDN or OptiX, with optional albedo and normal AOV names.
+      Preserves the source and publishes a fresh output without replacing files.
+      Returns source/output hashes and matching EXR header dimensions; pixel decoding
+      remains an external verification step. Limited to 512 MiB and 16 megapixels.
+    source_file: scripts/denoise_image.py
+    execution: async
+    affinity: any
+    timeout_hint_secs: 330
+    group: render
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [input_path, output_path]
+      properties:
+        input_path:
+          type: string
+          description: "Absolute path to an existing EXR. Source bytes are preserved."
+        output_path:
+          type: string
+          description: "Absolute new EXR path in an existing directory; replacement is refused."
+        denoiser:
+          type: string
+          enum: [oidn, optix]
+          default: oidn
+        albedo_plane:
+          type: string
+          pattern: "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+          description: "Optional albedo image-plane name already present in the source EXR."
+        normal_plane:
+          type: string
+          pattern: "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+          description: "Optional normal image-plane name already present in the source EXR."
+        aovs:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            pattern: "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+          description: "Planes to denoise; omitted uses official defaults C, Cf, color."
+        force_cpu:
+          type: boolean
+          default: false
+          description: "Force OIDN CPU execution. Invalid with OptiX."
+        timeout_secs:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 120
   - name: capture_viewport
     description: >-
       Capture the current Scene Viewer to an image file for a single frame via
