@@ -357,6 +357,53 @@ def test_generated_hooks_capture_bootstrap_errors_without_importing_hou_off_host
     compile(hook, "<houdini-hook>", "exec")
 
 
+def _write_bootstrap_probe(tmp_path: Path) -> Path:
+    """Write a shared-bootstrap stub that records each call, and return its marker path."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    marker = tmp_path / "bootstrap_calls"
+    (scripts / "dcc_mcp_houdini_bootstrap.py").write_text(
+        """from pathlib import Path
+
+class Server:
+    mcp_url = "http://127.0.0.1:8765/mcp"
+
+def bootstrap_and_start():
+    marker = Path({marker!r})
+    marker.write_text((marker.read_text() if marker.exists() else "") + "1")
+    return Server()
+""".format(marker=str(marker)),
+        encoding="utf-8",
+    )
+    return marker
+
+
+@pytest.mark.parametrize("location", ["scripts/123.py", "scripts/456.py", "python3.13libs/uiready.py"])
+def test_hook_source_reaches_shared_bootstrap_from_every_hook_location(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys,
+    location: str,
+) -> None:
+    """The generated hook must resolve the package root, not its own directory.
+
+    The same source is written to two ``scripts/`` startup hooks and to
+    ``pythonX.Ylibs/uiready.py``. Only the package root is common to all three, so deriving it
+    from ``__file__``'s parent leaves the UI-ready hook pointing into a directory that has no
+    bootstrap next to it. The hook swallows the resulting ``except Exception`` into a single
+    print, so without this test the autostart fails silently at Houdini startup.
+    """
+    marker = _write_bootstrap_probe(tmp_path)
+    monkeypatch.delenv("DCC_MCP_HOUDINI_ROOT", raising=False)
+
+    namespace = {"__file__": str(tmp_path / location)}
+    exec(compile(_installer._hook_source(tmp_path / "logs"), "<houdini-hook>", "exec"), namespace)
+
+    output = capsys.readouterr().out
+    assert "autostart failed" not in output, output
+    assert marker.read_text(encoding="utf-8") == "1"
+
+
 def test_quickinstall_bootstrap_uses_staged_vendor_and_error_capture() -> None:
     module = runpy.run_path(str(Path(__file__).resolve().parents[1] / "packaging" / "assemble_houdini_package.py"))
     bootstrap = module["_bootstrap_py"]()

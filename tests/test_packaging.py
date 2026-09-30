@@ -58,13 +58,19 @@ def _write_adapter_dist_info(archive: zipfile.ZipFile, version: str) -> None:
     )
 
 
-def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hook: bool = True) -> None:
+def _write_quickinstall_zip(
+    zip_path: Path,
+    *wheel_names: str,
+    include_scene_hook: bool = True,
+    include_ui_ready: bool = True,
+) -> None:
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
         if include_scene_hook:
             zf.writestr("dcc_mcp_houdini/scripts/456.py", "")
-        for minor in range(7, 15):
-            zf.writestr("dcc_mcp_houdini/python3.{}libs/uiready.py".format(minor), "")
+        if include_ui_ready:
+            for minor in range(7, 15):
+                zf.writestr("dcc_mcp_houdini/python3.{}libs/uiready.py".format(minor), "")
         zf.writestr("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py", "")
         zf.writestr("dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template", "")
         zf.writestr("dcc_mcp_houdini/README.txt", "")
@@ -296,6 +302,21 @@ def test_verify_quickinstall_zip_requires_scene_load_hook(tmp_path: Path) -> Non
     )
 
     with pytest.raises(RuntimeError, match="/scripts/456.py"):
+        pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.20.14")
+
+
+def test_verify_quickinstall_zip_requires_ui_ready_hook(tmp_path: Path) -> None:
+    pkg = _load_packaging_script()
+
+    zip_path = tmp_path / "dcc_mcp_houdini_quickinstall_win64.zip"
+    _write_quickinstall_zip(
+        zip_path,
+        "dcc_mcp_houdini-{}-py3-none-any.whl".format(pkg.get_package_version()),
+        "dcc_mcp_core-0.20.14-cp38-abi3-win_amd64.whl",
+        include_ui_ready=False,
+    )
+
+    with pytest.raises(RuntimeError, match="/python3\\.7libs/uiready\\.py"):
         pkg.verify_quickinstall_zip(zip_path, "win64", expected_core_version="0.20.14")
 
 

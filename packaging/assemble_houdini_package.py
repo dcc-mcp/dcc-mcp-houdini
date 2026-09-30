@@ -5,7 +5,8 @@ The output ZIP contains:
 * the built ``dcc_mcp_houdini`` wheel from ``dist/``;
 * compatible ``dcc-mcp-core`` wheels from PyPI for the requested platform;
 * a Houdini package JSON template;
-* ``scripts/123.py`` and ``scripts/456.py`` autostart hooks;
+* ``pythonX.Ylibs/uiready.py`` GUI-startup hooks and the ``scripts/123.py`` and
+  ``scripts/456.py`` legacy startup / scene-load hooks;
 * ``toolbar/DCC-MCP.shelf`` with basic user-visible controls;
 * PowerShell and POSIX installer scripts.
 
@@ -13,9 +14,12 @@ Install flow:
 
 1. Extract the ZIP anywhere stable.
 2. Run ``install.ps1 -HoudiniVersion 20.5`` or ``./install.sh 20.5``.
-3. Start Houdini. The package adds ``scripts/`` to ``HOUDINI_PATH``; the
-   startup hooks extract bundled wheels into ``vendor/`` and start the MCP
-   server when ``DCC_MCP_HOUDINI_AUTOSTART`` is not disabled.
+3. Start Houdini. The package adds ``scripts/`` to ``HOUDINI_PATH``;
+   ``pythonX.Ylibs/uiready.py`` handles GUI startup while ``scripts/123.py``
+   and ``scripts/456.py`` remain available for legacy startup and loaded
+   scenes; all hooks reuse the same bootstrap to extract bundled wheels into
+   ``vendor/`` and start the MCP server when ``DCC_MCP_HOUDINI_AUTOSTART`` is
+   not disabled.
 """
 
 from __future__ import annotations
