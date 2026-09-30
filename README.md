@@ -265,6 +265,13 @@ The package writes a Houdini package JSON into the user preferences folder.
 `pythonX.Ylibs/uiready.py` starts after the GUI is available. Houdini runs all
 matching `uiready.py` files, so a studio's first-match `123.py` cannot shadow
 this hook; it also covers Houdini Core and startup with a HIP file.
+
+Houdini only executes `uiready.py` on builds that implement the UI-ready hook.
+SideFX documents the hook without a minimum version, so this adapter states its
+verified range instead: real GUI sessions were confirmed on Houdini 20.5.550,
+21.0.440, and 22.0.368. Older builds never execute the file, and autostart keeps
+falling back to the legacy `123.py` / `456.py` hooks that the installer still
+deploys.
 Legacy `scripts/123.py` and `scripts/456.py` hooks reuse the same bootstrap that extracts bundled wheels into `vendor/` and
 starts the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
 Headless interpreters skip GUI autostart and use `hython -m dcc_mcp_houdini`.
@@ -463,6 +470,9 @@ dcc-mcp-houdini/
 ## Requirements
 
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
+- A Houdini build that implements the UI-ready startup hook
+  (`pythonX.Ylibs/uiready.py`) for GUI autostart; verified on 20.5 through 22.0.
+  Older builds fall back to the legacy `123.py` / `456.py` hooks.
 - `dcc-mcp-core >= 0.20.14,<0.21.0`
 - Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.20.14,<0.21.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
 - Bundled Core wheel matrix: Python 3.7+ on Windows/Linux and Python 3.8+ on macOS; unsupported runtime/tag pairs fail before extraction.

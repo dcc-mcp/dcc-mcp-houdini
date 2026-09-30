@@ -8,6 +8,10 @@ entry point is `dcc-mcp-houdini`.
 
 - SideFX Houdini 18.5 or newer with its Python 3 `hython` interpreter.
 - Python 3.7 or newer in that Houdini build for the wheel-first lifecycle.
+- A build that implements the UI-ready hook (`pythonX.Ylibs/uiready.py`) for GUI
+  autostart. Real GUI sessions were verified on Houdini 20.5 through 22.0.
+  Older builds never execute that file and keep using the legacy `123.py` and
+  `456.py` hooks, so older hosts are unaffected by its absence.
 - `dcc-mcp-core >= 0.20.14,<0.21.0` and the same `dcc-mcp-houdini` version
   installed in the selected `hython` environment.
 - Write access to the matching user profile. The installer never edits the
@@ -87,6 +91,12 @@ the same bootstrap. All preserve the existing one-pump,
 main-thread execution contract and capture bootstrap errors before a server is
 available.
 Headless autostart skips the GUI server; use `hython -m dcc_mcp_houdini` instead.
+
+Houdini only executes the UI-ready hook on builds that implement it. SideFX
+documents the hook without a minimum version
+([startup script locations](https://www.sidefx.com/docs/houdini/hom/locations.html)),
+so treat 20.5 through 22.0 as the verified range: on older builds the deployed
+`uiready.py` is inert and GUI autostart relies on the legacy hooks alone.
 
 ## Manual path
 
