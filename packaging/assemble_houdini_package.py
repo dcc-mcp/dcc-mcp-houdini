@@ -40,6 +40,7 @@ MIN_CORE_VERSION = "0.20.14"
 MAX_CORE_VERSION_EXCLUSIVE = "0.21.0"
 PLATFORMS = ("win64", "linux", "macos")
 QUICKINSTALL_PYTHON_FLOORS = {"win64": (3, 7), "linux": (3, 7), "macos": (3, 8)}
+STARTUP_PYTHON_MINORS = tuple(range(7, 15))
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 
 
@@ -817,7 +818,7 @@ def _load_bootstrap():
     if root:
         path = Path(root) / "scripts/dcc_mcp_houdini_bootstrap.py"
     elif script:
-        path = Path(script).with_name("dcc_mcp_houdini_bootstrap.py")
+        path = Path(script).resolve().parents[1] / "scripts/dcc_mcp_houdini_bootstrap.py"
     else:
         raise RuntimeError("DCC_MCP_HOUDINI_ROOT is not set")
     spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", str(path))
@@ -1114,7 +1115,8 @@ On Windows, -PackagesDir takes precedence over the environment variable.
 
 The installer writes a Houdini package JSON into the user Houdini preferences
 folder and points it at this extracted package directory. On Houdini startup,
-scripts/123.py handles empty startup and scripts/456.py handles loaded scenes;
+pythonX.Ylibs/uiready.py handles GUI startup; scripts/123.py and scripts/456.py
+remain available for legacy startup and loaded scenes;
 both reuse the same bootstrap to extract bundled wheels and start the MCP server.
 The DCC-MCP shelf is loaded from toolbar/DCC-MCP.shelf.
 
@@ -1155,6 +1157,7 @@ def verify_quickinstall_zip(
         "/packages/dcc_mcp_houdini.json.template",
         "/README.txt",
     ]
+    required_suffixes.extend("/python3.{}libs/uiready.py".format(minor) for minor in STARTUP_PYTHON_MINORS)
     for suffix in required_suffixes:
         if not any(name.endswith(suffix) for name in names):
             raise RuntimeError("quickinstall zip missing {}".format(suffix))
@@ -1280,6 +1283,10 @@ def assemble(platform: str, dist_dir: Path, output_dir: Path, core_version: Opti
         startup = _startup_py()
         for hook in ("123.py", "456.py"):
             (scripts_dir / hook).write_text(startup, encoding="utf-8")
+        for minor in STARTUP_PYTHON_MINORS:
+            python_libs = root / "python3.{}libs".format(minor)
+            python_libs.mkdir()
+            (python_libs / "uiready.py").write_text(startup, encoding="utf-8")
         (toolbar_dir / "DCC-MCP.shelf").write_text(_shelf_file(), encoding="utf-8")
         (root / "install.ps1").write_text(_install_ps1(), encoding="utf-8")
         install_sh = root / "install.sh"

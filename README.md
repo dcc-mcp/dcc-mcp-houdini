@@ -262,9 +262,13 @@ chmod +x install.sh
 ```
 
 The package writes a Houdini package JSON into the user preferences folder.
-`scripts/123.py` handles an empty startup and `scripts/456.py` handles a loaded
-scene; both reuse one bootstrap that extracts bundled wheels into `vendor/` and
+`pythonX.Ylibs/uiready.py` starts after the GUI is available. Houdini runs all
+matching `uiready.py` files, so a studio's first-match `123.py` cannot shadow
+this hook; it also covers Houdini Core and startup with a HIP file.
+Legacy `scripts/123.py` and `scripts/456.py` hooks reuse the same bootstrap that extracts bundled wheels into `vendor/` and
 starts the MCP server unless `DCC_MCP_HOUDINI_AUTOSTART=0`.
+Headless interpreters skip GUI autostart and use `hython -m dcc_mcp_houdini`.
+See [SideFX startup script locations](https://www.sidefx.com/docs/houdini/hom/locations.html).
 
 For Core 0.20.14, quickinstall supports Python 3.7+ on Windows/Linux and Python
 3.8+ on macOS. The macOS archive fails closed before extraction on Python 3.7

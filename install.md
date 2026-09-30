@@ -79,10 +79,14 @@ validate the exact public loader and resource; the adapter carries no fallback
 copy of the schema.
 
 The installer writes a receipted package JSON and owned startup hooks to the
-matching versioned Houdini profile. `123.py` covers an empty session and
-`456.py` covers a loaded scene. Both preserve the existing one-pump,
+matching versioned Houdini profile. `pythonX.Ylibs/uiready.py` uses the probed
+Hython Python version and runs after the UI is available, including Houdini Core
+and startup with a HIP. Houdini executes all matching UI-ready hooks; existing
+studio scripts cannot shadow this hook. Legacy `123.py` and `456.py` hooks reuse
+the same bootstrap. All preserve the existing one-pump,
 main-thread execution contract and capture bootstrap errors before a server is
 available.
+Headless autostart skips the GUI server; use `hython -m dcc_mcp_houdini` instead.
 
 ## Manual path
 

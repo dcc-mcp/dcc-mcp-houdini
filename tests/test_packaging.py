@@ -63,6 +63,8 @@ def _write_quickinstall_zip(zip_path: Path, *wheel_names: str, include_scene_hoo
         zf.writestr("dcc_mcp_houdini/scripts/123.py", "")
         if include_scene_hook:
             zf.writestr("dcc_mcp_houdini/scripts/456.py", "")
+        for minor in range(7, 15):
+            zf.writestr("dcc_mcp_houdini/python3.{}libs/uiready.py".format(minor), "")
         zf.writestr("dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py", "")
         zf.writestr("dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template", "")
         zf.writestr("dcc_mcp_houdini/README.txt", "")
@@ -107,6 +109,9 @@ def test_assemble_houdini_package_without_network(monkeypatch: pytest.MonkeyPatc
     assert "dcc_mcp_houdini/scripts/123.py" in names
     assert "dcc_mcp_houdini/scripts/456.py" in names
     assert startup == scene_load
+    with zipfile.ZipFile(zip_path) as zf:
+        for minor in pkg.STARTUP_PYTHON_MINORS:
+            assert zf.read("dcc_mcp_houdini/python3.{}libs/uiready.py".format(minor)) == startup
     assert "dcc_mcp_houdini/scripts/dcc_mcp_houdini_bootstrap.py" in names
     assert "dcc_mcp_houdini/toolbar/DCC-MCP.shelf" in names
     assert "dcc_mcp_houdini/packages/dcc_mcp_houdini.json.template" in names
@@ -446,9 +451,11 @@ def test_windows_installer_uses_packages_dir_environment_override(tmp_path: Path
     assert not (automatic_home / "Documents/houdini21.0/packages/dcc_mcp_houdini.json").exists()
 
 
+@pytest.mark.parametrize("location", [None, "scripts/123.py", "python3.13libs/uiready.py"])
 def test_startup_hook_uses_package_root_without_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    location,
 ) -> None:
     pkg = _load_packaging_script()
     scripts = tmp_path / "scripts"
@@ -467,9 +474,14 @@ def bootstrap_and_start():
 """.format(marker=str(marker)),
         encoding="utf-8",
     )
-    monkeypatch.setenv("DCC_MCP_HOUDINI_ROOT", str(tmp_path))
+    namespace = {}
+    if location is None:
+        monkeypatch.setenv("DCC_MCP_HOUDINI_ROOT", str(tmp_path))
+    else:
+        monkeypatch.delenv("DCC_MCP_HOUDINI_ROOT", raising=False)
+        namespace["__file__"] = str(tmp_path / location)
 
-    exec(compile(pkg._startup_py(), "<houdini-startup>", "exec"), {})
+    exec(compile(pkg._startup_py(), "<houdini-startup>", "exec"), namespace)
 
     assert marker.read_text(encoding="utf-8") == "1"
 
