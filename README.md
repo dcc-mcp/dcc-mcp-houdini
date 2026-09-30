@@ -368,7 +368,7 @@ quickinstall assets are produced on the **next daily window** after the merge
 and can drop scheduled runs under load). To ship sooner, trigger the Release
 workflow manually with `workflow_dispatch` after merging the release PR.
 
-## Bundled Skills (43 packages, 295 tools)
+## Bundled Skills (43 packages, 296 tools)
 
 See [domain coverage and acceptance](docs/guide/domain-capability-coverage.md)
 for implemented behavior, real-host evidence, and remaining domain work.
