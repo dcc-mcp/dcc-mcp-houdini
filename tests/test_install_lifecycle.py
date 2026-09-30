@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import runpy
 import sys
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -180,6 +182,7 @@ def test_receipt_round_trip_is_idempotent_and_uninstall_is_receipt_driven(
     package_file = Path(receipt["package_file"])
     assert package_file.is_file()
     assert (install_root / "scripts" / "123.py").is_file()
+    assert (install_root / "python3.12libs" / "uiready.py").is_file()
     bootstrap = (install_root / "scripts" / "dcc_mcp_houdini_bootstrap.py").read_text(encoding="utf-8")
     assert "capture_bootstrap_errors" in bootstrap
     before = {path: path.read_bytes() for path in install_root.rglob("*") if path.is_file()}
@@ -363,6 +366,25 @@ def test_quickinstall_bootstrap_uses_staged_vendor_and_error_capture() -> None:
     assert "shutil.rmtree(str(vendor_dir))" not in bootstrap
     assert "capture_bootstrap_errors" in bootstrap
     assert "capture_bootstrap_errors" in startup
+
+
+def test_generated_bootstrap_skips_headless_hython(monkeypatch):
+    import dcc_mcp_core
+
+    import dcc_mcp_houdini
+
+    monkeypatch.setattr(dcc_mcp_core, "capture_bootstrap_errors", lambda *args, **kwargs: nullcontext())
+    monkeypatch.setitem(sys.modules, "hou", SimpleNamespace(isUIAvailable=lambda: False))
+    monkeypatch.delenv("DCC_MCP_BACKGROUND_RENDER", raising=False)
+    monkeypatch.setenv("DCC_MCP_HOUDINI_AUTOSTART", "1")
+
+    def unexpected_start(**kwargs):
+        pytest.fail("a GUI startup hook must never start a server in headless Hython")
+
+    monkeypatch.setattr(dcc_mcp_houdini, "start_server", unexpected_start)
+    namespace = {}
+    exec(compile(_installer._bootstrap_source(Path("logs")), "<houdini-bootstrap>", "exec"), namespace)
+    assert namespace["bootstrap_and_start"]() is None
 
 
 def test_runbook_and_ci_cover_standard_lifecycle() -> None:

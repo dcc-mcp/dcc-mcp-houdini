@@ -691,7 +691,8 @@ try:
     ):
         root = os.environ.get("DCC_MCP_HOUDINI_ROOT")
         script = globals().get("__file__")
-        path = Path(root) / "scripts/dcc_mcp_houdini_bootstrap.py" if root else Path(script).with_name("dcc_mcp_houdini_bootstrap.py")
+        package_root = Path(root) if root else Path(script).resolve().parents[1]
+        path = package_root / "scripts/dcc_mcp_houdini_bootstrap.py"
         spec = importlib.util.spec_from_file_location("dcc_mcp_houdini_bootstrap", str(path))
         if spec is None or spec.loader is None:
             raise RuntimeError("Cannot load {{}}".format(path))
@@ -706,10 +707,12 @@ except Exception as exc:
 
 
 def _expected_sources(ctx: InstallContext) -> dict[str, str]:
+    python_abi = ".".join(ctx.python_version.split(".")[:2])
     return {
         "scripts/dcc_mcp_houdini_bootstrap.py": _bootstrap_source(ctx.bootstrap_log_dir),
         "scripts/123.py": _hook_source(ctx.bootstrap_log_dir),
         "scripts/456.py": _hook_source(ctx.bootstrap_log_dir),
+        "python{}libs/uiready.py".format(python_abi): _hook_source(ctx.bootstrap_log_dir),
     }
 
 
