@@ -100,9 +100,9 @@ documents the hook without a minimum version
 so this adapter records the evidence it has for each build instead of one
 minimum version. Real GUI sessions were verified on Houdini 22.0.368; 20.5.550
 and 21.0.440 ship the hook in their binaries but have no GUI-session
-verification, so treat 20.5 and 21.0 as unverified. On builds without the hook
-the deployed `uiready.py` is inert and GUI autostart relies on the legacy hooks
-alone.
+verification, so treat 20.5.550 and 21.0.440 as unverified. On builds without
+the hook the deployed `uiready.py` is inert and GUI autostart relies on the
+legacy hooks alone.
 
 ## Manual path
 

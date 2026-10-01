@@ -475,8 +475,9 @@ dcc-mcp-houdini/
 - Houdini with Python 3.7+ (`hython` or interactive Houdini)
 - A Houdini build that implements the UI-ready startup hook
   (`pythonX.Ylibs/uiready.py`) for GUI autostart. Real GUI sessions were verified
-  on 22.0; 20.5 and 21.0 ship the hook in their binaries but have no GUI-session
-  verification. Older builds fall back to the legacy `123.py` / `456.py` hooks.
+  on 22.0.368; 20.5.550 and 21.0.440 ship the hook in their binaries but have no
+  GUI-session verification. Older builds fall back to the legacy `123.py` /
+  `456.py` hooks.
 - `dcc-mcp-core >= 0.20.14,<0.21.0`
 - Quickinstall bundles the latest non-prerelease `dcc-mcp-core >= 0.20.14,<0.21.0` by default, or the validated `core_version` passed to a release backfill; no old-core pin is active.
 - Bundled Core wheel matrix: Python 3.7+ on Windows/Linux and Python 3.8+ on macOS; unsupported runtime/tag pairs fail before extraction.
