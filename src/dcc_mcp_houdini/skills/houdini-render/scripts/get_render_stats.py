@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from _render_common import eval_first_parm, get_node, node_summary  # noqa: E402
+from _render_common import eval_first_parm, get_node, node_summary, read_render_resolution  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -26,10 +26,7 @@ def get_render_stats(
             info_sources.append(node.path())
 
             # Resolution
-            res_x = eval_first_parm(node, ("res_overridex", "resx", "vm_resx", "res1"))
-            res_y = eval_first_parm(node, ("res_overridey", "resy", "vm_resy", "res2"))
-            if res_x and res_y:
-                stats["resolution"] = [int(res_x), int(res_y)]
+            stats.update(read_render_resolution(hou, node))
 
             # Samples
             pixel_samples = eval_first_parm(node, ("vm_samples", "pixelsamples"))

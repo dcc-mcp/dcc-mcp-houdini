@@ -8,8 +8,11 @@ from _render_common import (  # noqa: E402
     apply_frame_range,
     clamp_resolution,
     get_node,
+    is_mantra,
     node_summary,
+    read_render_resolution,
     set_first_parm,
+    set_render_resolution,
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -32,6 +35,7 @@ def set_render_settings(
         rop = get_node(hou, rop_path)
         applied: dict = {}
         unsupported: List[str] = []
+        readback: dict = {}
         if camera is not None:
             if set_first_parm(rop, ("camera", "render_camera"), camera):
                 applied["camera"] = camera
@@ -39,11 +43,11 @@ def set_render_settings(
                 unsupported.append("camera")
         clamped = clamp_resolution(resolution)
         if clamped is not None:
-            set_first_parm(rop, ("setres", "set_resolution"), True)
-            x = set_first_parm(rop, ("res_overridex", "resx", "vm_resx", "res1"), clamped[0])
-            y = set_first_parm(rop, ("res_overridey", "resy", "vm_resy", "res2"), clamped[1])
-            if x or y:
-                applied["resolution"] = clamped
+            written = set_render_resolution(rop, clamped)
+            readback.update(read_render_resolution(hou, rop))
+            required_source = "rop_override" if is_mantra(rop) else "rop"
+            if written and readback["resolution"] == clamped and readback["resolution_source"] == required_source:
+                applied["resolution"] = readback["resolution"]
             else:
                 unsupported.append("resolution")
         if frame_range is not None:
@@ -69,6 +73,7 @@ def set_render_settings(
             rop=node_summary(rop),
             applied=applied,
             unsupported=unsupported,
+            readback=readback,
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to set render settings")

@@ -178,7 +178,9 @@ tools:
   - name: get_render_settings
     description: >-
       Read renderer, camera, resolution, frame range, output path, and image
-      format from a ROP node. Preserves the existing resolved output_path and
+      format from a ROP node. For Mantra, follows the active camera resolution,
+      scale, or user override and reports unresolved controls explicitly.
+      Preserves the existing resolved output_path and
       also reports its raw tokenized pattern plus the frame-to-path resolution
       used for that value. For a Solaris USD Render ROP, resolves the composed
       RenderSettings, RenderProducts, samples, and AOVs without treating the
@@ -203,7 +205,11 @@ tools:
   - name: set_render_settings
     description: >-
       Set camera, resolution (clamped), frame range, output path, and image
-      format on a ROP node. Reports unsupported fields for the ROP type.
+      format on a ROP node. Mantra resolution enables camera override and user
+      specified resolution without editing the camera. Reports resolution in
+      applied only when complete controls read back as requested; readback
+      includes its current source and unresolved fields. Missing or ineffective
+      controls are reported in unsupported for the ROP type.
     source_file: scripts/set_render_settings.py
     execution: sync
     affinity: main
