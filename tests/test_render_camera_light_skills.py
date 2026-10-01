@@ -78,6 +78,17 @@ def _scalar_parm(value):
     return parm
 
 
+def _mutable_scalar_parm(value):
+    parm = _scalar_parm(value)
+
+    def set_value(updated):
+        parm.eval.return_value = updated
+        parm.unexpandedString.return_value = updated
+
+    parm.set.side_effect = set_value
+    return parm
+
+
 class _FakeMantraParm:
     def __init__(self, owner, name):
         self._owner = owner
@@ -1142,6 +1153,8 @@ class TestRenderSettings:
             "vm_picture": _scalar_parm("/tmp/beauty.exr"),
             "res_overridex": _scalar_parm(1280),
             "res_overridey": _scalar_parm(720),
+            "override_camerares": _scalar_parm(1),
+            "res_fraction": _scalar_parm("specific"),
         }.get(n)
         mock_hou = MagicMock()
         mock_hou.frame.return_value = 1.0
@@ -1178,9 +1191,9 @@ class TestRenderSettings:
     def test_set_render_settings_supports_houdini_22_copernicus_image_rop(self) -> None:
         mod = _load_script("houdini-render", "set_render_settings.py")
         parms = {
-            "setres": _scalar_parm(0),
-            "res1": _scalar_parm(1024),
-            "res2": _scalar_parm(1024),
+            "setres": _mutable_scalar_parm(0),
+            "res1": _mutable_scalar_parm(1024),
+            "res2": _mutable_scalar_parm(1024),
             "copoutput": _scalar_parm(""),
         }
         rop = _node("/img/copnet1/rop_image1", "rop_image1", "rop_image")

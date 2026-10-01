@@ -62,6 +62,17 @@ or Karma/Husk for batch rendering.
 5. `flipbook(output_path="/tmp/preview.$F4.jpg", frame_range=[1,24,4], camera_path="/obj/rendercam")` for a sparse camera preview (UI only)
 6. `render_rop("/out/mantra1", frame_range=[1,1])` → background `job_id` in interactive or headless Houdini
 
+For Mantra, `resolution` enables `override_camerares` and selects the
+`res_fraction` user-specified mode; it does not change the camera. Check both
+`applied.resolution` and the setter's `readback` before rendering. Missing axes,
+missing renderer controls, or writes that do not read back as requested are
+reported as `unsupported`, rather than a successful resolution change.
+`get_render_settings` and `get_render_stats` follow the active camera, camera
+scale, or ROP override. Unresolvable controls and fractional pixel rounding
+return explicit `resolution_unresolved` entries. These reads describe the
+current parameter context; verify the produced image separately, especially
+when a render take, command-line option, or another pipeline overrides it.
+
 For crash-safe final publication, opt in with
 `artifact_transaction={"mode":"staged_no_clobber"}` and an explicit integral
 frame range. Poll the worker to `completed`, validate each returned staging EXR

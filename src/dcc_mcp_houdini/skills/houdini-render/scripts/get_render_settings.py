@@ -8,6 +8,7 @@ from _render_common import (  # noqa: E402
     eval_first_parm_named,
     get_node,
     node_summary,
+    read_render_resolution,
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -171,8 +172,7 @@ def get_render_settings(rop_path: str) -> dict:
                 return skill_success("Read effective Solaris render settings", **_solaris_settings(hou, rop))
             except ValueError as exc:
                 solaris_error = str(exc)
-        res_x = eval_first_parm(rop, ("res_overridex", "resx", "vm_resx", "res1"))
-        res_y = eval_first_parm(rop, ("res_overridey", "resy", "vm_resy", "res2"))
+        resolution = read_render_resolution(hou, rop)
         output_frame = float(hou.frame())
         output_parms = (
             tuple(name for name in PRIMARY_OUTPUT_PARMS if name != "lopoutput")
@@ -185,7 +185,6 @@ def get_render_settings(rop_path: str) -> dict:
             "rop": node_summary(rop),
             "renderer": rop.type().name(),
             "camera": eval_first_parm(rop, ("camera", "render_camera")),
-            "resolution": [res_x, res_y] if (res_x is not None or res_y is not None) else None,
             "frame_range": eval_first_parm(rop, ("f",)),
             "output_parm_name": output_parm_name,
             "output_path": output_path,
@@ -198,6 +197,7 @@ def get_render_settings(rop_path: str) -> dict:
             },
             "image_format": eval_first_parm(rop, ("vm_image_format", "image_format")),
         }
+        settings.update(resolution)
         if solaris_error:
             settings.update(
                 intermediate_usd={
