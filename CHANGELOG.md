@@ -16,6 +16,28 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.44.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.43.1...v0.44.0) (2026-10-01)
+
+
+### Features
+
+* add official EXR denoising ([#331](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/331)) ([36a5295](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/36a5295750ceadf9596edde5f76aa346073316c8))
+* denoise EXRs with the official Houdini utility ([f1fbe04](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f1fbe04c642047119810854cf207f8f78371a40f))
+
+
+### Bug Fixes
+
+* apply and verify Mantra resolution overrides ([c23fded](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/c23fdedc5314eebec1f8a573543782fc318e9172))
+* bootstrap Houdini through official UI-ready hooks ([#329](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/329)) ([81bdf86](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/81bdf8616a74e5bd80608e9f07182e90c8f314ec))
+
+
+### Documentation
+
+* correct bundled tool total to 296 after denoise_image ([5e470a7](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/5e470a7afa13c2e6bbb2df143aec4edf3cfbf20c))
+* **integrations:** label the Claude Desktop endpoint as the gateway ([d67e30c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d67e30c46815d66fb2cc7b66e9a0b071f036d188))
+* **render:** list denoise_image in public tool catalogs ([b516333](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b516333aefdb2616761a6f947bf7930e4ef08303))
+* state verified Houdini range for uiready startup hook ([b9ed9dc](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/b9ed9dc14be8014ae69dd834d375d5a29006a684))
+
 ## [0.43.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.43.0...v0.43.1) (2026-09-23)
 
 
