@@ -17,7 +17,14 @@ tools:
         material_mode:
           type: string
           enum: [as_authored, default_gray, skip]
-          description: How to handle materials during import (default as_authored).
+          description: >-
+            How to handle materials during import (default as_authored).
+            as_authored rebuilds the carrier's materials as principledshader
+            nodes under /mat and binds them to the imported geo container;
+            carriers this adapter cannot decode (e.g. fbx, abc, bgeo) emit a
+            material_fallback warning instead of dropping the look silently.
+            default_gray creates and binds a neutral gray material.
+            skip imports geometry only.
         placement:
           type: object
           additionalProperties: true
