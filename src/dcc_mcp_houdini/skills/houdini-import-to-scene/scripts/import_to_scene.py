@@ -11,7 +11,7 @@ import os
 import re
 from typing import Any, Mapping, Optional
 
-from _asset_material_import import build_materials, decode_materials, detect_material_format
+from _asset_material_import import build_materials, decode_materials_report, detect_material_format
 from dcc_mcp_core.asset_import import (
     AssetDescriptor,
     AssetFileVariant,
@@ -102,10 +102,14 @@ def _import_file_to_houdini(
 ) -> tuple[list[str], list[ImportWarning]]:
     """Import a file into a Houdini geo container via a File SOP.
 
+    *filepath* must already be user- and variable-expanded (see
+    :func:`_expand_path`) so the geometry import and the material decode agree
+    on one single path.
+
     Returns (imported_node_paths, warnings).
     """
     warnings: list[ImportWarning] = []
-    expanded = os.path.expandvars(os.path.expanduser(filepath))
+    expanded = filepath
 
     if not os.path.exists(expanded):
         raise FileNotFoundError(f"Asset file not found: {expanded}")
@@ -143,6 +147,11 @@ def _import_file_to_houdini(
     return imported_nodes, warnings
 
 
+def _expand_path(filepath: str) -> str:
+    """Expand ``~`` and environment variables in *filepath* exactly once."""
+    return os.path.expandvars(os.path.expanduser(filepath))
+
+
 def _apply_material_mode(
     hou: Any,
     container: Any,
@@ -165,6 +174,7 @@ def _apply_material_mode(
         "material_paths": [],
         "material_assignments": [],
         "unapplied_parameters": [],
+        "unapplied_required": [],
         "status": "skipped",
         "warnings": [],
     }
@@ -208,7 +218,7 @@ def _apply_material_mode(
         return report
 
     material_format = detect_material_format(filepath, variant_format)
-    specs, status = decode_materials(filepath, material_format)
+    specs, status, decode_detail = decode_materials_report(filepath, material_format)
     report["status"] = status
 
     if status == "decoded" and specs:
@@ -218,8 +228,22 @@ def _apply_material_mode(
         report["material_paths"] = list(built["created"])
         report["material_assignments"] = list(built["assigned"])
         report["unapplied_parameters"] = list(built["unapplied"])
+        report["unapplied_required"] = list(built["unapplied_required"])
         if built["created"]:
             report["status"] = "as_authored"
+
+    detail = "file={0}; format={1}".format(filepath, material_format or "unknown")
+
+    def _fallback(reason: str) -> None:
+        report["warnings"].append(
+            ImportWarning(
+                code=ImportWarningCode.MATERIAL_FALLBACK,
+                message=(
+                    "material_mode='as_authored' was requested but the authored materials were not imported: " + reason
+                ),
+                detail=detail,
+            )
+        )
 
     if report["materials_imported"] == 0:
         reason = {
@@ -227,17 +251,19 @@ def _apply_material_mode(
                 material_format or "unknown"
             ),
             "decode_failed": "the carrier could not be decoded for materials",
-            "no_materials": "the carrier declares no materials",
+            "carrier_unreadable": "the carrier declares materials that could not be read",
             "decoded": "no material node could be created in the scene",
-        }.get(status, "materials were dropped")
-        if status in ("unsupported_format", "decode_failed", "decoded"):
-            report["warnings"].append(
-                ImportWarning(
-                    code=ImportWarningCode.MATERIAL_FALLBACK,
-                    message=("material_mode='as_authored' was requested but no materials were imported: " + reason),
-                    detail="file={0}; format={1}".format(filepath, material_format or "unknown"),
-                )
-            )
+        }.get(status)
+        if reason is not None and decode_detail:
+            reason = "{0} ({1})".format(reason, decode_detail)
+        # ``no_materials`` is the only quiet outcome: the carrier was read and
+        # genuinely carries no materials, so nothing was lost.
+        if reason is not None:
+            _fallback(reason)
+    elif report["unapplied_required"]:
+        # Materials exist but the shader did not expose the parms that carry
+        # the base look, so the imported material is not the authored one.
+        _fallback("the shader does not expose {0}".format(", ".join(report["unapplied_required"])))
     return report
 
 
@@ -312,7 +338,10 @@ def import_to_scene(
             "descriptor.variants is empty",
         )
 
-    filepath = variant.local_path
+    # Expand exactly once: the geometry import and the material decode must
+    # look at the same file (`$ASSETS/x.glb` used to reach the File SOP but
+    # not the material decoder).
+    filepath = _expand_path(variant.local_path)
 
     # Build placement hint
     placement_hint = None

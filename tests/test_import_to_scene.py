@@ -161,6 +161,17 @@ def hou(monkeypatch: pytest.MonkeyPatch) -> FakeHou:
     return fake
 
 
+def _load_helper() -> ModuleType:
+    helper = _SCRIPT_DIR / "_asset_material_import.py"
+    spec = importlib.util.spec_from_file_location("test_asset_material_import", helper)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    with skill_script_import_context(spec):
+        spec.loader.exec_module(module)
+    return module
+
+
 def _load_script() -> ModuleType:
     spec = importlib.util.spec_from_file_location("test_import_to_scene_script", _SCRIPT)
     assert spec and spec.loader
@@ -226,6 +237,55 @@ def write_obj_with_mtl(path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+USDA_PREVIEW_SURFACE = """#usda 1.0
+def Material "brushed_metal" {
+    token outputs:surface.connect = </brushed_metal/PreviewSurface.outputs:surface>
+    def Shader "PreviewSurface" {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.72, 0.45, 0.2)
+        float inputs:metallic = 1.0
+        float inputs:roughness = 0.28
+        token outputs:surface
+    }
+}
+"""
+
+
+def write_usda(path: Path) -> Path:
+    path.write_text(USDA_PREVIEW_SURFACE, encoding="utf-8")
+    return path
+
+
+class _FakeUsdInput:
+    """Stands in for ``UsdShade.Input``; unauthored inputs return ``None``."""
+
+    def __init__(self, value: Any) -> None:
+        self._value = value
+
+    def Get(self) -> Any:
+        return self._value
+
+
+class _FakeVec3f(tuple):
+    """Stands in for ``Gf.Vec3f``: iterable, but not a plain list/tuple."""
+
+    def __new__(cls, r: float, g: float, b: float) -> "_FakeVec3f":
+        return super().__new__(cls, (r, g, b))
+
+
+class _FakeUsdShader:
+    """Stands in for ``UsdShade.Shader``."""
+
+    def __init__(self, inputs: Dict[str, Any]) -> None:
+        self._inputs = inputs
+
+    def GetInput(self, name: str) -> Optional[_FakeUsdInput]:
+        if name not in self._inputs:
+            # Real pxr returns an Input object whose Get() is None.
+            return _FakeUsdInput(None)
+        return _FakeUsdInput(self._inputs[name])
 
 
 def _descriptor(path: Path, fmt: str, asset_id: str = "showcase_gltf") -> Dict[str, Any]:
@@ -300,6 +360,59 @@ class TestMaterialModeAsAuthored:
         assert _warnings(result) == []
 
 
+class TestUsdMaterials:
+    """USD coverage.  The pxr-dependent case is skipped when pxr is absent."""
+
+    def test_shader_spec_reads_vec3f_colours(self) -> None:
+        module = _load_helper()
+        shader = _FakeUsdShader(
+            {
+                "diffuseColor": _FakeVec3f(0.72, 0.45, 0.20),
+                "metallic": 1.0,
+                "roughness": 0.28,
+            }
+        )
+
+        spec = module._shader_spec(shader, "brushed_metal")
+
+        assert spec["base_color"] == [0.72, 0.45, 0.2]
+        assert spec["metallic"] == 1.0
+        assert round(spec["roughness"], 3) == 0.28
+        assert spec["emissive"] is None
+
+    def test_surface_shader_accepts_tuple_return(self) -> None:
+        """Modern pxr returns (shader, sourceName, attributeType)."""
+        module = _load_helper()
+        shader = _FakeUsdShader({"diffuseColor": (0.1, 0.2, 0.3)})
+
+        class _FakeUsdShade:
+            @staticmethod
+            def Shader(prim: Any) -> Any:
+                return prim
+
+        class _FakeMaterial:
+            @staticmethod
+            def ComputeSurfaceSource() -> Any:
+                return (shader, "surface", "output")
+
+        assert module._surface_shader(_FakeMaterial(), _FakeUsdShade) is shader
+
+    def test_usd_materials_are_imported_with_real_pxr(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
+        pytest.importorskip("pxr")
+        carrier = write_usda(tmp_path / "asset.usda")
+
+        result = script.import_to_scene(_descriptor(carrier, "usd"), material_mode="as_authored")
+
+        assert result["success"] is True
+        assert _extra(result)["status"] == "as_authored"
+        assert _extra(result)["materials_imported"] == 1
+        assert _warnings(result) == []
+        shader = hou.registry["/mat/showcase_gltf_brushed_metal"]
+        assert shader.parm_tuples["basecolor"].values == [0.72, 0.45, 0.2]
+        assert shader.parms["metallic"].value == 1.0
+        assert round(shader.parms["rough"].value, 3) == 0.28
+
+
 class TestMaterialModeIsNotSilent:
     def test_unsupported_carrier_warns_instead_of_lying(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
         carrier = tmp_path / "showcase.fbx"
@@ -335,6 +448,88 @@ class TestMaterialModeIsNotSilent:
         assert _warnings(result) == []
         assert _extra(result)["materials_imported"] == 0
         assert _extra(result)["status"] == "no_materials"
+
+    def test_obj_without_mtl_sidecar_warns(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
+        carrier = tmp_path / "asset.obj"
+        carrier.write_text("mtllib asset.mtl\nusemtl brushed_metal\nv 0 0 0\n", encoding="utf-8")
+
+        result = script.import_to_scene(_descriptor(carrier, "obj"), material_mode="as_authored")
+
+        assert result["success"] is True
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
+        assert "mtllib" in _warnings(result)[0]["message"]
+
+    def test_obj_with_unknown_usemtl_name_warns(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
+        (tmp_path / "asset.mtl").write_text("newmtl other\nKd 0.1 0.1 0.1\n", encoding="utf-8")
+        carrier = tmp_path / "asset.obj"
+        carrier.write_text("mtllib asset.mtl\nusemtl missing_name\nv 0 0 0\n", encoding="utf-8")
+
+        result = script.import_to_scene(_descriptor(carrier, "obj"), material_mode="as_authored")
+
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
+
+    def test_gltf_with_out_of_range_material_index_warns(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path
+    ) -> None:
+        carrier = write_glb(
+            tmp_path / "dangling.glb",
+            [{"name": "only_one", "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1]}}],
+            referenced=[5],
+        )
+
+        result = script.import_to_scene(_descriptor(carrier, "glb"), material_mode="as_authored")
+
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
+
+    def test_unexpanded_path_still_decodes_materials(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`~/env` paths must reach the material decoder, not only the File SOP."""
+        carrier = write_glb(
+            tmp_path / "showcase.glb",
+            [
+                {
+                    "name": "brushed_metal",
+                    "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.45, 0.20, 1.0], "metallicFactor": 1.0},
+                }
+            ],
+        )
+        monkeypatch.setenv("DCC_MCP_TEST_ASSETS", str(tmp_path))
+        descriptor = _descriptor(Path("$DCC_MCP_TEST_ASSETS/showcase.glb"), "glb")
+
+        result = script.import_to_scene(descriptor, material_mode="as_authored")
+
+        assert result["success"] is True
+        assert _extra(result)["materials_imported"] == 1
+        assert _warnings(result) == []
+        assert hou.registry["/obj/showcase_gltf/file1"].parms["file"].value == str(carrier)
+
+    def test_missing_base_color_parm_warns_instead_of_reporting_success(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A shader that cannot carry the base look must not report as_authored."""
+        original = FakeNode.__init__
+
+        def _init_without_color(
+            self: FakeNode, path: str, type_name: str, parent: Any, registry: Dict[str, Any]
+        ) -> None:
+            original(self, path, type_name, parent, registry)
+            self.parm_tuples.pop("basecolor", None)
+
+        monkeypatch.setattr(FakeNode, "__init__", _init_without_color)
+        carrier = write_glb(
+            tmp_path / "showcase.glb",
+            [{"name": "brushed_metal", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.45, 0.20, 1.0]}}],
+        )
+
+        result = script.import_to_scene(_descriptor(carrier, "glb"), material_mode="as_authored")
+
+        assert _extra(result)["materials_imported"] == 1
+        assert _extra(result)["unapplied_required"] == ["/mat/showcase_gltf_brushed_metal:base_color"]
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
 
     def test_default_result_is_never_silent_about_materials(
         self, script: ModuleType, hou: FakeHou, tmp_path: Path
