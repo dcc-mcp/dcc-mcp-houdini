@@ -34,6 +34,15 @@ from dcc_mcp_core.deployment import (
     load_install_sop_schema,
 )
 
+# Core 0.20.41 answers "what goes in a report's ``schema_version``?" itself, so the
+# hand-rolled read below is only the fallback for cores that predate it. Import
+# guardedly: the name does not exist at this adapter's declared floor (0.20.14), so a
+# static import would break every older core at import time rather than at call time.
+try:
+    from dcc_mcp_core.deployment import install_sop_report_schema_version
+except ImportError:  # Core older than 0.20.41
+    install_sop_report_schema_version = None
+
 from dcc_mcp_houdini.__version__ import __version__
 
 DCC_TYPE = "houdini"
@@ -925,11 +934,23 @@ def report_schema_version() -> int:
     field; the two merely happened to agree while both were 1. Populating the report from that
     constant is the defect this function exists to avoid.
 
+    Core 0.20.41 and later expose ``install_sop_report_schema_version()`` as the single
+    authoritative answer, so prefer it and keep the local read below as the fallback for
+    older cores in the declared range. The local read stays because the floor is unchanged:
+    deleting it would break every core below 0.20.41.
+
     If the document cannot be read, or is not shaped like a schema -- a partially installed,
     tampered, or otherwise unhealthy Core -- the value falls back to
     ``FALLBACK_REPORT_SCHEMA_VERSION`` rather than propagating, because this CLI's job is to
     keep emitting a report when the installation is broken.
     """
+    if install_sop_report_schema_version is not None:
+        try:
+            return int(install_sop_report_schema_version())
+        except (RuntimeError, OSError, ValueError, TypeError):
+            # A core new enough to answer the question but unable to read its own schema
+            # document. Fall through to the local read rather than losing the report.
+            pass
     try:
         document = load_install_sop_schema()
     except (RuntimeError, OSError, ValueError):

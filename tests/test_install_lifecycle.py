@@ -464,11 +464,22 @@ def test_runbook_and_ci_cover_standard_lifecycle() -> None:
 
 def test_report_schema_version_follows_cores_published_document(monkeypatch):
     """The report field is the ``const`` Core enforces, not a literal of ours."""
-    monkeypatch.setattr(
-        _installer,
-        "load_install_sop_schema",
-        lambda: {"properties": {"schema_version": {"const": 7}}},
-    )
+    if _installer.install_sop_report_schema_version is not None:
+        # Core 0.20.41+ answers this itself, so that is the path under test. It reads the
+        # same document, so patch the loader inside Core rather than the adapter's import.
+        from dcc_mcp_core.deployment import install_sop
+
+        monkeypatch.setattr(
+            install_sop,
+            "load_install_sop_schema",
+            lambda: {"properties": {"schema_version": {"const": 7}}},
+        )
+    else:
+        monkeypatch.setattr(
+            _installer,
+            "load_install_sop_schema",
+            lambda: {"properties": {"schema_version": {"const": 7}}},
+        )
 
     assert _installer.report_schema_version() == 7
 
