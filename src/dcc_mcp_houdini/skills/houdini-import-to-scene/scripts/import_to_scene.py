@@ -11,6 +11,7 @@ import os
 import re
 from typing import Any, Mapping, Optional
 
+from _asset_material_import import build_materials, decode_materials_report, detect_material_format
 from dcc_mcp_core.asset_import import (
     AssetDescriptor,
     AssetFileVariant,
@@ -21,6 +22,8 @@ from dcc_mcp_core.asset_import import (
     PlacementHint,
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
+
+VALID_MATERIAL_MODES = (MaterialMode.AS_AUTHORED, MaterialMode.DEFAULT_GRAY, MaterialMode.SKIP)
 
 
 def _safe_node_name(asset_id: str) -> str:
@@ -99,10 +102,14 @@ def _import_file_to_houdini(
 ) -> tuple[list[str], list[ImportWarning]]:
     """Import a file into a Houdini geo container via a File SOP.
 
+    *filepath* must already be user- and variable-expanded (see
+    :func:`_expand_path`) so the geometry import and the material decode agree
+    on one single path.
+
     Returns (imported_node_paths, warnings).
     """
     warnings: list[ImportWarning] = []
-    expanded = os.path.expandvars(os.path.expanduser(filepath))
+    expanded = filepath
 
     if not os.path.exists(expanded):
         raise FileNotFoundError(f"Asset file not found: {expanded}")
@@ -140,6 +147,126 @@ def _import_file_to_houdini(
     return imported_nodes, warnings
 
 
+def _expand_path(filepath: str) -> str:
+    """Expand ``~`` and environment variables in *filepath* exactly once."""
+    return os.path.expandvars(os.path.expanduser(filepath))
+
+
+def _apply_material_mode(
+    hou: Any,
+    container: Any,
+    material_mode: str,
+    filepath: str,
+    variant_format: Optional[str],
+    name_prefix: str,
+) -> dict:
+    """Honour *material_mode* for the freshly imported *container*.
+
+    The File-SOP import path carries geometry only, so ``as_authored`` has to be
+    reconstructed from the carrier itself.  Whatever happens, the returned
+    report tells the caller exactly how many materials landed, so the import
+    can warn instead of silently dropping the look of the asset.
+    """
+    report: dict = {
+        "material_mode": material_mode,
+        "materials_detected": 0,
+        "materials_imported": 0,
+        "material_paths": [],
+        "material_assignments": [],
+        "unapplied_parameters": [],
+        "unapplied_required": [],
+        "status": "skipped",
+        "warnings": [],
+    }
+
+    if container is None:
+        return report
+
+    if material_mode == MaterialMode.SKIP:
+        return report
+
+    if material_mode == MaterialMode.DEFAULT_GRAY:
+        built = build_materials(
+            hou,
+            [
+                {
+                    "name": "default_gray",
+                    "base_color": [0.5, 0.5, 0.5],
+                    "metallic": 0.0,
+                    "roughness": 0.5,
+                    "emissive": None,
+                    "opacity": 1.0,
+                }
+            ],
+            container,
+            name_prefix=name_prefix,
+        )
+        report["status"] = "default_gray" if built["created"] else "failed"
+        report["materials_imported"] = len(built["created"])
+        report["material_paths"] = list(built["created"])
+        report["material_assignments"] = list(built["assigned"])
+        if not built["created"]:
+            report["warnings"].append(
+                ImportWarning(
+                    code=ImportWarningCode.MATERIAL_FALLBACK,
+                    message=(
+                        "material_mode='default_gray' was requested but no material could be created; "
+                        "the imported geometry has no material assignment"
+                    ),
+                )
+            )
+        return report
+
+    material_format = detect_material_format(filepath, variant_format)
+    specs, status, decode_detail = decode_materials_report(filepath, material_format)
+    report["status"] = status
+
+    if status == "decoded" and specs:
+        report["materials_detected"] = len(specs)
+        built = build_materials(hou, specs, container, name_prefix=name_prefix)
+        report["materials_imported"] = len(built["created"])
+        report["material_paths"] = list(built["created"])
+        report["material_assignments"] = list(built["assigned"])
+        report["unapplied_parameters"] = list(built["unapplied"])
+        report["unapplied_required"] = list(built["unapplied_required"])
+        if built["created"]:
+            report["status"] = "as_authored"
+
+    detail = "file={0}; format={1}".format(filepath, material_format or "unknown")
+
+    def _fallback(reason: str) -> None:
+        report["warnings"].append(
+            ImportWarning(
+                code=ImportWarningCode.MATERIAL_FALLBACK,
+                message=(
+                    "material_mode='as_authored' was requested but the authored materials were not imported: " + reason
+                ),
+                detail=detail,
+            )
+        )
+
+    if report["materials_imported"] == 0:
+        reason = {
+            "unsupported_format": "this adapter has no material path for '{0}' carriers".format(
+                material_format or "unknown"
+            ),
+            "decode_failed": "the carrier could not be decoded for materials",
+            "carrier_unreadable": "the carrier declares materials that could not be read",
+            "decoded": "no material node could be created in the scene",
+        }.get(status)
+        if reason is not None and decode_detail:
+            reason = "{0} ({1})".format(reason, decode_detail)
+        # ``no_materials`` is the only quiet outcome: the carrier was read and
+        # genuinely carries no materials, so nothing was lost.
+        if reason is not None:
+            _fallback(reason)
+    elif report["unapplied_required"]:
+        # Materials exist but the shader did not expose the parms that carry
+        # the base look, so the imported material is not the authored one.
+        _fallback("the shader does not expose {0}".format(", ".join(report["unapplied_required"])))
+    return report
+
+
 def import_to_scene(
     descriptor: Mapping[str, Any],
     material_mode: str = MaterialMode.AS_AUTHORED,
@@ -157,7 +284,11 @@ def import_to_scene(
         skip_existing: Skip if asset_id already present in the scene.
 
     Returns:
-        ActionResultModel dict with ImportToSceneResult in context.
+        ActionResultModel dict with ImportToSceneResult in context.  Material
+        fidelity is reported through ``context.extra`` (``material_mode``,
+        ``materials_detected``, ``materials_imported``, ``material_paths``,
+        ``material_assignments``) and, when ``as_authored`` could not be
+        honoured, through a ``material_fallback`` warning.
     """
     try:
         import hou  # noqa: PLC0415
@@ -165,6 +296,15 @@ def import_to_scene(
         return skill_error(
             "Houdini not available",
             "hou could not be imported — this skill must run inside Houdini",
+        )
+
+    mode = material_mode or MaterialMode.AS_AUTHORED
+    if mode not in VALID_MATERIAL_MODES:
+        return skill_error(
+            "Unsupported material_mode '{0}'".format(mode),
+            "material_mode must be one of: {0}".format(", ".join(VALID_MATERIAL_MODES)),
+            material_mode=material_mode,
+            supported_modes=list(VALID_MATERIAL_MODES),
         )
 
     try:
@@ -198,7 +338,10 @@ def import_to_scene(
             "descriptor.variants is empty",
         )
 
-    filepath = variant.local_path
+    # Expand exactly once: the geometry import and the material decode must
+    # look at the same file (`$ASSETS/x.glb` used to reach the File SOP but
+    # not the material decoder).
+    filepath = _expand_path(variant.local_path)
 
     # Build placement hint
     placement_hint = None
@@ -232,16 +375,44 @@ def import_to_scene(
         container.setComment(f"dcc_mcp_asset_id: {desc.asset_id}")
         container.setUserData("dcc_mcp_asset_id", desc.asset_id)
 
+    # Materials: the File SOP carries geometry only, so the requested mode has
+    # to be honoured explicitly (and reported, never dropped in silence).
+    material_report = _apply_material_mode(
+        hou,
+        container,
+        mode,
+        filepath,
+        getattr(variant, "format", None),
+        _safe_node_name(desc.asset_id) + "_",
+    )
+    warnings.extend(material_report.pop("warnings"))
+
+    scene_nodes = list(imported_nodes) + list(material_report["material_paths"])
     result = ImportToSceneResult(
         success=True,
-        imported_nodes=imported_nodes,
+        imported_nodes=scene_nodes,
         warnings=warnings,
+        extra=material_report,
     )
 
+    imported_count = material_report["materials_imported"]
+    material_note = "{0} material(s)".format(imported_count)
+    if imported_count == 0 and mode != MaterialMode.SKIP:
+        material_note += " (material_mode='{0}' was not honoured)".format(mode)
+
     return skill_success(
-        f"Imported '{desc.asset_id}' into Houdini ({len(imported_nodes)} node(s))",
+        f"Imported '{desc.asset_id}' into Houdini ({len(imported_nodes)} node(s), {material_note})",
         **result.to_dict(),
-        prompt=f"Imported {len(imported_nodes)} node(s). Use get_scene_info or list_obj_nodes to inspect.",
+        prompt=(
+            f"Imported {len(imported_nodes)} geometry node(s) into {parent_path}. "
+            f"material_mode='{mode}' -> {material_report['status']}, "
+            f"{imported_count} material(s) created at {material_report['material_paths'] or 'n/a'}."
+            + (
+                " WARNING: materials were dropped — see context.warnings (code=material_fallback)."
+                if any(w.code == ImportWarningCode.MATERIAL_FALLBACK for w in warnings)
+                else ""
+            )
+        ),
     )
 
 
