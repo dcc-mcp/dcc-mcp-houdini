@@ -9,18 +9,30 @@ name: Release
 #
 # release-please creates tags from merged-but-untagged release PRs, so the
 # GitHub Release is cut on the first window after the release PR is merged
-# instead of on the merge push itself.
+# instead of on the merge push itself. The window is normally opened by a
+# `workflow_dispatch` with no inputs, fired at 19:37 CST (11:37 UTC); the
+# `schedule` cron below is a fallback only.
 on:
   schedule:
-    # 05:37 UTC daily. Deliberately off the hour: GitHub queues scheduled runs
-    # and on-the-hour crons are the most delayed during peak load.
+    # FALLBACK ONLY, and not the release trigger. The deterministic path is the
+    # `workflow_dispatch` fired at 19:37 CST (11:37 UTC) with no inputs; this
+    # cron exists only to cut a version when that dispatch does not happen.
+    # The cron value is deliberately left unchanged: GitHub queues scheduled
+    # runs, so retuning it cannot make it land on a predictable clock time.
     #
-    # CONTRACT: this window must stay AFTER the dcc-mcp-core release window
-    # (01:13 UTC, defined by the schedule cron in dcc-mcp-core's own
-    # .github/workflows/release.yml). Quickinstall assets resolve the newest
-    # compatible core from PyPI, so moving this window ahead of core would
-    # silently package a stale core. Re-check both crons together when either
-    # one changes.
+    # CONTRACT: this repository must cut its version AFTER dcc-mcp-core has
+    # published, never before. Core's window is opened by dispatch at 18:07 CST
+    # (10:07 UTC) and its publish has taken roughly 53 minutes end to end,
+    # which is why this repository's dispatch sits at 19:37 CST. Quickinstall
+    # assets resolve the newest compatible core from PyPI, so cutting here
+    # before core is on PyPI silently packages a stale core into the bundle.
+    # Re-check both trigger times together when either one changes.
+    #
+    # Known gap: this fallback cron is not ordered against core's dispatch. A
+    # queued cron can fire while core is still publishing, and the quickinstall
+    # assets it builds would then resolve the previous core. The dispatch path
+    # upholds the contract; the fallback cannot, and a fallback run that lands
+    # first must not be read as evidence that the ordering held.
     - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:
