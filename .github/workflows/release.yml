@@ -9,14 +9,18 @@ name: Release
 #
 # release-please creates tags from merged-but-untagged release PRs, so the
 # GitHub Release is cut on the first window after the release PR is merged
-# instead of on the merge push itself. The window is normally opened by a
-# `workflow_dispatch` with no inputs, fired at 19:37 CST (11:37 UTC); the
-# `schedule` cron below is a fallback only.
+# instead of on the merge push itself. In practice the window is usually
+# opened by the `schedule` cron below rather than by the 19:37 CST (11:37 UTC)
+# `workflow_dispatch`, because the cron lands after the merge batch and, on
+# most days, before that dispatch. See the note on the cron.
 on:
   schedule:
-    # FALLBACK ONLY, and not the release trigger. The deterministic path is the
-    # `workflow_dispatch` fired at 19:37 CST (11:37 UTC) with no inputs; this
-    # cron exists only to cut a version when that dispatch does not happen.
+    # NOT fallback-only in practice. This cron lands 10:03-11:57 UTC
+    # (18:03-19:57 CST): after the 17:32 CST merge batch, and on most days
+    # BEFORE the 19:37 CST dispatch. It therefore cuts the version on most
+    # days, and the dispatch then returns release_created=false. Only the
+    # dispatch upholds the ordering contract below; this cron cannot.
+    #
     # The cron value is deliberately left unchanged: GitHub queues scheduled
     # runs, so retuning it cannot make it land on a predictable clock time.
     #
