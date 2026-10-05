@@ -16,6 +16,13 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.44.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.44.0...v0.44.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **import:** honor material_mode instead of dropping materials silently ([#336](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/336)) ([e66d373](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/e66d3734e571e444e722eb1a887aaeb1bfa78be0))
+
 ## [0.44.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.43.1...v0.44.0) (2026-10-01)
 
 
