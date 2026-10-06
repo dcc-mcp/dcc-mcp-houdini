@@ -34,7 +34,7 @@ The list must include `dcc_type=houdini`. If it does not, follow the
 <!-- dcc-mcp-agent-quickstart:end -->
 
 <!-- dcc-mcp-coverage-pointer:start -->
-<!-- Generated from dcc-mcp-catalog.yml by scripts/generate_adapter_pointer.py. Do not edit by hand. -->
+<!-- Generated from dcc-mcp-catalog.yml by scripts/generate_adapter_pointer.py in dcc-mcp/dcc-mcp-core. Do not edit by hand. -->
 ## Part of the DCC-MCP host matrix
 
 **dcc-mcp-houdini** — Core Houdini adapter for DCC-MCP — Houdini tools exposed through
