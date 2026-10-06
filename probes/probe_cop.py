@@ -426,7 +426,7 @@ def main():
         "summary": {"pass": passed, "fail": failed, "blocked": blocked},
     }
 
-    out_path = "P:/monica/feb80763-f6d5-4f8e-993e-b65688e9ec3c/03ead74f/workdir/dcc-mcp-houdini/probes/result_v2.json"
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "result_v2.json")
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2, default=str)
     print(f"\nResults written to {out_path}")
