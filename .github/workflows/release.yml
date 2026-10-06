@@ -2,42 +2,29 @@ name: Release
 
 # Batched release cadence.
 #
-# release-please runs on a fixed daily window instead of on every push to main,
-# so a single version carries every feat/fix merged since the previous tag
-# rather than one version per merge. `workflow_dispatch` stays available as the
+# release-please runs in a release window instead of on every push to main, so a
+# single version carries every feat/fix merged since the previous tag rather
+# than one version per merge. `workflow_dispatch` stays available as the
 # emergency release and asset-backfill channel.
 #
 # release-please creates tags from merged-but-untagged release PRs, so the
 # GitHub Release is cut on the first window after the release PR is merged
-# instead of on the merge push itself. In practice the window is usually
-# opened by the `schedule` cron below rather than by the 19:37 CST (11:37 UTC)
-# `workflow_dispatch`, because the cron lands after the merge batch and, on
-# most days, before that dispatch. See the note on the cron.
+# instead of on the merge push itself.
+#
+# The window is opened by a `workflow_dispatch` with no inputs, fired at 19:37
+# CST (11:37 UTC). That dispatch is the only entry point: there is deliberately
+# no `schedule` fallback, so a missed dispatch shows up as a missed dispatch
+# instead of being quietly absorbed by a cron that fires at an unpredictable
+# clock time.
+#
+# CONTRACT: this repository must cut its version AFTER dcc-mcp-core has
+# published, never before. Core's window is opened by dispatch at 18:07 CST
+# (10:07 UTC) and its publish has taken roughly 53 minutes end to end, which is
+# why this repository's dispatch sits at 19:37 CST. Quickinstall assets resolve
+# the newest compatible core from PyPI, so cutting here before core reaches
+# PyPI silently packages a stale core into the bundle. Re-check both dispatch
+# times together when either one changes.
 on:
-  schedule:
-    # NOT fallback-only in practice. This cron lands 10:03-11:57 UTC
-    # (18:03-19:57 CST): after the 17:32 CST merge batch, and on most days
-    # BEFORE the 19:37 CST dispatch. It therefore cuts the version on most
-    # days, and the dispatch then returns release_created=false. Only the
-    # dispatch upholds the ordering contract below; this cron cannot.
-    #
-    # The cron value is deliberately left unchanged: GitHub queues scheduled
-    # runs, so retuning it cannot make it land on a predictable clock time.
-    #
-    # CONTRACT: this repository must cut its version AFTER dcc-mcp-core has
-    # published, never before. Core's window is opened by dispatch at 18:07 CST
-    # (10:07 UTC) and its publish has taken roughly 53 minutes end to end,
-    # which is why this repository's dispatch sits at 19:37 CST. Quickinstall
-    # assets resolve the newest compatible core from PyPI, so cutting here
-    # before core is on PyPI silently packages a stale core into the bundle.
-    # Re-check both trigger times together when either one changes.
-    #
-    # Known gap: this fallback cron is not ordered against core's dispatch. A
-    # queued cron can fire while core is still publishing, and the quickinstall
-    # assets it builds would then resolve the previous core. The dispatch path
-    # upholds the contract; the fallback cannot, and a fallback run that lands
-    # first must not be read as evidence that the ordering held.
-    - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:
       tag_name:
