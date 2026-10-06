@@ -33,6 +33,26 @@ The list must include `dcc_type=houdini`. If it does not, follow the
 [connection troubleshooting guide](https://github.com/dcc-mcp/dcc-mcp-agent-plugins#adapter-connection-troubleshooting).
 <!-- dcc-mcp-agent-quickstart:end -->
 
+<!-- dcc-mcp-coverage-pointer:start -->
+<!-- Generated from dcc-mcp-catalog.yml by scripts/generate_adapter_pointer.py. Do not edit by hand. -->
+## Part of the DCC-MCP host matrix
+
+**dcc-mcp-houdini** — Core Houdini adapter for DCC-MCP — Houdini tools exposed through
+MCP.
+
+It is one of **38 host adapters** in the DCC-MCP catalog. Every adapter implements the
+same MCP protocol and the same tool contract, so an agent that drives this host drives
+the others through the same calls.
+
+- [All host adapters and install metadata](https://dcc-mcp.github.io/ecosystem)
+- [Host matrix on the core README](https://github.com/dcc-mcp/dcc-mcp-core#readme)
+- [Showcase](https://dcc-mcp.github.io/showcase)
+
+This block is generated from the catalog entry in
+[`dcc-mcp-catalog.yml`](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/dcc-mcp-catalog.yml).
+Re-run the generator after changing the catalog.
+<!-- dcc-mcp-coverage-pointer:end -->
+
 ## Agent workflow
 
 AI agents should use the shared gateway through `dcc-mcp-cli`; IDE users may
