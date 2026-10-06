@@ -102,7 +102,10 @@ Houdini `hou.*` APIs require the UI thread. The adapter wires:
 
 When adding or changing bundled skills, load the project skill:
 
-- **Cursor:** `.cursor/skills/dcc-mcp-skill-developer/SKILL.md`
+- **Registry (authoritative):** `dcc-mcp-skill-developer` in the workspace skill
+  registry — `monica skill get dcc-mcp-skill-developer --with-content`. Agent and
+  IDE directories such as `.cursor/` are runtime mount points and are not
+  committed, so the registry is the only copy guaranteed to be current.
 - **Checklist:** `references/SKILL_AUTHORING_CHECKLIST.md` in that skill
 - **Index:** `src/dcc_mcp_houdini/skills/SKILLS_INDEX.md`
 
