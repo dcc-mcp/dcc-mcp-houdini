@@ -40,9 +40,9 @@ The list must include `dcc_type=houdini`. If it does not, follow the
 **dcc-mcp-houdini** — Core Houdini adapter for DCC-MCP — Houdini tools exposed through
 MCP.
 
-It is one of **38 host adapters** in the DCC-MCP catalog. Every adapter implements the
-same MCP protocol and the same tool contract, so an agent that drives this host drives
-the others through the same calls.
+It is one of **38 host adapters** in the DCC-MCP catalog. Every adapter speaks the same
+MCP protocol and builds on the same core runtime contract; each one exposes the tools
+its own host needs on top of that.
 
 - [All host adapters and install metadata](https://dcc-mcp.github.io/ecosystem)
 - [Host matrix on the core README](https://github.com/dcc-mcp/dcc-mcp-core#readme)
