@@ -111,6 +111,9 @@ def main() -> None:
             stdin=subprocess.DEVNULL,
             timeout=int(status.get("timeout_secs") or 3600),
             check=False,
+            # The outer worker is console-less; flags do not propagate to children.
+            # Keep inherited stdout/stderr attached to the worker log files.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         written_files = _written_files(status)
         render_errors, warnings = _file_render_diagnostics(status.get("stderr_path"))
