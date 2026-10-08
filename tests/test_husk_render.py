@@ -565,3 +565,21 @@ def test_create_snapshot_rejects_non_lop_with_typed_redirect(tmp_path: Path) -> 
     assert result["error"] == "UNSUPPORTED_SNAPSHOT_SOURCE"
     assert result["context"]["code"] == "UNSUPPORTED_SNAPSHOT_SOURCE"
     assert result["context"]["dcc"]["next_tools"] == ["houdini_interchange__export_usd"]
+
+
+@pytest.mark.parametrize("no_window_flag", [0, 0x08000000])
+def test_husk_child_suppresses_console_without_detaching_logs(tmp_path, no_window_flag):
+    worker = _load_script("_husk_worker.py")
+    status_path = tmp_path / "status.json"
+    write_status(status_path, {"timeout_secs": 30, "expected_outputs": []})
+    with patch.object(sys, "argv", ["worker", str(status_path), '["husk", "scene.usda"]']), patch.object(
+        worker.subprocess, "CREATE_NO_WINDOW", no_window_flag, create=True
+    ), patch.object(worker.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run:
+        worker.main()
+    kwargs = run.call_args.kwargs
+    assert kwargs["creationflags"] == no_window_flag
+    assert kwargs.get("stdout") is None
+    assert kwargs.get("stderr") is None
+    assert not kwargs.get("start_new_session", False)
+    assert kwargs["timeout"] == 30
+    assert read_status(status_path)["returncode"] == 7
