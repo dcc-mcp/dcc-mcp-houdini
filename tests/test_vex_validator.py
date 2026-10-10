@@ -260,9 +260,9 @@ class TestValidateAttributeBindings:
 
 
 class TestStripCommentsAndStrings:
-    def test_hash_inside_string_literal_does_not_truncate_line(self) -> None:
-        # A '#' inside a string literal is data, not a comment start, so the
-        # statement terminator after it must survive stripping.
+    def test_string_literal_is_blanked_not_truncated(self) -> None:
+        # A comment marker inside a string literal is data, so the statement
+        # terminator after it must survive stripping.
         code = 's@attr = "value # not a comment";'
         stripped = _strip_comments_and_strings(code)
         assert 's@attr = "";' in stripped
@@ -271,6 +271,25 @@ class TestStripCommentsAndStrings:
         code = 's@name = "path // to nowhere"; @P += 1;'
         stripped = _strip_comments_and_strings(code)
         assert 's@name = ""; @P += 1;' in stripped
+
+    def test_single_quoted_string_literal_is_handled(self) -> None:
+        # VEX accepts both quote styles (sidefx.com/docs/houdini/vex/strings.html).
+        code = "s@name = 'path // to nowhere'; @P += 1;"
+        stripped = _strip_comments_and_strings(code)
+        assert 's@name = ""; @P += 1;' in stripped
+
+    def test_escaped_quote_does_not_end_literal_early(self) -> None:
+        code = 's@a = "he said \\"hi\\" ok"; @P += 1;'
+        stripped = _strip_comments_and_strings(code)
+        assert 's@a = ""; @P += 1;' in stripped
+
+    def test_unterminated_quote_in_comment_does_not_span_lines(self) -> None:
+        # An odd quote inside a comment must not pair with a later quote and
+        # swallow everything in between.
+        code = '// 5" diameter\n@P += 1;\ns@a = "x";'
+        stripped = _strip_comments_and_strings(code)
+        assert "@P += 1;" in stripped
+        assert 's@a = "";' in stripped
 
     def test_real_line_comment_is_stripped(self) -> None:
         code = "@P += 1;  // this is a real comment"
@@ -284,3 +303,41 @@ class TestStripCommentsAndStrings:
         stripped = _strip_comments_and_strings(code)
         assert 's@name = ""; @P += 1;' in stripped
         assert "tail comment" not in stripped
+
+
+# ---------------------------------------------------------------------------
+# Allowlist escape regressions — assert the security property, not the helper
+# ---------------------------------------------------------------------------
+
+
+class TestAllowlistNotBypassedByStringsOrComments:
+    """A '//' in a string or comment must not hide a disallowed call."""
+
+    def test_bare_disallowed_call_is_flagged(self) -> None:
+        errors = validate_vex_snippet_client("unknown();", WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)
+
+    def test_double_quoted_string_does_not_hide_call(self) -> None:
+        code = 's@name = "path // to nowhere"; unknown();'
+        errors = validate_vex_snippet_client(code, WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)
+
+    def test_single_quoted_string_does_not_hide_call(self) -> None:
+        code = "string s = 'path // inside'; unknown();"
+        errors = validate_vex_snippet_client(code, WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)
+
+    def test_unpaired_quote_in_comment_does_not_hide_call(self) -> None:
+        code = '// 5" diameter\nunknown();\ns@a = "x";'
+        errors = validate_vex_snippet_client(code, WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)
+
+    def test_paired_quotes_in_comment_do_not_hide_call(self) -> None:
+        code = '// use " around paths\nunknown();\ns@a = "x";'
+        errors = validate_vex_snippet_client(code, WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)
+
+    def test_escaped_quote_does_not_hide_call(self) -> None:
+        code = 's@a = "he said \\"hi\\" ok"; unknown();'
+        errors = validate_vex_snippet_client(code, WrangleType.POINT_WRANGLE)
+        assert any("Disallowed function call" in e.message for e in errors)

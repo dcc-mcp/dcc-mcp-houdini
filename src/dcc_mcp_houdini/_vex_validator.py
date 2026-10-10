@@ -320,9 +320,11 @@ def _strip_comments_and_strings(code: str) -> str:
     """Remove comments and string literals so the token allowlist is accurate."""
     # Remove block comments
     code = re.sub(r"/\*.*?\*/", " ", code, flags=re.DOTALL)
-    # Remove string literals before line comments: a '#' or '//' inside a
-    # string literal is data, not a comment start.
-    code = re.sub(r'"[^"]*"', '""', code)
+    # Remove string literals before line comments: a '//' inside a string
+    # literal is data, not a comment start. VEX allows both quote styles
+    # (sidefx.com/docs/houdini/vex/strings.html). Anchoring to a single line
+    # stops an unterminated quote in a comment from pairing with a later quote.
+    code = re.sub(r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')""", '""', code)
     # Remove line comments
     code = re.sub(r"//.*$", " ", code, flags=re.MULTILINE)
     return code
