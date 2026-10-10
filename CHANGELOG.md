@@ -16,6 +16,18 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.44.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.44.1...v0.44.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* suppress nested Husk renderer consoles ([173305e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/173305e63a792f4eaadba8a3ca059c20e5cce8d2))
+
+
+### Documentation
+
+* refresh the generated DCC-MCP host matrix pointer ([d66a6af](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d66a6afb86cd6a76894e6c271148f5325c200b28))
+
 ## [0.44.1](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.44.0...v0.44.1) (2026-10-05)
 
 
