@@ -320,10 +320,11 @@ def _strip_comments_and_strings(code: str) -> str:
     """Remove comments and string literals so the token allowlist is accurate."""
     # Remove block comments
     code = re.sub(r"/\*.*?\*/", " ", code, flags=re.DOTALL)
+    # Remove string literals before line comments: a '#' or '//' inside a
+    # string literal is data, not a comment start.
+    code = re.sub(r'"[^"]*"', '""', code)
     # Remove line comments
     code = re.sub(r"//.*$", " ", code, flags=re.MULTILINE)
-    # Remove string literals
-    code = re.sub(r'"[^"]*"', '""', code)
     return code
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dcc_mcp_houdini._vex_types import VexSeverity, WrangleType
 from dcc_mcp_houdini._vex_validator import (
+    _strip_comments_and_strings,
     validate_attribute_bindings,
     validate_vex_snippet_client,
     validate_wrangle_parameters,
@@ -251,3 +252,35 @@ class TestValidateAttributeBindings:
         # Should have line context
         assert errors[0].line is not None
         assert "unknownAttr" in errors[0].message
+
+
+# ---------------------------------------------------------------------------
+# _strip_comments_and_strings — stripping order
+# ---------------------------------------------------------------------------
+
+
+class TestStripCommentsAndStrings:
+    def test_hash_inside_string_literal_does_not_truncate_line(self) -> None:
+        # A '#' inside a string literal is data, not a comment start, so the
+        # statement terminator after it must survive stripping.
+        code = 's@attr = "value # not a comment";'
+        stripped = _strip_comments_and_strings(code)
+        assert 's@attr = "";' in stripped
+
+    def test_slash_slash_inside_string_literal_does_not_truncate_line(self) -> None:
+        code = 's@name = "path // to nowhere"; @P += 1;'
+        stripped = _strip_comments_and_strings(code)
+        assert 's@name = ""; @P += 1;' in stripped
+
+    def test_real_line_comment_is_stripped(self) -> None:
+        code = "@P += 1;  // this is a real comment"
+        stripped = _strip_comments_and_strings(code)
+        assert "//" not in stripped
+        assert "real comment" not in stripped
+        assert "@P += 1;" in stripped
+
+    def test_string_before_real_comment_keeps_both_boundaries(self) -> None:
+        code = 's@name = "path // to nowhere"; @P += 1;  // tail comment'
+        stripped = _strip_comments_and_strings(code)
+        assert 's@name = ""; @P += 1;' in stripped
+        assert "tail comment" not in stripped
