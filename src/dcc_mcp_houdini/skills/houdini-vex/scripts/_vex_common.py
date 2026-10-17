@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import List
 
 from dcc_mcp_houdini._vex_types import (
     VexContext,
@@ -36,11 +36,3 @@ def resolve_wrangle_type(type_name: str) -> WrangleType:
 def format_validation_errors(errors: List[VexSyntaxError]) -> List[dict]:
     """Convert a list of :class:`VexSyntaxError` to JSON-compatible dicts."""
     return [e.to_dict() for e in errors]
-
-
-def _get_node(hou: Any, node_path: str) -> Any:
-    """Resolve a node path, raising ValueError if not found."""
-    node = hou.node(node_path)
-    if node is None:
-        raise ValueError(f"Houdini node not found: {node_path}")
-    return node
