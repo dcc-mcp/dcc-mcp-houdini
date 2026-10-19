@@ -23,6 +23,12 @@ def _values(value: Any, count: int, cast: Any) -> Tuple[Any, ...]:
     raw = value if isinstance(value, (list, tuple)) else [value] * count
     if len(raw) != count:
         raise ValueError("default must contain exactly {} value(s)".format(count))
+    # Reject null up front: for a string default, ``str(None)`` would otherwise
+    # silently bake the literal ``"None"`` into the interface, while numeric
+    # defaults fail much later with an opaque host error. Failing here keeps all
+    # parameter types on one readable, structured-error path.
+    if any(item is None for item in raw):
+        raise ValueError("default must not contain null (None) values")
     return tuple(cast(item) for item in raw)
 
 

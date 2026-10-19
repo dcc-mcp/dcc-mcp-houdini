@@ -26,7 +26,9 @@ tools:
   - name: get_parms
     description: >-
       Read values for specific parm names (or all parms when names omitted).
-      Read-only; missing names are reported separately.
+      An explicit empty ``names`` list selects nothing and returns empty values;
+      only omitting ``names`` reads the whole node. Read-only; missing names are
+      reported separately.
     source_file: scripts/get_parms.py
     execution: sync
     affinity: main
@@ -49,7 +51,9 @@ tools:
           type: array
           items:
             type: string
-          description: Parameter names to read; all parms when omitted.
+          description: >-
+            Parameter names to read; omit to read all parms. An explicit empty
+            list returns no values (it does not fall back to reading all parms).
   - name: set_parms
     description: >-
       Set one or many parameters with type-aware coercion. Tuple values target

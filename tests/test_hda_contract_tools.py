@@ -10,6 +10,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_error_assertions import skill_error_detail
 from skill_loader import skill_script_import_context
 
@@ -205,6 +206,78 @@ def test_author_hda_interface_accepts_one_sided_numeric_ranges() -> None:
 
     assert result["success"] is True
     node.setParmTemplateGroup.assert_called_once_with(group)
+
+
+def test_author_hda_interface_rejects_null_string_default() -> None:
+    # DEF-2: a null string default must not be coerced via str(None) into the
+    # literal "None" baked into the interface; it has to fail with a structured
+    # error and leave the interface unwritten.
+    mod = _load_script("author_hda_interface.py")
+    group = _Group()
+    node = MagicMock()
+    node.path.return_value = "/obj/asset"
+    node.type.return_value.definition.return_value = None
+    node.parmTemplateGroup.return_value = group
+    mock_hou = MagicMock(**_template_api())
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.author_hda_interface(
+            "/obj/asset",
+            [{"type": "string", "name": "shot", "label": "Shot", "default": None}],
+        )
+
+    assert result["success"] is False
+    assert "null" in skill_error_detail(result).lower() or "none" in skill_error_detail(result).lower()
+    node.setParmTemplateGroup.assert_not_called()
+    assert len(group.entries()) == 0
+
+
+@pytest.mark.parametrize("kind, default", [("float", None), ("int", None)])
+def test_author_hda_interface_rejects_null_numeric_default(kind: str, default: object) -> None:
+    # Numeric null defaults already failed, but via an opaque host TypeError;
+    # they now share one readable structured-error path with string defaults.
+    mod = _load_script("author_hda_interface.py")
+    node = MagicMock()
+    node.path.return_value = "/obj/asset"
+    node.type.return_value.definition.return_value = None
+    node.parmTemplateGroup.return_value = _Group()
+    mock_hou = MagicMock(**_template_api())
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.author_hda_interface(
+            "/obj/asset",
+            [{"type": kind, "name": "gain", "label": "Gain", "default": default}],
+        )
+
+    assert result["success"] is False
+    assert "null" in skill_error_detail(result).lower() or "none" in skill_error_detail(result).lower()
+    node.setParmTemplateGroup.assert_not_called()
+
+
+def test_author_hda_interface_string_default_empty_string_is_valid() -> None:
+    # An explicit empty string is a legitimate default and must still work.
+    mod = _load_script("author_hda_interface.py")
+    group = _Group()
+    node = MagicMock()
+    node.path.return_value = "/obj/asset"
+    node.type.return_value.definition.return_value = None
+    node.parmTemplateGroup.return_value = group
+    mock_hou = MagicMock(**_template_api())
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.author_hda_interface(
+            "/obj/asset",
+            [{"type": "string", "name": "shot", "label": "Shot", "default": ""}],
+        )
+
+    assert result["success"] is True
+    node.setParmTemplateGroup.assert_called_once_with(group)
+    built = group.entries()[0]
+    assert built.name() == "shot"
+    assert built.settings["default_value"] == ("",)
 
 
 def test_publish_hda_library_namespaces_versions_and_embeds_manifest(tmp_path: Path) -> None:

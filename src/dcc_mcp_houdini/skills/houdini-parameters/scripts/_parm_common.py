@@ -48,7 +48,17 @@ def _safe(obj: Any, method: str):
 
 
 def coerce_scalar(value: Any, current: Any) -> Any:
-    """Best-effort coercion of *value* to the type of *current*."""
+    """Best-effort coercion of *value* to the type of *current*.
+
+    A null (``None``) value is never a valid Houdini parameter value, so it is
+    rejected with a descriptive error instead of being coerced. Without this
+    guard ``str(None)`` silently turns a string parameter into the literal
+    ``"None"``, and ``int(None)``/``float(None)``/``bool(None)`` fail late with
+    an opaque host error. Rejecting up front keeps every type on the same
+    safe-failure path with a single readable message.
+    """
+    if value is None:
+        raise TypeError("Cannot coerce null (None) to a parameter value: provide a concrete value")
     if current is None or isinstance(value, type(current)):
         return value
     try:
