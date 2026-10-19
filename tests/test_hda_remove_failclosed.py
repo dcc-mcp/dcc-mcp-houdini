@@ -21,6 +21,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -234,3 +235,112 @@ class TestRefusedRemovalRollsBackInstall:
         assert fx.install_calls == ["/assets/solar.hda"]
         # Pre-existing load is left untouched: no rollback uninstall.
         assert fx.uninstall_calls == []
+
+
+# ---- point 6: an UNKNOWN load state must never authorize a rollback ----
+class TestUnknownLoadStateDoesNotRollback:
+    """A rollback that uninstalls a library is only safe when we can prove we
+    installed it. When ``loadedFiles()`` cannot be read, the load state is
+    UNKNOWN and must be treated as "do not uninstall", otherwise a refused
+    removal can uninstall a library that was already loaded before the call —
+    violating the tool's own "already loaded is never uninstalled" contract.
+    """
+
+    def test_loaded_files_raises_does_not_uninstall_on_refusal(self):
+        mod = _load("remove_hda_definition.py")
+        fx = _RemovalFixture(library="/assets/solar.hda")
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]  # live -> refusal
+        fx.mock_hou.hda.loadedFiles.side_effect = RuntimeError("HOM loadedFiles transient failure")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="/assets/solar.hda")
+
+        assert result["success"] is False
+        assert fx.install_calls == ["/assets/solar.hda"]
+        # Load state was UNKNOWN -> no rollback authorization -> nothing uninstalled.
+        assert fx.uninstall_calls == []
+
+    def test_loaded_files_returns_non_iterable_does_not_uninstall_on_refusal(self):
+        mod = _load("remove_hda_definition.py")
+        fx = _RemovalFixture(library="/assets/solar.hda")
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]  # live -> refusal
+        fx.mock_hou.hda.loadedFiles.return_value = object()  # not iterable -> unknown
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="/assets/solar.hda")
+
+        assert result["success"] is False
+        assert fx.uninstall_calls == []
+
+
+# ---- point 7: non-canonical request forms must still match a loaded library ----
+class TestNonCanonicalRequestMatchesLoadedLibrary:
+    """``loadedFiles()``/``libraryFilePath()`` report expanded absolute paths, so a
+    request using ``$VAR``/relative/symlink form must be canonicalized before
+    matching. Otherwise an already-loaded library is judged "not loaded", the
+    install is marked as ours, and a refused removal wrongly uninstalls it.
+    """
+
+    def test_var_request_matches_loaded_library_no_rollback_on_refusal(self):
+        mod = _load("remove_hda_definition.py")
+        fx = _RemovalFixture(library="/assets/solar.hda", loaded=["/assets/solar.hda"])
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]  # live -> refusal
+        fx.mock_hou.expandString.side_effect = lambda s: s.replace("$HIP", "/assets")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="$HIP/solar.hda")
+
+        assert result["success"] is False
+        assert fx.install_calls == ["$HIP/solar.hda"]
+        # Requested via $VAR but the canonical library was already loaded -> no rollback.
+        assert fx.uninstall_calls == []
+
+    def test_relative_request_matches_loaded_library_no_rollback_on_refusal(self, tmp_path, monkeypatch):
+        mod = _load("remove_hda_definition.py")
+        library = tmp_path / "solar.hda"
+        library.write_bytes(b"hda")
+        canonical = str(library.resolve())
+        fx = _RemovalFixture(library=canonical, loaded=[canonical])
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]  # live -> refusal
+        monkeypatch.chdir(tmp_path)
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="solar.hda")
+
+        assert result["success"] is False
+        assert fx.uninstall_calls == []
+
+    def test_symlink_request_matches_loaded_library_no_rollback_on_refusal(self, tmp_path):
+        mod = _load("remove_hda_definition.py")
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        (real_dir / "solar.hda").write_bytes(b"hda")
+        canonical = str((real_dir / "solar.hda").resolve())
+        link_dir = tmp_path / "link"
+        try:
+            link_dir.symlink_to(real_dir, target_is_directory=True)
+        except OSError as exc:  # pragma: no cover - platform without symlink privilege
+            pytest.skip("symlink unavailable: {}".format(exc))
+        requested = str(link_dir / "solar.hda")  # same file, different path form
+        fx = _RemovalFixture(library=canonical, loaded=[canonical])
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]  # live -> refusal
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file=requested)
+
+        assert result["success"] is False
+        assert fx.uninstall_calls == []
+
+
+# ---- point 8: a failed rollback must be reported, not silently swallowed ----
+class TestRollbackFailureIsReported:
+    def test_uninstall_failure_is_surfaced_on_result(self):
+        mod = _load("remove_hda_definition.py")
+        # Not loaded beforehand and refused by a live instance -> a rollback is
+        # authorized, but uninstall fails; the failure must be reported.
+        fx = _RemovalFixture(library="/assets/solar.hda")
+        fx.node_type.instances.return_value = [_node("/obj/geo1/solar1")]
+        fx.mock_hou.hda.uninstallFile.side_effect = RuntimeError("uninstall refused by Houdini")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="/assets/solar.hda")
+
+        assert result["success"] is False
+        assert fx.install_calls == ["/assets/solar.hda"]
+        assert result["context"]["rollback_failed"] is True
+        assert "uninstall refused by Houdini" in result["context"]["rollback_error"]
+        assert result["context"]["rolled_back_library"] == "/assets/solar.hda"
