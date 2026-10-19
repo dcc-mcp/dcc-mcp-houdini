@@ -419,6 +419,10 @@ def test_uninstall_hda_file_reports_still_loaded_when_houdini_keeps_library(tmp_
     mock_hou.hda.uninstallFile.assert_called_once_with(library)
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="Case/separator-insensitive path matching relies on Windows ntpath.normcase semantics.",
+)
 def test_uninstall_hda_file_is_case_and_separator_insensitive_on_windows(tmp_path: Path) -> None:
     mod = _load_script("uninstall_hda_file.py")
     library = tmp_path / "solar.hda"
