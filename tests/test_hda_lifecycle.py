@@ -419,6 +419,36 @@ def test_uninstall_hda_file_reports_still_loaded_when_houdini_keeps_library(tmp_
     mock_hou.hda.uninstallFile.assert_called_once_with(library)
 
 
+def test_uninstall_hda_file_uninstalls_when_definitions_cannot_be_read(tmp_path: Path) -> None:
+    """A loaded library whose file is missing/corrupt must still be uninstallable.
+
+    Regression: an unguarded ``hou.hda.definitionsInFile`` call raised for such a
+    library, so ``hou.hda.uninstallFile`` was never reached and the library could
+    not be removed from the session at all — contradicting the tool's own design
+    intent that a library removed from disk may still be session-registered.
+    """
+    mod = _load_script("uninstall_hda_file.py")
+    library = str(tmp_path / "solar.hda")
+    mock_hou = MagicMock()
+    # The library is still registered in the session, but its backing file can no
+    # longer be read (removed or corrupted on disk).
+    mock_hou.hda.loadedFiles.side_effect = [[library], []]
+    mock_hou.hda.definitionsInFile.side_effect = RuntimeError("library file missing or corrupt")
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file(library)
+
+    assert result["success"] is True
+    ctx = result["context"]
+    assert ctx["was_loaded"] is True
+    assert ctx["still_loaded"] is False
+    assert ctx["removed_definition_count"] == 0
+    assert ctx["removed_definitions"] == []
+    assert ctx["unregistered_node_types"] == []
+    # The whole point of the fix: uninstallFile still runs despite the read error.
+    mock_hou.hda.uninstallFile.assert_called_once_with(library)
+
+
 @pytest.mark.skipif(
     sys.platform != "win32",
     reason="Case/separator-insensitive path matching relies on Windows ntpath.normcase semantics.",

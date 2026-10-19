@@ -47,13 +47,17 @@ definition introspection, instantiation, validation, and graph-level cooking.
   current HIP for embedded definitions) and cannot be undone. It fails closed:
   removal is refused when live instances exist, and also when the instance
   count cannot be reliably enumerated (reported as `instances_unknown`); only
-  `allow_orphan_instances=true` overrides both. It is not the same as unloading
-  a library from the session — for that reversible, session-only operation use
-  `houdini-hda`'s `uninstall_hda_file`. Always consider `dry_run=true` first
-  when the target library is shared; a dry run never calls `destroy`, and with
-  `hda_file` it neither installs the library nor switches the active definition.
-  A dry run targeting a library that is not already loaded reports
-  `Definition not found` rather than installing it.
+  `allow_orphan_instances=true` overrides both. When the target library is not
+  already loaded, a real removal installs it first so `destroy` rewrites that
+  exact file; if the removal is then refused or fails, that install is rolled
+  back (a library already loaded before the call is left untouched), so a
+  refused removal never leaves a newly installed library loaded. It is not the
+  same as unloading a library from the session — for that reversible,
+  session-only operation use `houdini-hda`'s `uninstall_hda_file`. Always
+  consider `dry_run=true` first when the target library is shared; a dry run
+  never calls `destroy`, and with `hda_file` it neither installs the library nor
+  switches the active definition. A dry run targeting a library that is not
+  already loaded reports `Definition not found` rather than installing it.
 - **Headless / no license:** all tools degrade through structured
   `skill_error` envelopes when `hou` is unavailable; PDG/ROP cooking still
   requires a valid Houdini session.

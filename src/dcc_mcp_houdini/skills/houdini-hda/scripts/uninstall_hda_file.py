@@ -29,17 +29,28 @@ def _match_loaded_library(hou: Any, requested: str) -> Optional[str]:
     return None
 
 
-def _definition_identities(hou: Any, library: str) -> list:
-    """Snapshot (category, node type name) for every definition in *library*.
+def _safe_definitions(hou: Any, library: str) -> list:
+    """Return the definitions in *library*, or [] when the file cannot be read.
+
+    A library can remain registered in the session after its backing file is
+    removed from disk or corrupted. Such a library must still be uninstallable,
+    so a read failure (e.g. ``hou.OperationFailed``) is treated as "no
+    definitions known" rather than an error that would block
+    ``hou.hda.uninstallFile``.
+    """
+    try:
+        return list(hou.hda.definitionsInFile(library))
+    except Exception:  # noqa: BLE001 - missing/corrupt file still allows uninstall
+        return []
+
+
+def _definition_identities(definitions: list) -> list:
+    """Snapshot (category, node type name) for every definition in *definitions*.
 
     Captured before uninstall so the post-uninstall registration check still has
     the category objects needed to look each node type up again.
     """
     identities = []
-    try:
-        definitions = hou.hda.definitionsInFile(library)
-    except Exception:  # noqa: BLE001 - a missing/corrupt file still allows uninstall
-        return identities
     for definition in definitions:
         node_type = getattr(definition, "nodeType", None)
         category = node_type().category() if callable(node_type) else None
@@ -89,8 +100,12 @@ def uninstall_hda_file(file_path: str) -> dict:
                 session_only=True,
             )
 
-        definitions = [definition_summary(defn, loaded) for defn in hou.hda.definitionsInFile(loaded)]
-        identities = _definition_identities(hou, loaded)
+        # Read definitions once, guarded: a loaded-but-missing/corrupt file must
+        # not raise here, otherwise uninstallFile below would never run and the
+        # library could not be removed from the session at all.
+        raw_definitions = _safe_definitions(hou, loaded)
+        definitions = [definition_summary(defn, loaded) for defn in raw_definitions]
+        identities = _definition_identities(raw_definitions)
         hou.hda.uninstallFile(loaded)
         still_loaded = _match_loaded_library(hou, loaded) is not None
         unregistered = _unregistered(hou, identities)
