@@ -157,6 +157,143 @@ class TestHdaEdit:
         assert any("missing" in w for w in result["context"]["warnings"])
 
 
+def _definition(node_type_name: str, library: str) -> MagicMock:
+    definition = MagicMock()
+    definition.nodeTypeName.return_value = node_type_name
+    definition.libraryFilePath.return_value = library
+    definition.version.return_value = "1.0"
+    definition.description.return_value = "Solar asset"
+    definition.isCurrent.return_value = True
+    definition.isInstalled.return_value = True
+    definition.sections.return_value = {}
+    return definition
+
+
+class _RemovalFixture:
+    """Wire a mock hou so find_node_type resolves before destroy and not after."""
+
+    def __init__(self, node_type_name: str, library: str, instances: list | None = None) -> None:
+        self.destroyed = False
+        category = MagicMock()
+        category.name.return_value = "Sop"
+        self.node_type = MagicMock()
+        self.node_type.name.return_value = node_type_name
+        self.node_type.category.return_value = category
+        self.node_type.instances.return_value = list(instances or [])
+        self.definition = _definition(node_type_name, library)
+        self.definition.nodeType.return_value = self.node_type
+        self.node_type.definition.return_value = self.definition
+
+        def destroy() -> None:
+            self.destroyed = True
+
+        self.definition.destroy.side_effect = destroy
+
+        self.mock_hou = MagicMock()
+        self.mock_hou.nodeType.side_effect = self._lookup
+
+    def _lookup(self, _category, _name):
+        return None if self.destroyed else self.node_type
+
+
+class TestHdaRemoveDefinition:
+    def test_remove_definition_destroys_and_unregisters_type(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        fx = _RemovalFixture("studio::solar", "/assets/solar.hda")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar")
+
+        assert result["success"] is True
+        ctx = result["context"]
+        assert ctx["dry_run"] is False
+        assert ctx["instance_count"] == 0
+        assert ctx["instances_orphaned"] == 0
+        assert ctx["node_type_unregistered"] is True
+        assert ctx["node_type_name"] == "studio::solar"
+        fx.definition.destroy.assert_called_once_with()
+
+    def test_remove_definition_refuses_live_instances_by_default(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        inst1 = _node("/obj/geo1/solar1", "solar1", "studio::solar")
+        inst2 = _node("/obj/geo2/solar2", "solar2", "studio::solar")
+        fx = _RemovalFixture("studio::solar", "/assets/solar.hda", instances=[inst1, inst2])
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar")
+
+        assert result["success"] is False
+        assert result["context"]["instance_count"] == 2
+        assert result["context"]["instance_paths"] == ["/obj/geo1/solar1", "/obj/geo2/solar2"]
+        fx.definition.destroy.assert_not_called()
+
+    def test_remove_definition_allows_orphan_when_explicit(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        inst1 = _node("/obj/geo1/solar1", "solar1", "studio::solar")
+        fx = _RemovalFixture("studio::solar", "/assets/solar.hda", instances=[inst1])
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", allow_orphan_instances=True)
+
+        assert result["success"] is True
+        assert result["context"]["instances_orphaned"] == 1
+        assert result["context"]["node_type_unregistered"] is True
+        fx.definition.destroy.assert_called_once_with()
+
+    def test_remove_definition_dry_run_does_not_destroy(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        fx = _RemovalFixture("studio::solar", "/assets/solar.hda")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", dry_run=True)
+
+        assert result["success"] is True
+        assert result["context"]["dry_run"] is True
+        assert result["context"]["node_type_name"] == "studio::solar"
+        fx.definition.destroy.assert_not_called()
+
+    def test_remove_definition_reports_not_found(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        mock_hou = MagicMock()
+        mock_hou.nodeType.return_value = None  # no node type in any category
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.remove_hda_definition("studio::missing")
+
+        assert result["success"] is False
+
+    def test_remove_definition_targets_file_and_installs_first(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        fx = _RemovalFixture("studio::solar", "/assets/solar.hda")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="/assets/solar.hda")
+
+        assert result["success"] is True
+        fx.mock_hou.hda.installFile.assert_called_once_with("/assets/solar.hda")
+        fx.definition.destroy.assert_called_once_with()
+
+    def test_remove_definition_refuses_definition_from_other_library(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        # Active definition lives in a different library than the requested file.
+        fx = _RemovalFixture("studio::solar", "/assets/other.hda")
+        with patch.dict(sys.modules, {"hou": fx.mock_hou}):
+            result = mod.remove_hda_definition("studio::solar", hda_file="/assets/solar.hda")
+
+        assert result["success"] is False
+        fx.definition.destroy.assert_not_called()
+
+    def test_remove_definition_without_hou_returns_error(self) -> None:
+        mod = _load_script("remove_hda_definition.py")
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _import(name, *args, **kwargs):
+            if name == "hou":
+                raise ImportError("no hou")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_import):
+            result = mod.remove_hda_definition("studio::solar")
+
+        assert result["success"] is False
+
+
 class TestPdgRop:
     def test_cook_top_network(self) -> None:
         mod = _load_script("cook_top_network.py")

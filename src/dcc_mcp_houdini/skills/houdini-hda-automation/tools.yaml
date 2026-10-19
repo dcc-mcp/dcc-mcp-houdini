@@ -75,6 +75,44 @@ tools:
         cook:
           type: boolean
           default: true
+  - name: remove_hda_definition
+    description: >-
+      Remove a single HDA definition with HDADefinition.destroy, permanently
+      deleting it from its library and rewriting the library file on disk (or
+      the current HIP when embedded). Destructive and irreversible: existing
+      instances are left as incomplete assets. Refuses to orphan live instances
+      unless allow_orphan_instances is true; dry_run previews without writing.
+      Prefer houdini-hda uninstall_hda_file for a reversible session-only
+      library removal.
+    source_file: scripts/remove_hda_definition.py
+    execution: sync
+    affinity: main
+    group: hda-edit
+    read_only: false
+    destructive: true
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [node_type_name]
+      properties:
+        node_type_name:
+          type: string
+          description: "HDA node type name whose definition will be removed."
+        hda_file:
+          type: string
+          description: "Optional library file to install and target; its active definition must match this node type."
+        allow_orphan_instances:
+          type: boolean
+          default: false
+          description: "Permit removal even when live instances would be orphaned."
+        dry_run:
+          type: boolean
+          default: false
+          description: "Report what would be removed without calling destroy."
   - name: validate_hda
     description: >-
       Cook an HDA node (optional) and report errors, warnings, and a pass/fail

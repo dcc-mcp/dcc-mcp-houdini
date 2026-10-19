@@ -336,3 +336,133 @@ def test_sync_hda_instance_matches_definition_and_runs_version_handler() -> None
     node.syncDelayedDefinition.assert_called_once_with()
     node.matchCurrentDefinition.assert_called_once_with()
     node.syncNodeVersionIfNeeded.assert_called_once_with("1.1.0")
+
+
+def _hda_definition(node_type_name: str, library: str, category_name: str = "Sop") -> MagicMock:
+    """Build a mock hou.HDADefinition suitable for install/uninstall tests."""
+    category = MagicMock()
+    category.name.return_value = category_name
+    node_type = MagicMock()
+    node_type.category.return_value = category
+    definition = MagicMock()
+    definition.nodeType.return_value = node_type
+    definition.nodeTypeName.return_value = node_type_name
+    definition.libraryFilePath.return_value = library
+    definition.description.return_value = "Solar asset"
+    definition.version.return_value = "1.0"
+    return definition
+
+
+def test_uninstall_hda_file_uninstalls_loaded_library_and_unregister_types(tmp_path: Path) -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    library = str(tmp_path / "solar.hda")
+    definition = _hda_definition("studio::solar", library)
+    sop_category = definition.nodeType.return_value.category.return_value
+
+    mock_hou = MagicMock()
+    # First call (before uninstall) reports loaded; second call (after) reports gone.
+    mock_hou.hda.loadedFiles.side_effect = [[library], []]
+    mock_hou.hda.definitionsInFile.return_value = [definition]
+    mock_hou.nodeType.return_value = None  # node type unregistered after uninstall
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file(library)
+
+    assert result["success"] is True
+    ctx = result["context"]
+    assert ctx["was_loaded"] is True
+    assert ctx["still_loaded"] is False
+    assert ctx["removed_definition_count"] == 1
+    assert ctx["removed_definitions"][0]["node_type_name"] == "studio::solar"
+    assert ctx["unregistered_node_types"] == ["studio::solar"]
+    assert ctx["session_only"] is True
+    mock_hou.hda.uninstallFile.assert_called_once_with(library)
+    # Post-check must look the node type up with the captured category.
+    mock_hou.nodeType.assert_called_once_with(sop_category, "studio::solar")
+
+
+def test_uninstall_hda_file_is_idempotent_noop_when_not_loaded(tmp_path: Path) -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    library = str(tmp_path / "solar.hda")
+    mock_hou = MagicMock()
+    mock_hou.hda.loadedFiles.return_value = ["/libs/other.hda"]
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file(library)
+
+    assert result["success"] is True
+    ctx = result["context"]
+    assert ctx["was_loaded"] is False
+    assert ctx["still_loaded"] is False
+    assert ctx["removed_definition_count"] == 0
+    assert ctx["removed_definitions"] == []
+    assert ctx["session_only"] is True
+    mock_hou.hda.uninstallFile.assert_not_called()
+
+
+def test_uninstall_hda_file_reports_still_loaded_when_houdini_keeps_library(tmp_path: Path) -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    library = str(tmp_path / "solar.hda")
+    definition = _hda_definition("studio::solar", library)
+    mock_hou = MagicMock()
+    mock_hou.hda.loadedFiles.side_effect = [[library], [library]]
+    mock_hou.hda.definitionsInFile.return_value = [definition]
+    mock_hou.nodeType.return_value = definition.nodeType.return_value
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file(library)
+
+    assert result["success"] is True
+    assert result["context"]["was_loaded"] is True
+    assert result["context"]["still_loaded"] is True
+    assert result["context"]["unregistered_node_types"] == []
+    mock_hou.hda.uninstallFile.assert_called_once_with(library)
+
+
+def test_uninstall_hda_file_is_case_and_separator_insensitive_on_windows(tmp_path: Path) -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    library = tmp_path / "solar.hda"
+    library.write_bytes(b"hda")
+    # Pass an upper-cased, back-slashed variant of the same loaded path.
+    requested = str(library).upper().replace("/", "\\")
+    definition = _hda_definition("studio::solar", str(library))
+    mock_hou = MagicMock()
+    mock_hou.hda.loadedFiles.side_effect = [[str(library)], []]
+    mock_hou.hda.definitionsInFile.return_value = [definition]
+    mock_hou.nodeType.return_value = None
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file(requested)
+
+    assert result["success"] is True
+    assert result["context"]["was_loaded"] is True
+    # uninstallFile must be called with Houdini's canonical loaded string, not the raw input.
+    mock_hou.hda.uninstallFile.assert_called_once_with(str(library))
+
+
+def test_uninstall_hda_file_rejects_unsupported_extension() -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    mock_hou = MagicMock()
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.uninstall_hda_file("/libs/solar.txt")
+
+    assert result["success"] is False
+    mock_hou.hda.uninstallFile.assert_not_called()
+
+
+def test_uninstall_hda_file_without_hou_returns_error(tmp_path: Path) -> None:
+    mod = _load_script("uninstall_hda_file.py")
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _import(name, *args, **kwargs):
+        if name == "hou":
+            raise ImportError("no hou")
+        return real_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=_import):
+        result = mod.uninstall_hda_file(str(tmp_path / "solar.hda"))
+
+    assert result["success"] is False

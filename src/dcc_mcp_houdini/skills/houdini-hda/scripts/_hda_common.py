@@ -30,6 +30,20 @@ def validate_hda_path(file_path: str, *, must_exist: bool = True) -> Path:
     return path
 
 
+def validate_hda_library_path(file_path: str) -> Path:
+    """Validate an HDA library path by extension only, without touching the filesystem.
+
+    Used by session-level operations such as uninstalling a loaded library: the
+    library may still be registered in the session even after its file has been
+    removed from disk, and validating must never create parent directories as a
+    side effect (unlike :func:`validate_hda_path` with ``must_exist=False``).
+    """
+    path = Path(file_path).expanduser()
+    if path.suffix.lower() not in _HDA_SUFFIXES:
+        raise ValueError("Unsupported HDA file extension: {}".format(path.suffix))
+    return path
+
+
 def definition_summary(definition: Any, source_file: str = "") -> dict:
     """Return a JSON-safe HDA definition summary."""
     node_type = definition.nodeType()
