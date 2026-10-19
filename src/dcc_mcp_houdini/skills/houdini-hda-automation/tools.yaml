@@ -84,8 +84,11 @@ tools:
       live instances, and refuses when the instance count cannot be reliably
       determined, unless allow_orphan_instances is true. dry_run previews
       without writing; with hda_file it does not install the library or switch
-      the active definition. Prefer houdini-hda uninstall_hda_file for a
-      reversible session-only library removal.
+      the active definition. When a real removal installs the target library,
+      that install is rolled back if the removal is refused or fails, so a
+      refused removal never leaves a newly installed library loaded; a library
+      already loaded beforehand is left untouched. Prefer houdini-hda
+      uninstall_hda_file for a reversible session-only library removal.
     source_file: scripts/remove_hda_definition.py
     execution: sync
     affinity: main
