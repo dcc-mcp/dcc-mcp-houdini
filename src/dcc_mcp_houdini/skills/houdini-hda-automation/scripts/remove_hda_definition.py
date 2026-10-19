@@ -14,7 +14,7 @@ def _normalize(path: str) -> str:
     return os.path.normcase(os.path.normpath(os.path.expanduser(path)))
 
 
-def _resolve_definition(hou: Any, node_type_name: str, hda_file: Optional[str]):
+def _resolve_definition(hou: Any, node_type_name: str, hda_file: Optional[str], dry_run: bool = False):
     """Return (definition, node_type) for removal, or (None, None) when absent.
 
     When *hda_file* is provided the library is installed first so that
@@ -22,9 +22,14 @@ def _resolve_definition(hou: Any, node_type_name: str, hda_file: Optional[str]):
     rewrites that exact file. The active definition's library path is then
     verified to match the requested file, refusing ambiguous targets where a
     same-named definition from a different library is currently preferred.
+
+    For a dry run the library is never installed: installing would mutate the
+    loaded-library list and could switch the active/current definition, which a
+    preview must not do.
     """
     if hda_file:
-        hou.hda.installFile(hda_file)
+        if not dry_run:
+            hou.hda.installFile(hda_file)
         node_type = find_node_type(hou, node_type_name)
         if node_type is None:
             return None, None
@@ -65,7 +70,7 @@ def remove_hda_definition(
         return skill_error("Houdini not available", "hou could not be imported")
 
     try:
-        definition, node_type = _resolve_definition(hou, node_type_name, hda_file)
+        definition, node_type = _resolve_definition(hou, node_type_name, hda_file, dry_run=dry_run)
         if definition is None:
             return skill_error(
                 "Definition not found",
@@ -74,7 +79,21 @@ def remove_hda_definition(
                 hda_file=hda_file,
             )
 
-        instance_paths = node_type_instances(node_type) if node_type is not None else []
+        instance_paths = node_type_instances(node_type) if node_type is not None else None
+
+        # Fail closed: an unknown instance count (enumeration failed/unavailable)
+        # must never be treated as zero instances for a destructive removal.
+        if instance_paths is None and not allow_orphan_instances:
+            return skill_error(
+                "Instance state unknown",
+                "Could not reliably enumerate instances of {!r}; refusing to remove "
+                "(fail-closed). Retry, or pass allow_orphan_instances=true to override.".format(node_type_name),
+                node_type_name=node_type_name,
+                hda_file=hda_file,
+                instance_count=None,
+                instances_unknown=True,
+            )
+
         if instance_paths and not allow_orphan_instances:
             return skill_error(
                 "Definition has live instances",
@@ -87,9 +106,11 @@ def remove_hda_definition(
                 instance_paths=instance_paths,
             )
 
+        known_paths = instance_paths or []
         summary = definition_summary(definition)
-        summary["instance_count"] = len(instance_paths)
-        summary["instance_paths"] = instance_paths
+        summary["instance_count"] = None if instance_paths is None else len(known_paths)
+        summary["instance_paths"] = known_paths
+        summary["instances_unknown"] = instance_paths is None
 
         if dry_run:
             summary["dry_run"] = True
@@ -115,7 +136,7 @@ def remove_hda_definition(
                 unregistered = True
 
         summary["dry_run"] = False
-        summary["instances_orphaned"] = len(instance_paths)
+        summary["instances_orphaned"] = len(known_paths)
         summary["node_type_unregistered"] = unregistered
         return skill_success("Removed HDA definition", **summary)
     except Exception as exc:

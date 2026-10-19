@@ -80,10 +80,12 @@ tools:
       Remove a single HDA definition with HDADefinition.destroy, permanently
       deleting it from its library and rewriting the library file on disk (or
       the current HIP when embedded). Destructive and irreversible: existing
-      instances are left as incomplete assets. Refuses to orphan live instances
-      unless allow_orphan_instances is true; dry_run previews without writing.
-      Prefer houdini-hda uninstall_hda_file for a reversible session-only
-      library removal.
+      instances are left as incomplete assets. Fails closed: refuses to orphan
+      live instances, and refuses when the instance count cannot be reliably
+      determined, unless allow_orphan_instances is true. dry_run previews
+      without writing; with hda_file it does not install the library or switch
+      the active definition. Prefer houdini-hda uninstall_hda_file for a
+      reversible session-only library removal.
     source_file: scripts/remove_hda_definition.py
     execution: sync
     affinity: main
@@ -104,15 +106,15 @@ tools:
           description: "HDA node type name whose definition will be removed."
         hda_file:
           type: string
-          description: "Optional library file to install and target; its active definition must match this node type."
+          description: "Optional library file to install (skipped when dry_run is true) and target; its active definition must match this node type."
         allow_orphan_instances:
           type: boolean
           default: false
-          description: "Permit removal even when live instances would be orphaned."
+          description: "Permit removal even when live instances would be orphaned or the instance count cannot be determined (fail-closed override)."
         dry_run:
           type: boolean
           default: false
-          description: "Report what would be removed without calling destroy."
+          description: "Report what would be removed without calling destroy; with hda_file, does not install the library or switch the active definition."
   - name: validate_hda
     description: >-
       Cook an HDA node (optional) and report errors, warnings, and a pass/fail
