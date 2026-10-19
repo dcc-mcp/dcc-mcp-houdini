@@ -49,26 +49,30 @@ def find_node_type(hou: Any, type_name: str) -> Optional[Any]:
     return None
 
 
-def node_type_instances(node_type: Any) -> list:
-    """Return live instance node paths for a node type, defensively.
+def node_type_instances(node_type: Any) -> Optional[list]:
+    """Return live instance node paths for a node type, or ``None`` if unknown.
 
     ``hou.NodeType`` does not advertise ``instances`` on the base class, but the
-    concrete per-category node type objects implement it. Absence or failure is
-    treated as "no known instances" rather than an error.
+    concrete per-category node type objects implement it. A list (possibly empty)
+    is returned only when the instance count is reliably known. ``None`` signals
+    that enumeration was unavailable or failed (e.g. ``instances()`` raised, the
+    attribute is not callable, or a node path could not be read), so callers can
+    fail closed instead of mistaking a failure for "no instances".
     """
     instances_fn = getattr(node_type, "instances", None)
     if not callable(instances_fn):
-        return []
+        return None
     try:
         nodes = list(instances_fn())
     except Exception:  # noqa: BLE001
-        return []
+        return None
     paths = []
     for node in nodes:
         try:
             paths.append(node.path())
         except Exception:  # noqa: BLE001
-            continue
+            # Partial enumeration: we cannot trust the count, so report unknown.
+            return None
     return paths
 
 

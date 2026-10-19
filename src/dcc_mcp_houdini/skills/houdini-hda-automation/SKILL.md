@@ -33,8 +33,10 @@ definition introspection, instantiation, validation, and graph-level cooking.
   `validate_hda`.
 - **`hda-edit`:** `instantiate_hda` (async — creates and cooks a node) and
   `remove_hda_definition` (destructive — permanently deletes a single
-  definition from its library file on disk; refuses to orphan live instances
-  unless `allow_orphan_instances` is set, and supports `dry_run`).
+  definition from its library file on disk; fails closed on live or
+  indeterminable instance counts unless `allow_orphan_instances` is set, and
+  supports `dry_run` that never installs a library or switches the active
+  definition).
 - **`pdg-rop`:** async `cook_top_network` and self-managed
   `execute_rop_chain`.
 
@@ -42,10 +44,16 @@ definition introspection, instantiation, validation, and graph-level cooking.
 
 - **Destructive definition removal:** `remove_hda_definition` calls
   `HDADefinition.destroy`, which rewrites the library file on disk (or the
-  current HIP for embedded definitions) and cannot be undone. It is not the
-  same as unloading a library from the session — for that reversible,
-  session-only operation use `houdini-hda`'s `uninstall_hda_file`. Always
-  consider `dry_run=true` first when the target library is shared.
+  current HIP for embedded definitions) and cannot be undone. It fails closed:
+  removal is refused when live instances exist, and also when the instance
+  count cannot be reliably enumerated (reported as `instances_unknown`); only
+  `allow_orphan_instances=true` overrides both. It is not the same as unloading
+  a library from the session — for that reversible, session-only operation use
+  `houdini-hda`'s `uninstall_hda_file`. Always consider `dry_run=true` first
+  when the target library is shared; a dry run never calls `destroy`, and with
+  `hda_file` it neither installs the library nor switches the active definition.
+  A dry run targeting a library that is not already loaded reports
+  `Definition not found` rather than installing it.
 - **Headless / no license:** all tools degrade through structured
   `skill_error` envelopes when `hou` is unavailable; PDG/ROP cooking still
   requires a valid Houdini session.
