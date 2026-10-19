@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from _usd_common import make_time_code, require_absolute_path, resolve_prim, resolve_stage
+from _usd_common import (
+    make_time_code,
+    require_absolute_path,
+    resolve_prim,
+    resolve_stage,
+    writable_edit_target,
+)
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 MAX_ATTRIBUTES = 32
@@ -79,25 +85,30 @@ def set_prim_attributes(lop_node_path: str, prim_path: str, attributes: dict, ti
 
         applied, skipped = {}, []
         created = []
-        try:
-            for name, (type_name, usd_value) in planned.items():
-                attribute = prim.CreateAttribute(name, type_name)
-                created.append(name)
-                if not attribute.Set(usd_value, time):
-                    # A refused write must not leave an attribute that exists
-                    # with a default value: that reads as "written" to a caller
-                    # who only checks that the name is there. Only this one goes;
-                    # the writes that did succeed stay.
-                    skipped.append(name)
-                    created.remove(name)
-                    _remove_properties(prim, [name])
-                    continue
-                applied[name] = usd_value
-        except BaseException:
-            # Pre-validation cannot cover everything USD rejects at Set time, and
-            # an exception here would otherwise leave the earlier writes in place.
-            _remove_properties(prim, reversed(created))
-            raise
+        # A LOP stage's default edit target is read-only for sublayer/reference
+        # content, so author and roll back against a layer we can actually edit.
+        # The context restores the original target on exit; readback below reads
+        # the composed value and is independent of the edit target.
+        with writable_edit_target(stage, Usd):
+            try:
+                for name, (type_name, usd_value) in planned.items():
+                    attribute = prim.CreateAttribute(name, type_name)
+                    created.append(name)
+                    if not attribute.Set(usd_value, time):
+                        # A refused write must not leave an attribute that exists
+                        # with a default value: that reads as "written" to a caller
+                        # who only checks that the name is there. Only this one goes;
+                        # the writes that did succeed stay.
+                        skipped.append(name)
+                        created.remove(name)
+                        _remove_properties(prim, [name])
+                        continue
+                    applied[name] = usd_value
+            except BaseException:
+                # Pre-validation cannot cover everything USD rejects at Set time, and
+                # an exception here would otherwise leave the earlier writes in place.
+                _remove_properties(prim, reversed(created))
+                raise
 
         readback = {}
         for name in applied:
