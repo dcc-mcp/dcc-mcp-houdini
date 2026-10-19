@@ -72,6 +72,59 @@ class TestParameterQuery:
         assert result["context"]["values"] == {"scale": 2.0}
         assert result["context"]["missing"] == ["nope"]
 
+    def test_get_parms_explicit_empty_names_returns_no_values(self) -> None:
+        # DEF-3: an explicit empty selector must select nothing, not fall back
+        # to reading every parm on the node.
+        mod = _load_script("houdini-parameters", "get_parms.py")
+        node = _node()
+        node.parms.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_parms("/obj/geo1", names=[])
+
+        assert result["success"] is True
+        assert result["context"]["values"] == {}
+        assert result["context"]["missing"] == []
+        node.parms.assert_not_called()
+
+    def test_get_parms_omitted_names_reads_all(self) -> None:
+        # Omitting names must still read the whole node (unchanged contract).
+        mod = _load_script("houdini-parameters", "get_parms.py")
+        scale = MagicMock()
+        scale.name.return_value = "scale"
+        scale.eval.return_value = 2.0
+        node = _node()
+        node.parms.return_value = [scale]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_parms("/obj/geo1")
+
+        assert result["success"] is True
+        assert result["context"]["values"] == {"scale": 2.0}
+        node.parms.assert_called_once()
+
+    def test_get_parms_empty_names_distinct_from_omitted(self) -> None:
+        # The whole point of DEF-3: names=[] and omitted names are not the same.
+        mod = _load_script("houdini-parameters", "get_parms.py")
+        scale = MagicMock()
+        scale.name.return_value = "scale"
+        scale.eval.return_value = 2.0
+        node = _node()
+        node.parms.return_value = [scale]
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            omitted = mod.get_parms("/obj/geo1")
+            explicit_empty = mod.get_parms("/obj/geo1", names=[])
+
+        assert omitted["context"]["values"] == {"scale": 2.0}
+        assert explicit_empty["context"]["values"] == {}
+
 
 class TestParameterEdit:
     def test_set_parms_coerces_and_reports_errors(self) -> None:
@@ -208,6 +261,96 @@ class TestParameterEdit:
         assert "t" in result["context"]["errors"]
         assert "tx" in result["context"]["errors"]["t"]
         t_tuple.set.assert_not_called()
+
+    def test_set_parms_rejects_null_for_string_parm(self) -> None:
+        # DEF-1: None must not be coerced via str(None) into the literal
+        # "None"; the write must fail cleanly and leave the host value intact.
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = "hello"
+        parm.keyframes.return_value = []
+        parm.isTimeDependent.return_value = False
+        node = _node()
+        node.parm.side_effect = lambda n: parm if n == "s" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"s": None})
+
+        assert result["success"] is False
+        assert "s" in result["context"]["errors"]
+        assert "none" in result["context"]["errors"]["s"].lower()
+        parm.set.assert_not_called()
+
+    def test_set_parms_rejects_null_for_int_parm(self) -> None:
+        # Numeric null already failed, but via a bare host TypeError; it should
+        # now surface one readable, structured error with no write attempt.
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = 3
+        parm.keyframes.return_value = []
+        parm.isTimeDependent.return_value = False
+        node = _node()
+        node.parm.side_effect = lambda n: parm if n == "count" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"count": None})
+
+        assert result["success"] is False
+        assert "count" in result["context"]["errors"]
+        assert "none" in result["context"]["errors"]["count"].lower()
+        parm.set.assert_not_called()
+
+    def test_set_parms_rejects_null_for_toggle_parm(self) -> None:
+        # bool(None) would otherwise silently write False to a toggle parm.
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = True
+        parm.keyframes.return_value = []
+        parm.isTimeDependent.return_value = False
+        node = _node()
+        node.parm.side_effect = lambda n: parm if n == "flag" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"flag": None})
+
+        assert result["success"] is False
+        assert "flag" in result["context"]["errors"]
+        parm.set.assert_not_called()
+
+    def test_set_parms_null_does_not_block_sibling_values(self) -> None:
+        # A null value is reported per-parameter; other valid values still apply.
+        mod = _load_script("houdini-parameters", "set_parms.py")
+        count_parm = MagicMock()
+        count_parm.eval.return_value = 3
+        count_parm.keyframes.return_value = []
+        count_parm.isTimeDependent.return_value = False
+        str_parm = MagicMock()
+        str_parm.eval.return_value = "hello"
+        str_parm.keyframes.return_value = []
+        str_parm.isTimeDependent.return_value = False
+        node = _node()
+        node.parmTuple.side_effect = lambda n: None
+        node.parm.side_effect = lambda n: {"count": count_parm, "s": str_parm}.get(n)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_parms("/obj/geo1", {"count": "5", "s": None})
+
+        assert result["success"] is True
+        count_parm.set.assert_called_once_with(5)
+        str_parm.set.assert_not_called()
+        assert result["context"]["applied"] == {"count": 5}
+        assert "s" in result["context"]["errors"]
 
     def test_add_spare_parm_unsupported(self) -> None:
         mod = _load_script("houdini-parameters", "add_spare_parm.py")
