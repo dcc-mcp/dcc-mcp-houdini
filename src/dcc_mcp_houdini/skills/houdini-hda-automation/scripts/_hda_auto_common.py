@@ -49,6 +49,29 @@ def find_node_type(hou: Any, type_name: str) -> Optional[Any]:
     return None
 
 
+def node_type_instances(node_type: Any) -> list:
+    """Return live instance node paths for a node type, defensively.
+
+    ``hou.NodeType`` does not advertise ``instances`` on the base class, but the
+    concrete per-category node type objects implement it. Absence or failure is
+    treated as "no known instances" rather than an error.
+    """
+    instances_fn = getattr(node_type, "instances", None)
+    if not callable(instances_fn):
+        return []
+    try:
+        nodes = list(instances_fn())
+    except Exception:  # noqa: BLE001
+        return []
+    paths = []
+    for node in nodes:
+        try:
+            paths.append(node.path())
+        except Exception:  # noqa: BLE001
+            continue
+    return paths
+
+
 def definition_summary(definition: Any) -> dict:
     """Summarise a hou.HDADefinition into JSON-safe fields (defensive)."""
     summary: dict = {}

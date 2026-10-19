@@ -14,7 +14,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: pipeline
-    version: "1.0.0"
+    version: "1.1.0"
     tags: [houdini, hda, otl, digital-asset, pdg, top, rop, render, automation, validation, pipeline]
     search-hint: "hda otl digital asset definition instantiate validate cook pdg top tasks rop output driver render chain dependencies automation"
     tools: tools.yaml
@@ -31,12 +31,21 @@ definition introspection, instantiation, validation, and graph-level cooking.
 
 - **`hda-query`** (read-only): `scan_hda_libraries`, `inspect_hda_definition`,
   `validate_hda`.
-- **`hda-edit`:** `instantiate_hda` (async — creates and cooks a node).
+- **`hda-edit`:** `instantiate_hda` (async — creates and cooks a node) and
+  `remove_hda_definition` (destructive — permanently deletes a single
+  definition from its library file on disk; refuses to orphan live instances
+  unless `allow_orphan_instances` is set, and supports `dry_run`).
 - **`pdg-rop`:** async `cook_top_network` and self-managed
   `execute_rop_chain`.
 
 ## Context limitations
 
+- **Destructive definition removal:** `remove_hda_definition` calls
+  `HDADefinition.destroy`, which rewrites the library file on disk (or the
+  current HIP for embedded definitions) and cannot be undone. It is not the
+  same as unloading a library from the session — for that reversible,
+  session-only operation use `houdini-hda`'s `uninstall_hda_file`. Always
+  consider `dry_run=true` first when the target library is shared.
 - **Headless / no license:** all tools degrade through structured
   `skill_error` envelopes when `hou` is unavailable; PDG/ROP cooking still
   requires a valid Houdini session.

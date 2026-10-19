@@ -27,6 +27,38 @@ tools:
         - houdini_hda__list_hda_definitions
         - houdini_hda__execute_hda
 
+  - name: uninstall_hda_file
+    description: >-
+      Uninstall a loaded HDA/OTL library from the current Houdini session,
+      removing its definitions and unregistering its node types. Session-only:
+      the library file on disk is never modified or deleted, and reinstalling
+      it restores the definitions and re-links existing instances. Uninstalling
+      a library that is not loaded is a successful no-op.
+    input_schema:
+      type: object
+      required: [file_path]
+      properties:
+        file_path:
+          type: string
+          description: "Path to the packed or expanded .hda, .hdalc, .hdanc, .otl, or .otllc library to uninstall from the session."
+    read_only: false
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    timeout_hint_secs: 60
+    source_file: scripts/uninstall_hda_file.py
+    tool_role: action
+    risk: medium
+    search_aliases: [uninstall hda, unload otl, remove hda file, deregister asset, unload digital asset]
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    next-tools:
+      on-success:
+        - houdini_hda__list_hda_definitions
+
   - name: list_hda_definitions
     description: "List Houdini Digital Asset definitions from a specific file or all loaded HDA files."
     input_schema:
