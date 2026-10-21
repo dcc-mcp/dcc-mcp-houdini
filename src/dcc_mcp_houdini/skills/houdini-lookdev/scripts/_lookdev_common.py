@@ -29,13 +29,25 @@ def preset_dir() -> Path:
 
 
 def coerce_scalar(value: Any, current: Any) -> Any:
-    """Best-effort coerce *value* to the type of *current* (the parm's value)."""
-    if current is None:
+    """Best-effort coerce *value* to the type of *current* (the parm's value).
+
+    A null (``None``) value is never a valid Houdini parameter value, so it is
+    rejected with a descriptive error instead of being coerced. Without this
+    guard ``str(None)`` silently turns a string parameter into the literal
+    ``"None"``, and ``int(None)``/``float(None)``/``bool(None)`` fail late with
+    an opaque host error. Rejecting up front keeps every type on the same
+    safe-failure path with a single readable message.
+    """
+    if value is None:
+        raise TypeError("Cannot coerce null (None) to a parameter value: provide a concrete value")
+    if current is None or isinstance(value, type(current)):
         return value
     try:
         if isinstance(current, bool):
+            if isinstance(value, str):
+                return value.strip().lower() in ("1", "true", "yes", "on")
             return bool(value)
-        if isinstance(current, int) and not isinstance(current, bool):
+        if isinstance(current, int):
             return int(value)
         if isinstance(current, float):
             return float(value)
