@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -37,6 +39,29 @@ def _parm(name, value):
     parm.name.return_value = name
     parm.eval.return_value = value
     return parm
+
+
+class TestLookdevCoerceScalar:
+    """Host-independent unit tests for the shared null-rejection contract."""
+
+    @pytest.mark.parametrize("current", ["old", True, 3, 0.5])
+    def test_coerce_scalar_rejects_null(self, current) -> None:
+        # DEF-1/DEF-2: a null value must never be coerced to "None"/False/None;
+        # it must fail with a TypeError so set_parameters records a structured
+        # error instead of writing a host value and reporting success.
+        common = _load_script("_lookdev_common.py")
+        with pytest.raises(TypeError) as excinfo:
+            common.coerce_scalar(None, current)
+        assert "none" in str(excinfo.value).lower()
+
+    def test_coerce_scalar_bool_string_parsing(self) -> None:
+        # Copy-drift hardening: a string like "false"/"0" must not be coerced
+        # truthily to True for a toggle parameter.
+        common = _load_script("_lookdev_common.py")
+        assert common.coerce_scalar("false", True) is False
+        assert common.coerce_scalar("0", True) is False
+        assert common.coerce_scalar("yes", True) is True
+        assert common.coerce_scalar("1", True) is True
 
 
 class TestLookdevQuery:
@@ -115,6 +140,79 @@ class TestLookdevEdit:
         assert result["success"] is True
         tuple_parm.set.assert_called_once_with((0.8, 0.4, 0.2))
         scalar_parm.set.assert_called_once_with(0.6)
+
+    def test_set_material_parms_rejects_null_for_string_parm(self) -> None:
+        # DEF-1: null must not become the literal "None" and must not be reported
+        # as an applied, successful write; the host value must be left intact.
+        mod = _load_script("set_material_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = "hello"
+        node = _node("/mat/clay", "clay", "principledshader::2.0")
+        node.parm.side_effect = lambda n: parm if n == "name" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_material_parms("/mat/clay", {"name": None})
+        assert result["success"] is False
+        assert "name" in result["context"]["errors"]
+        assert "none" in result["context"]["errors"]["name"].lower()
+        parm.set.assert_not_called()
+        assert "name" not in result["context"].get("applied", {})
+
+    def test_set_material_parms_rejects_null_for_toggle_parm(self) -> None:
+        # DEF-2: bool(None) would otherwise silently write False to a toggle.
+        mod = _load_script("set_material_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = True
+        node = _node("/mat/clay", "clay", "principledshader::2.0")
+        node.parm.side_effect = lambda n: parm if n == "flag" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_material_parms("/mat/clay", {"flag": None})
+        assert result["success"] is False
+        assert "flag" in result["context"]["errors"]
+        parm.set.assert_not_called()
+        assert "flag" not in result["context"].get("applied", {})
+
+    def test_set_material_parms_rejects_null_for_int_parm(self) -> None:
+        # Numeric null must fail cleanly with a readable error and no write.
+        mod = _load_script("set_material_parms.py")
+        parm = MagicMock()
+        parm.eval.return_value = 3
+        node = _node("/mat/clay", "clay", "principledshader::2.0")
+        node.parm.side_effect = lambda n: parm if n == "count" else None
+        node.parmTuple.side_effect = lambda n: None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_material_parms("/mat/clay", {"count": None})
+        assert result["success"] is False
+        assert "count" in result["context"]["errors"]
+        assert "none" in result["context"]["errors"]["count"].lower()
+        parm.set.assert_not_called()
+
+    def test_set_material_parms_null_does_not_block_sibling_values(self) -> None:
+        # A null value is reported per-parameter; a valid sibling still applies.
+        mod = _load_script("set_material_parms.py")
+        rough_parm = MagicMock()
+        rough_parm.eval.return_value = 0.0
+        str_parm = MagicMock()
+        str_parm.eval.return_value = "hello"
+        node = _node("/mat/clay", "clay", "principledshader::2.0")
+        node.parmTuple.side_effect = lambda n: None
+        node.parm.side_effect = lambda n: {"rough": rough_parm, "name": str_parm}.get(n)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.set_material_parms("/mat/clay", {"rough": 0.6, "name": None})
+        assert result["success"] is True
+        rough_parm.set.assert_called_once_with(0.6)
+        str_parm.set.assert_not_called()
+        assert result["context"]["applied"] == {"rough": 0.6}
+        assert "name" in result["context"]["errors"]
 
     def test_connect_shader_by_name(self) -> None:
         mod = _load_script("connect_shader.py")
@@ -202,3 +300,48 @@ class TestPresets:
         with patch.dict(sys.modules, {"hou": MagicMock()}):
             result = load_mod.load_preset("nope", "/mat/clay")
         assert result["success"] is False
+
+    def test_load_preset_reports_null_param_as_error(self, tmp_path: Path, monkeypatch) -> None:
+        # A preset whose only value is null must surface a structured error and
+        # must not report unconditional success; the host value stays intact.
+        monkeypatch.setenv("DCC_MCP_HOUDINI_MATERIAL_PRESET_DIR", str(tmp_path))
+        preset = {"material_type": "principledshader::2.0", "parameters": {"rough": None}}
+        (tmp_path / "nullpreset.json").write_text(json.dumps(preset), encoding="utf-8")
+        load_mod = _load_script("load_preset.py")
+        target_parm = MagicMock()
+        target_parm.eval.return_value = 0.0
+        target = _node("/mat/clay2", "clay2", "principledshader::2.0")
+        target.parmTuple.return_value = None
+        target.parm.side_effect = lambda n: target_parm if n == "rough" else None
+        load_hou = MagicMock()
+        load_hou.node.return_value = target
+        with patch.dict(sys.modules, {"hou": load_hou}):
+            result = load_mod.load_preset("nullpreset", "/mat/clay2")
+        assert result["success"] is False
+        assert "rough" in result["context"]["errors"]
+        target_parm.set.assert_not_called()
+        assert "rough" not in result["context"].get("applied", {})
+
+    def test_load_preset_null_does_not_block_sibling_values(self, tmp_path: Path, monkeypatch) -> None:
+        # With a valid sibling present, load reports success, applies the valid
+        # value, and surfaces the null parameter as a per-parameter error.
+        monkeypatch.setenv("DCC_MCP_HOUDINI_MATERIAL_PRESET_DIR", str(tmp_path))
+        preset = {"material_type": "principledshader::2.0", "parameters": {"rough": 0.6, "name": None}}
+        (tmp_path / "mixed.json").write_text(json.dumps(preset), encoding="utf-8")
+        load_mod = _load_script("load_preset.py")
+        rough_parm = MagicMock()
+        rough_parm.eval.return_value = 0.0
+        str_parm = MagicMock()
+        str_parm.eval.return_value = "hello"
+        target = _node("/mat/clay2", "clay2", "principledshader::2.0")
+        target.parmTuple.return_value = None
+        target.parm.side_effect = lambda n: {"rough": rough_parm, "name": str_parm}.get(n)
+        load_hou = MagicMock()
+        load_hou.node.return_value = target
+        with patch.dict(sys.modules, {"hou": load_hou}):
+            result = load_mod.load_preset("mixed", "/mat/clay2")
+        assert result["success"] is True
+        rough_parm.set.assert_called_once_with(0.6)
+        str_parm.set.assert_not_called()
+        assert result["context"]["applied"] == {"rough": 0.6}
+        assert "name" in result["context"]["errors"]
