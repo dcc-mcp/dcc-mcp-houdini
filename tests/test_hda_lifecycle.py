@@ -422,6 +422,48 @@ def test_sync_hda_instance_errors_when_target_version_not_reached(tmp_path: Path
     node.syncNodeVersionIfNeeded.assert_called_once_with("1.0")
 
 
+def test_sync_hda_instance_errors_when_library_has_no_matching_definition(tmp_path: Path) -> None:
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    # The library is valid but defines a different operator, so it can never
+    # provide a definition for this instance's node type. Targeting it must be a
+    # hard error rather than a silent success on the old/current definition.
+    other_definition = MagicMock()
+    other_definition.nodeTypeName.return_value = "studio::other"
+    other_definition.version.return_value = "9.9"
+
+    definition = MagicMock()
+    definition.version.return_value = "1.0"
+    definition.libraryFilePath.return_value = "/assets/current.hda"
+    definition.nodeTypeName.return_value = "studio::solar"
+    node_type = MagicMock()
+    node_type.name.return_value = "studio::solar"
+    node_type.category.return_value = MagicMock()
+    node_type.definition.return_value = definition
+    node = MagicMock()
+    node.path.return_value = "/obj/solar1"
+    node.type.return_value = node_type
+    node.isDelayedDefinition.return_value = False
+    node.matchesCurrentDefinition.return_value = True
+
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+    mock_hou.hda.definitionsInFile.return_value = [other_definition]
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.sync_hda_instance("/obj/solar1", "1.0", hda_file=str(library))
+
+    assert result["success"] is False
+    detail = skill_error_detail(result)
+    assert "studio::solar" in detail
+    assert "solar.hda" in detail
+    mock_hou.hda.installFile.assert_called_once_with(str(library), force_use_assets=True)
+    # Must fail before the instance's version handler is ever invoked.
+    node.syncNodeVersionIfNeeded.assert_not_called()
+
+
 def test_sync_hda_instance_without_hda_file_skips_promotion_and_target() -> None:
     mod = _load_script("sync_hda_instance.py")
     definition = MagicMock()
@@ -473,6 +515,34 @@ def test_library_definition_version_prefers_current_definition_from_same_library
 
     version = mod._library_definition_version(mock_hou, str(library), "studio::solar", MagicMock())
     assert version == "2.0"
+
+
+def test_library_definition_version_raises_when_node_type_absent(tmp_path: Path) -> None:
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    other = MagicMock()
+    other.nodeTypeName.return_value = "studio::other"
+    other.version.return_value = "1.0"
+
+    mock_hou = MagicMock()
+    mock_hou.hda.definitionsInFile.return_value = [other]
+
+    with pytest.raises(mod._MissingLibraryDefinition):
+        mod._library_definition_version(mock_hou, str(library), "studio::solar", MagicMock())
+
+
+def test_library_definition_version_returns_none_when_inspection_fails(tmp_path: Path) -> None:
+    """A corrupt/missing library stays a tolerant fallback, not a hard error."""
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    mock_hou = MagicMock()
+    mock_hou.hda.definitionsInFile.side_effect = RuntimeError("corrupt library")
+
+    assert mod._library_definition_version(mock_hou, str(library), "studio::solar", MagicMock()) is None
 
 
 def test_version_key_orders_dotted_versions_numerically() -> None:

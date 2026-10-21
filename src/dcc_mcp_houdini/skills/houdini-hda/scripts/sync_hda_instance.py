@@ -9,6 +9,10 @@ from _hda_common import validate_hda_path  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
+class _MissingLibraryDefinition(Exception):
+    """The requested library provides no definition for the node type."""
+
+
 def _same_library(a: str, b: str) -> bool:
     """Compare two HDA library paths case-/separator-insensitively."""
     return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
@@ -26,20 +30,28 @@ def _version_key(version: str) -> list:
 
 
 def _library_definition_version(hou, file_path: str, node_type_name: str, node_category) -> Optional[str]:
-    """Return the version *file_path* provides for *node_type_name*, or ``None``.
+    """Return the version *file_path* provides for *node_type_name*.
 
     A single library usually carries one definition per operator, but it may
     hold several versions. Prefer the definition Houdini currently resolves the
     operator to (after the forced re-install this is the one
     ``matchCurrentDefinition`` will bind to), then the preferred definition,
     then the highest version.
+
+    Return ``None`` only when the library cannot be inspected (a missing or
+    corrupt file), so the caller keeps a tolerant fallback. Raise
+    :class:`_MissingLibraryDefinition` when the library is readable but simply
+    carries no definition for *node_type_name* — that is a hard error rather
+    than a silent skip, because the caller explicitly targeted this library.
     """
     try:
         definitions = [d for d in hou.hda.definitionsInFile(file_path) if d.nodeTypeName() == node_type_name]
     except Exception:  # noqa: BLE001 - a malformed library must not mask the sync result
         return None
     if not definitions:
-        return None
+        raise _MissingLibraryDefinition(
+            "library {!r} provides no definition for node type {!r}".format(file_path, node_type_name)
+        )
     if len(definitions) == 1:
         return definitions[0].version()
 
@@ -101,7 +113,20 @@ def sync_hda_instance(
             # matchCurrentDefinition() call below has the intended target to
             # bind to.
             hou.hda.installFile(str(path), force_use_assets=True)
-            target_version = _library_definition_version(hou, str(path), node_type_name, node_type.category())
+            try:
+                target_version = _library_definition_version(hou, str(path), node_type_name, node_type.category())
+            except _MissingLibraryDefinition as exc:
+                # The caller explicitly targeted this library, but it does not
+                # define this node type at all, so it can never be synced to.
+                # Failing beats silently succeeding on the old/current definition.
+                return skill_error(
+                    "HDA library does not define the node type",
+                    str(exc),
+                    node_path=node.path(),
+                    node_type_name=node_type_name,
+                    library_path=str(path),
+                    from_version=from_version,
+                )
 
         definition = node.type().definition()
         if definition is None:
