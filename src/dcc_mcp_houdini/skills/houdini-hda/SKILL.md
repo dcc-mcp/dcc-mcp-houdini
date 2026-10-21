@@ -59,8 +59,11 @@ press button parms, and cook the node.
 3. Use `save_node_as_hda` for a new asset, then `publish_hda_library` for an
    explicitly namespaced/versioned library with metadata and dependencies.
 4. Gate the result with `validate_hda_contract`.
-5. Use `sync_hda_instance` to reload a library, match an instance to the current
-   definition, and run its native `SyncNodeVersion` handler.
+5. Use `sync_hda_instance` to match an instance to the current definition and run
+   its native `SyncNodeVersion` handler. When `hda_file` is provided, that library
+   is force-promoted to the current definition first (even if already loaded), and
+   the call fails rather than reporting success if the instance does not reach that
+   library's version.
 6. Use `houdini-hda-automation` graph cooking tools when a reusable
    asset needs pipeline-level verification.
 7. Use `uninstall_hda_file` to remove a loaded library from the current session
