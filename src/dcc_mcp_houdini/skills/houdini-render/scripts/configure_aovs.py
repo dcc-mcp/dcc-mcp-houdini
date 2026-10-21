@@ -154,6 +154,11 @@ KARMA_PRODUCT_TYPES = ("renderproduct",)
 # USD property authored on the product so husk combines every AOV into one EXR.
 _IMAGE_FORMAT_PROP = "driver:parameters:husk:image_format"
 _IMAGE_FORMAT_VALUE = "OpenEXR"
+# Control-parm states for ``driver:parameters:husk:image_format`` that mean the
+# attribute is NOT authored as a readable value on the USD stage (so husk will
+# not see it and would collapse the render to beauty-only). A non-empty value
+# parm with a control in this set must still be (re)authored as OpenEXR.
+_IMAGE_FORMAT_NON_AUTHORING_CONTROLS = frozenset({"none", "block", ""})
 _ADDITIONAL_RENDERVARS_TYPE = "additionalrendervars"
 _ARV_PARENT_PATH = "parentprimpath"
 _ARV_COUNT_PARM = "rendervars"
@@ -598,18 +603,28 @@ def _restore_image_format(product, state: dict) -> None:
 
 
 def _ensure_product_image_format(product) -> bool:
-    """Author image_format=OpenEXR unless the product already sets one.
+    """Author image_format=OpenEXR unless the product already authors one.
 
     husk only merges every ordered RenderVar into a single EXR when the product
-    carries ``driver:parameters:husk:image_format``; without it the render
-    collapses to the beauty/first channel.
+    carries an authored ``driver:parameters:husk:image_format``; without it the
+    render collapses to the beauty/first channel. A non-empty value parm is not
+    enough on its own: the attribute must also be authored on the USD stage,
+    which the control parm reports ("none"/"block"/empty mean husk would not see
+    a readable value). Only a non-empty value paired with an authored control
+    counts as already configured.
     """
     value_names, control_names = _find_driver_parms(product, _IMAGE_FORMAT_PROP)
     if not value_names:
         return False
     value_parm = product.parm(value_names[0])
-    if value_parm is not None and str(value_parm.eval()).strip():
-        return False
+    value_is_set = value_parm is not None and bool(str(value_parm.eval()).strip())
+    if value_is_set:
+        for name in control_names:
+            control_parm = product.parm(name)
+            if control_parm is None:
+                continue
+            if str(control_parm.eval()).strip().lower() not in _IMAGE_FORMAT_NON_AUTHORING_CONTROLS:
+                return False
     for name in control_names:
         control_parm = product.parm(name)
         if control_parm is not None:
@@ -620,8 +635,11 @@ def _ensure_product_image_format(product) -> bool:
 
 
 def _unwire_and_destroy_arv(product, arv) -> None:
-    upstream = arv.input(0)
-    product.setInput(0, upstream)
+    # Only bypass the node when it is actually the product's current input. A
+    # findable-but-unwired sibling additionalrendervars LOP must be destroyed
+    # without touching the product's existing upstream connection.
+    if product.input(0) is arv:
+        product.setInput(0, arv.input(0))
     try:
         arv.destroy()
     except Exception:  # noqa: BLE001
@@ -703,6 +721,9 @@ def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
     # action == "add"
     pre_existing = _find_owned_arv(product)
     original_input = product.input(0)
+    # Capture the node's own upstream before _get_or_create may rewire it, so a
+    # failed add can restore both the product's input and the node's input.
+    original_arv_input = pre_existing.input(0) if pre_existing is not None else None
     arv = _get_or_create_additional_rendervars(product)
     arv_created = pre_existing is None
     var_parent = _arv_var_parent(arv)
@@ -732,9 +753,14 @@ def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
     except Exception:  # noqa: BLE001
         if arv_created:
             _unwire_and_destroy_arv(product, arv)
-            product.setInput(0, original_input)
         else:
             _restore_arv(arv, snapshot)
+            # Undo the input rewire _get_or_create performed for a pre-existing
+            # node, so a failed add leaves the scene graph untouched.
+            arv.setInput(0, original_arv_input)
+        # Restore the product's original input unconditionally: _get_or_create
+        # may have rewired it even for a pre-existing node.
+        product.setInput(0, original_input)
         _write_ordered_vars(product, original_ordered)
         _restore_image_format(product, image_state)
         raise

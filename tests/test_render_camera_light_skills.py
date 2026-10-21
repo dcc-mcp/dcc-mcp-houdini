@@ -1693,6 +1693,59 @@ class TestSolarisConfigureAovs:
         assert product.input(0) is arv
         assert arv.authored_names() == ["my_custom_aov"]
 
+    def test_remove_all_of_unwired_owned_var_node_preserves_product_input(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/lights2", "lights2", "light", stage)
+        stage.add(upstream)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["diffuse"])
+            # Detach the owned node from the product input (it stays a findable
+            # sibling) and wire the product to a real upstream connection.
+            arv = stage.node("rp1_aovs")
+            arv.setInput(0, None)
+            product.setInput(0, upstream)
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"], action="remove")
+
+        assert result["success"] is True
+        assert stage.node("rp1_aovs") is None
+        assert product.input(0) is upstream
+
+    def test_add_failure_on_unwired_existing_node_restores_product_input(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/lights3", "lights3", "light", stage)
+        stage.add(upstream)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            # Pre-existing owned node that is NOT wired as the product input.
+            arv = _FakeAdditionalRenderVars("/stage/rp1_aovs", "rp1_aovs", stage)
+            stage.add(arv)
+            arv.setInput(0, None)
+            product.setInput(0, upstream)
+            arv.set_failures.add("sourceName2")
+            result = mod.configure_aovs("/stage/rp1", ["normal", "diffuse"])
+
+        assert result["success"] is False
+        assert product.input(0) is upstream
+        assert arv.input(0) is None
+
+    def test_add_authors_image_format_when_value_set_but_control_none(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        # Non-empty value but control reports "none": the attribute is NOT
+        # authored on the USD stage, so husk would still collapse to beauty-only.
+        product.parm("xn__driverparametershuskimage_format_6sbke").set("PNG")
+        product.parm("xn__driverparametershuskimage_format_control_75bke").set("none")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"])
+
+        assert result["success"] is True
+        assert product.parm("xn__driverparametershuskimage_format_control_75bke").eval() == "set"
+        assert product.parm("xn__driverparametershuskimage_format_6sbke").eval() == "OpenEXR"
+
 
 class TestRenderPassAuthoring:
     def test_mantra_component_presets_use_complete_light_path_expressions(self) -> None:
