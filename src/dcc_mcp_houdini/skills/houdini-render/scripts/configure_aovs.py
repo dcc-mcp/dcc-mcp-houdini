@@ -418,7 +418,12 @@ def _var_prim_path(var_parent: str, name: str) -> str:
 
 
 def _arv_existing_names(arv) -> list:
-    """Ordered, de-duplicated list of preset names currently authored on *arv*."""
+    """Ordered, de-duplicated list of preset names currently authored on *arv*.
+
+    Only preset (tool-managed) names are returned; hand-authored instances are
+    intentionally excluded here so they are never mistaken for managed state
+    (they are preserved separately by ``_arv_foreign_instances``).
+    """
     count_parm = arv.parm(_ARV_COUNT_PARM)
     count = int(count_parm.eval()) if count_parm is not None else 0
     names = []
@@ -428,6 +433,32 @@ def _arv_existing_names(arv) -> list:
         if name and name in KARMA_AOV_PRESETS and name not in names:
             names.append(name)
     return names
+
+
+def _arv_foreign_instances(arv) -> list:
+    """Snapshots of non-preset multiparm instances currently authored on *arv*.
+
+    The additionalrendervars LOP is tool-owned, but a user may hand-author extra
+    instances on it. Those are not managed presets, so they must survive a
+    rebuild of the managed set rather than being overwritten. Blank default
+    instances (empty name) are dropped.
+    """
+    count_parm = arv.parm(_ARV_COUNT_PARM)
+    count = int(count_parm.eval()) if count_parm is not None else 0
+    foreign = []
+    for index in range(1, count + 1):
+        parm = arv.parm("name{}".format(index))
+        name = str(parm.eval()).strip().lower() if parm is not None else ""
+        if not name or name in KARMA_AOV_PRESETS:
+            continue
+        fields = {}
+        for key in _ARV_VALUE_KEYS:
+            key_parm = arv.parm("{}{}".format(key, index))
+            if key_parm is not None:
+                fields[key] = key_parm.eval()
+        if fields:
+            foreign.append(fields)
+    return foreign
 
 
 def _arv_instance_values(name: str, preset: dict) -> dict:
@@ -484,9 +515,12 @@ def _rewrite_arv(arv, names: list) -> None:
     count_parm = arv.parm(_ARV_COUNT_PARM)
     if count_parm is None:
         raise ValueError("additionalrendervars node has no '{}' parameter".format(_ARV_COUNT_PARM))
-    count_parm.set(len(names))
+    foreign = _arv_foreign_instances(arv)
+    count_parm.set(len(names) + len(foreign))
     for index, name in enumerate(names, start=1):
         _write_arv_instance(arv, index, _arv_instance_values(name, KARMA_AOV_PRESETS[name]))
+    for offset, fields in enumerate(foreign, start=1):
+        _write_arv_instance(arv, len(names) + offset, fields)
 
 
 def _read_ordered_vars(product) -> list:
@@ -510,9 +544,18 @@ def _ordered_vars_path(var_parent: str, names: list) -> list:
     return [_var_prim_path(var_parent, name) for name in names]
 
 
-def _foreign_ordered_vars(original: list, var_parent: str) -> list:
-    prefix = "{}/".format(var_parent)
-    return [path for path in original if not path.startswith(prefix)]
+def _merge_ordered_vars(original: list, var_parent: str, managed_before: list, managed_after: list) -> list:
+    """Keep unrelated RenderVar references and replace only managed preset paths.
+
+    ``orderedVars`` may reference RenderVars authored by other LOPs or by hand;
+    those must survive an add/remove. Only the paths for preset names the tool
+    currently manages (``managed_before``) are swapped out, and the paths for
+    ``managed_after`` are appended without duplicating anything already kept.
+    """
+    managed_paths = set(_ordered_vars_path(var_parent, managed_before))
+    kept = [path for path in original if path not in managed_paths]
+    kept_set = set(kept)
+    return kept + [path for path in _ordered_vars_path(var_parent, managed_after) if path not in kept_set]
 
 
 def _find_driver_parms(node, usd_prop: str):
@@ -643,22 +686,25 @@ def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
         original_ordered = _read_ordered_vars(product)
         snapshot = _snapshot_arv(arv)
         try:
-            if remaining:
-                _rewrite_arv(arv, remaining)
-                _write_ordered_vars(product, _ordered_vars_path(var_parent, remaining))
-            else:
-                _rewrite_arv(arv, [])
-                _write_ordered_vars(product, _foreign_ordered_vars(original_ordered, var_parent))
+            _rewrite_arv(arv, remaining)
+            _write_ordered_vars(
+                product,
+                _merge_ordered_vars(original_ordered, var_parent, current_names, remaining),
+            )
         except Exception:  # noqa: BLE001
             _restore_arv(arv, snapshot)
             _write_ordered_vars(product, original_ordered)
             raise
-        if not remaining:
+        count_parm = arv.parm(_ARV_COUNT_PARM)
+        if count_parm is None or int(count_parm.eval()) == 0:
             _unwire_and_destroy_arv(product, arv)
         return configured, unsupported
 
     # action == "add"
+    pre_existing = _find_owned_arv(product)
+    original_input = product.input(0)
     arv = _get_or_create_additional_rendervars(product)
+    arv_created = pre_existing is None
     var_parent = _arv_var_parent(arv)
     current_names = _arv_existing_names(arv)
     target_names = list(current_names)
@@ -678,10 +724,17 @@ def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
     image_state = _capture_image_format(product)
     try:
         _rewrite_arv(arv, target_names)
-        _write_ordered_vars(product, _ordered_vars_path(var_parent, target_names))
+        _write_ordered_vars(
+            product,
+            _merge_ordered_vars(original_ordered, var_parent, current_names, target_names),
+        )
         _ensure_product_image_format(product)
     except Exception:  # noqa: BLE001
-        _restore_arv(arv, snapshot)
+        if arv_created:
+            _unwire_and_destroy_arv(product, arv)
+            product.setInput(0, original_input)
+        else:
+            _restore_arv(arv, snapshot)
         _write_ordered_vars(product, original_ordered)
         _restore_image_format(product, image_state)
         raise
