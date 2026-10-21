@@ -338,6 +338,150 @@ def test_sync_hda_instance_matches_definition_and_runs_version_handler() -> None
     node.syncNodeVersionIfNeeded.assert_called_once_with("1.1.0")
 
 
+def test_sync_hda_instance_forces_target_library_current_and_upgrades(tmp_path: Path) -> None:
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    target_definition = MagicMock()
+    target_definition.nodeTypeName.return_value = "studio::solar"
+    target_definition.version.return_value = "2.0"
+
+    definition = MagicMock()
+    definition.version.return_value = "2.0"
+    definition.libraryFilePath.return_value = "/assets/solar.hda"
+    definition.nodeTypeName.return_value = "studio::solar"
+    node_type = MagicMock()
+    node_type.name.return_value = "studio::solar"
+    node_type.category.return_value = MagicMock()
+    node_type.definition.return_value = definition
+    node = MagicMock()
+    node.path.return_value = "/obj/solar1"
+    node.type.return_value = node_type
+    node.isDelayedDefinition.return_value = False
+    node.matchesCurrentDefinition.return_value = True
+
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+    # Already loaded is exactly the condition where reloadFile used to be a
+    # no-op and left an older last-installed definition current.
+    mock_hou.hda.loadedFiles.return_value = [str(library)]
+    mock_hou.hda.definitionsInFile.return_value = [target_definition]
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.sync_hda_instance("/obj/solar1", "1.0", hda_file=str(library))
+
+    assert result["success"] is True
+    ctx = result["context"]
+    assert ctx["version"] == "2.0"
+    assert ctx["target_version"] == "2.0"
+    assert ctx["matched_current_definition"] is True
+    mock_hou.hda.installFile.assert_called_once_with(str(library), force_use_assets=True)
+    mock_hou.hda.reloadFile.assert_not_called()
+    node.syncNodeVersionIfNeeded.assert_called_once_with("1.0")
+
+
+def test_sync_hda_instance_errors_when_target_version_not_reached(tmp_path: Path) -> None:
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    target_definition = MagicMock()
+    target_definition.nodeTypeName.return_value = "studio::solar"
+    target_definition.version.return_value = "2.0"
+
+    # Host still resolves the instance to the old definition after the attempt.
+    stale_definition = MagicMock()
+    stale_definition.version.return_value = "1.0"
+    stale_definition.libraryFilePath.return_value = "/assets/solar.hda"
+    stale_definition.nodeTypeName.return_value = "studio::solar"
+    node_type = MagicMock()
+    node_type.name.return_value = "studio::solar"
+    node_type.category.return_value = MagicMock()
+    node_type.definition.return_value = stale_definition
+    node = MagicMock()
+    node.path.return_value = "/obj/solar1"
+    node.type.return_value = node_type
+    node.isDelayedDefinition.return_value = False
+    node.matchesCurrentDefinition.return_value = False
+
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+    mock_hou.hda.definitionsInFile.return_value = [target_definition]
+    mock_hou.nodeType.return_value = None
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.sync_hda_instance("/obj/solar1", "1.0", hda_file=str(library))
+
+    assert result["success"] is False
+    ctx = result["context"]
+    assert ctx["target_version"] == "2.0"
+    assert ctx["version"] == "1.0"
+    detail = skill_error_detail(result)
+    assert "2.0" in detail and "1.0" in detail
+    node.syncNodeVersionIfNeeded.assert_called_once_with("1.0")
+
+
+def test_sync_hda_instance_without_hda_file_skips_promotion_and_target() -> None:
+    mod = _load_script("sync_hda_instance.py")
+    definition = MagicMock()
+    definition.version.return_value = "1.2.0"
+    definition.libraryFilePath.return_value = "/assets/solar.hda"
+    definition.nodeTypeName.return_value = "studio::solar"
+    node_type = MagicMock()
+    node_type.name.return_value = "studio::solar"
+    node_type.definition.return_value = definition
+    node = MagicMock()
+    node.path.return_value = "/obj/solar1"
+    node.type.return_value = node_type
+    node.isDelayedDefinition.return_value = False
+    node.matchesCurrentDefinition.return_value = True
+
+    mock_hou = MagicMock()
+    mock_hou.node.return_value = node
+
+    with patch.dict(sys.modules, {"hou": mock_hou}):
+        result = mod.sync_hda_instance("/obj/solar1", "1.1.0")
+
+    assert result["success"] is True
+    assert "target_version" not in result["context"]
+    mock_hou.hda.installFile.assert_not_called()
+    mock_hou.hda.reloadFile.assert_not_called()
+
+
+def test_library_definition_version_prefers_current_definition_from_same_library(tmp_path: Path) -> None:
+    mod = _load_script("sync_hda_instance.py")
+    library = tmp_path / "solar.hda"
+    library.write_text("dummy", encoding="utf-8")
+
+    older = MagicMock()
+    older.nodeTypeName.return_value = "studio::solar"
+    older.version.return_value = "1.0"
+    newer = MagicMock()
+    newer.nodeTypeName.return_value = "studio::solar"
+    newer.version.return_value = "2.0"
+
+    current_definition = MagicMock()
+    current_definition.version.return_value = "2.0"
+    current_definition.libraryFilePath.return_value = str(library)
+    current_type = MagicMock()
+    current_type.definition.return_value = current_definition
+
+    mock_hou = MagicMock()
+    mock_hou.hda.definitionsInFile.return_value = [older, newer]
+    mock_hou.nodeType.return_value = current_type
+
+    version = mod._library_definition_version(mock_hou, str(library), "studio::solar", MagicMock())
+    assert version == "2.0"
+
+
+def test_version_key_orders_dotted_versions_numerically() -> None:
+    mod = _load_script("sync_hda_instance.py")
+    assert mod._version_key("1.10") > mod._version_key("1.9")
+    assert mod._version_key("2.0") > mod._version_key("1.9.9")
+    assert mod._version_key("1.0.0") > mod._version_key("1.0")
+
+
 def _hda_definition(node_type_name: str, library: str, category_name: str = "Sop") -> MagicMock:
     """Build a mock hou.HDADefinition suitable for install/uninstall tests."""
     category = MagicMock()

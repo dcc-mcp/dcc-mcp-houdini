@@ -240,8 +240,11 @@ tools:
 
   - name: sync_hda_instance
     description: >-
-      Reload or install an optional HDA library, match an instance to its current
-      definition, and run the asset's native version synchronization handler.
+      Run an asset's native version synchronization handler, matching the instance
+      to the current definition. When hda_file is provided, that library is
+      force-promoted to the current definition first (even if already loaded), so a
+      specific version can be targeted; the call fails instead of reporting success
+      if the instance does not reach the library's version.
     input_schema:
       type: object
       required: [node_path, from_version]
@@ -254,7 +257,10 @@ tools:
           description: "Previous instance version passed to the SyncNodeVersion handler."
         hda_file:
           type: string
-          description: "Optional HDA/OTL library to install or reload first."
+          description: >-
+            Optional HDA/OTL library to force-promote to the current definition and
+            sync against. Returns an error if the instance does not end up on this
+            library's version.
         match_current:
           type: boolean
           default: true
