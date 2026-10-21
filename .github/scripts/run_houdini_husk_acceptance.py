@@ -65,8 +65,12 @@ def _scene(directory):
     var.CreateSourceNameAttr("C.*[LO]")
     var.CreateSourceTypeAttr("lpe")
     var.GetPrim().AddAppliedSchema("HuskRenderVarAPI")
-    var.GetPrim().CreateAttribute("driver:parameters:aov:husk:format", Sdf.ValueTypeNames.String).Set("color4f")
-    var.GetPrim().CreateAttribute("driver:parameters:aov:husk:name", Sdf.ValueTypeNames.String).Set("C")
+    # husk (Karma) requires the generic driver:parameters:aov:* tokens; the
+    # driver:parameters:aov:husk:* namespace is deprecated and makes husk exit 1
+    # with "Missing driver:parameters:aov:name token" before any EXR is written.
+    var.GetPrim().AddAppliedSchema("KarmaRenderVarAPI")
+    var.GetPrim().CreateAttribute("driver:parameters:aov:format", Sdf.ValueTypeNames.String).Set("color4h")
+    var.GetPrim().CreateAttribute("driver:parameters:aov:name", Sdf.ValueTypeNames.String).Set("C")
     product.CreateOrderedVarsRel().SetTargets(["/Render/color"])
     settings.CreateProductsRel().SetTargets(["/Render/product"])
     stage.SetMetadata("renderSettingsPrimPath", "/Render/settings")
