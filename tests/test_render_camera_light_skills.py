@@ -1578,6 +1578,121 @@ class TestSolarisConfigureAovs:
         assert result["success"] is False
         assert stage.node("rp1_aovs") is None
 
+    def test_add_preserves_foreign_ordered_vars(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        product.parm("orderedVars").set("/Render/Products/Vars/my_custom_beauty /other/branch/rendervar_user")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"])
+
+        assert result["success"] is True
+        ordered = product.parm("orderedVars").eval().split()
+        assert "/Render/Products/Vars/my_custom_beauty" in ordered
+        assert "/other/branch/rendervar_user" in ordered
+        assert "/Render/Products/Vars/diffuse" in ordered
+        assert len(ordered) == 3
+
+    def test_partial_remove_preserves_foreign_ordered_vars(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal", "depth"])
+            product.parm("orderedVars").set(product.parm("orderedVars").eval() + " /other/branch/rendervar_user")
+            result = mod.configure_aovs("/stage/rp1", ["normal"], action="remove")
+
+        assert result["success"] is True
+        ordered = product.parm("orderedVars").eval().split()
+        assert "/other/branch/rendervar_user" in ordered
+        assert "/Render/Products/Vars/depth" in ordered
+        assert "/Render/Products/Vars/normal" not in ordered
+
+    def test_remove_all_preserves_foreign_ordered_vars(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["diffuse"])
+            product.parm("orderedVars").set(
+                product.parm("orderedVars").eval() + " /Render/Products/Vars/user_manual_var"
+            )
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"], action="remove")
+
+        assert result["success"] is True
+        ordered = product.parm("orderedVars").eval().split()
+        assert "/Render/Products/Vars/user_manual_var" in ordered
+        assert "/Render/Products/Vars/diffuse" not in ordered
+
+    def test_add_rolls_back_newly_created_var_node(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/geo1", "geo1", "geo", stage)
+        stage.add(upstream)
+        product.setInput(0, upstream)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            with patch.object(mod, "_rewrite_arv", side_effect=RuntimeError("write failed")):
+                result = mod.configure_aovs("/stage/rp1", ["normal"])
+
+        assert result["success"] is False
+        assert stage.node("rp1_aovs") is None
+        assert product.input(0) is upstream
+        assert product.parm("orderedVars").eval() == ""
+        assert product.parm("xn__driverparametershuskimage_format_control_75bke").eval() == "none"
+
+    def test_add_preserves_foreign_render_var_instances(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal"])
+            arv = stage.node("rp1_aovs")
+            arv.parm("rendervars").set(2)
+            arv.parm("name2").set("my_custom_aov")
+            arv.parm("sourceName2").set("custom")
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"])
+
+        assert result["success"] is True
+        arv = stage.node("rp1_aovs")
+        assert arv.authored_names() == ["normal", "diffuse", "my_custom_aov"]
+        assert arv.instance_fields(3)["sourceName"] == "custom"
+
+    def test_partial_remove_preserves_foreign_render_var_instances(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal", "depth"])
+            arv = stage.node("rp1_aovs")
+            arv.parm("rendervars").set(3)
+            arv.parm("name3").set("my_custom_aov")
+            arv.parm("sourceName3").set("custom")
+            result = mod.configure_aovs("/stage/rp1", ["normal"], action="remove")
+
+        assert result["success"] is True
+        arv = stage.node("rp1_aovs")
+        assert arv.authored_names() == ["depth", "my_custom_aov"]
+        assert arv.instance_fields(2)["sourceName"] == "custom"
+
+    def test_remove_all_keeps_node_when_foreign_instances_remain(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal"])
+            arv = stage.node("rp1_aovs")
+            arv.parm("rendervars").set(2)
+            arv.parm("name2").set("my_custom_aov")
+            arv.parm("sourceName2").set("custom")
+            result = mod.configure_aovs("/stage/rp1", ["normal"], action="remove")
+
+        assert result["success"] is True
+        arv = stage.node("rp1_aovs")
+        assert arv is not None
+        assert product.input(0) is arv
+        assert arv.authored_names() == ["my_custom_aov"]
+
 
 class TestRenderPassAuthoring:
     def test_mantra_component_presets_use_complete_light_path_expressions(self) -> None:
