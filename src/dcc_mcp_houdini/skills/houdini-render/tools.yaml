@@ -549,7 +549,11 @@ tools:
       Add or remove AOVs on a Solaris Render Product or Mantra ROP. Mantra
       edits the native auxiliary-plane multiparm, deduplicates requested and
       existing planes on add, writes native quantization and filter settings,
-      and compacts the multiparm on remove.
+      and compacts the multiparm on remove. On Solaris it authors Karma-canonical
+      RenderVars (KarmaRenderVarAPI/HuskRenderVarAPI plus the full aov driver
+      attributes) through an additionalrendervars LOP, wires them into the
+      product's orderedVars, and sets the product image format to OpenEXR so husk
+      actually renders the requested channels.
     source_file: scripts/configure_aovs.py
     execution: sync
     affinity: main
@@ -567,18 +571,23 @@ tools:
       properties:
         rop_path:
           type: string
-          description: Absolute path of the Solaris Render Product or Mantra ROP.
+          description: >-
+            Absolute path of a Solaris Render Product LOP (renderproduct) or a
+            Mantra ROP. Solaris targets must be the renderproduct node itself,
+            not a karma/rendersettings/ROP node.
         aovs:
           type: array
           items: {type: string}
           description: >-
-            AOV preset names or Solaris RenderVar names. Unsupported Mantra
-            names are returned without changing the existing planes.
+            AOV preset names (diffuse, specular, transmission, normal, depth,
+            motionvector, albedo, opacity, emission, volume, uv, worldpos,
+            cryptomatte, objectid, materialid). Unsupported names are returned
+            without changing existing AOVs.
         action:
           type: string
           enum: [add, remove]
           default: add
-          description: Add missing planes or remove matching planes by preset/source/channel.
+          description: Add missing AOVs or remove matching AOVs by preset name.
   - name: manage_takes
     description: >-
       Create, switch, delete, or list takes, and add or remove a parameter

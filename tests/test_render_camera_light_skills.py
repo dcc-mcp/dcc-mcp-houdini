@@ -1218,6 +1218,367 @@ class TestRenderSettings:
         parms["copoutput"].set.assert_called_once_with("/tmp/preview.png")
 
 
+_ARV_FIELD_DEFAULTS = {
+    "enable": 1,
+    "name": "",
+    "sourceName": "",
+    "sourceType": "raw",
+    "dataType": "color3f",
+    "format": "float",
+    "multisampled": 0,
+    "clearvalue": 0,
+    "filter": '["ubox",{}]',
+    "cryptomatte": 0,
+    "cryptomatterank": 6,
+}
+_ARV_FIELDS = tuple(_ARV_FIELD_DEFAULTS)
+
+
+class _FakeLopParm:
+    """A live view over a fake LOP node's parameter store."""
+
+    def __init__(self, owner, name):
+        self._owner = owner
+        self._name = name
+
+    def name(self):
+        return self._name
+
+    def eval(self):
+        return self._owner._parm_value(self._name)
+
+    def set(self, value):
+        self._owner._set_parm_value(self._name, value)
+
+
+class _FakeLopNode:
+    def __init__(self, path, name, type_name, parent=None):
+        self._path = path
+        self._name = name
+        self._type_name = type_name
+        self._parent = parent
+        self._inputs = {}
+        self._values = {}
+        self.set_failures = set()
+        self.destroyed = False
+
+    def path(self):
+        return self._path
+
+    def name(self):
+        return self._name
+
+    def type(self):
+        node_type = MagicMock()
+        node_type.name.return_value = self._type_name
+        return node_type
+
+    def parent(self):
+        return self._parent
+
+    def input(self, index):
+        return self._inputs.get(index)
+
+    def setInput(self, index, node):
+        self._inputs[index] = node
+
+    def destroy(self):
+        self.destroyed = True
+        if self._parent is not None:
+            self._parent.children.pop(self._name, None)
+
+    def _parm_value(self, name):
+        return self._values.get(name)
+
+    def _set_parm_value(self, name, value):
+        if name in self.set_failures:
+            raise RuntimeError("cannot set {}".format(name))
+        self._values[name] = value
+        self._on_parm_set(name, value)
+
+    def _on_parm_set(self, name, value):  # noqa: D401 - overridden by subclasses
+        pass
+
+    def parm(self, name):
+        return _FakeLopParm(self, name) if name in self._values else None
+
+    def parms(self):
+        return [_FakeLopParm(self, name) for name in self._values]
+
+
+class _FakeRenderProduct(_FakeLopNode):
+    def __init__(self, path="/stage/rp1", name="rp1", parent=None):
+        super().__init__(path, name, "renderproduct", parent)
+        self._values = {
+            "primpath": "/Render/Products/{}".format(name),
+            "productName": "",
+            "productType": "raster",
+            "orderedVars": "",
+            "xn__driverparametershuskimage_format_6sbke": "",
+            "xn__driverparametershuskimage_format_control_75bke": "none",
+        }
+
+    def createNode(self, type_name, node_name=None):  # noqa: N802 - hou API name
+        raise AssertionError("configure_aovs must never create a {!r} child of the Render Product".format(type_name))
+
+    def node(self, name):
+        return None
+
+
+class _FakeAdditionalRenderVars(_FakeLopNode):
+    def __init__(self, path, name, parent):
+        super().__init__(path, name, "additionalrendervars", parent)
+        self._values = {"parentprimpath": "/Render/Products/Vars", "rendervars": 1}
+        self._instance_count = 0
+        self._apply_count(1)
+
+    def _apply_count(self, target):
+        target = max(0, int(target))
+        for index in range(self._instance_count + 1, target + 1):
+            for field, default in _ARV_FIELD_DEFAULTS.items():
+                self._values["{}{}".format(field, index)] = default
+        for index in range(target + 1, self._instance_count + 1):
+            for field in _ARV_FIELDS:
+                self._values.pop("{}{}".format(field, index), None)
+        self._instance_count = target
+        self._values["rendervars"] = target
+
+    def _on_parm_set(self, name, value):
+        if name == "rendervars":
+            self._apply_count(int(value))
+
+    def instance_fields(self, index):
+        return {field: self._values.get("{}{}".format(field, index)) for field in _ARV_FIELDS}
+
+    def authored_names(self):
+        count = int(self._values["rendervars"])
+        return [str(self._values.get("name{}".format(i))).strip().lower() for i in range(1, count + 1)]
+
+
+class _FakeStageNetwork:
+    def __init__(self):
+        self.children = {}
+
+    def path(self):
+        return "/stage"
+
+    def name(self):
+        return "stage"
+
+    def type(self):
+        node_type = MagicMock()
+        node_type.name.return_value = "lopnet"
+        return node_type
+
+    def node(self, name):
+        return self.children.get(name)
+
+    def createNode(self, type_name, node_name):  # noqa: N802 - hou API name
+        assert type_name == "additionalrendervars"
+        node = _FakeAdditionalRenderVars("/stage/{}".format(node_name), node_name, self)
+        self.children[node_name] = node
+        return node
+
+    def add(self, node):
+        node._parent = self
+        self.children[node.name()] = node
+
+
+def _build_solaris_product(name="rp1"):
+    stage = _FakeStageNetwork()
+    product = _FakeRenderProduct("/stage/{}".format(name), name, stage)
+    stage.add(product)
+    mock_hou = MagicMock()
+    mock_hou.node.side_effect = lambda path: {product.path(): product, "/stage": stage}.get(path)
+    return product, stage, mock_hou
+
+
+class TestSolarisConfigureAovs:
+    def test_add_authors_karma_vars_wires_product_and_sets_image_format(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["diffuse", "normal", "cryptomatte"])
+
+        assert result["success"] is True
+        assert [item["name"] for item in result["context"]["configured"]] == ["diffuse", "normal", "cryptomatte"]
+        assert result["context"]["unsupported"] == []
+        assert result["context"]["is_solaris"] is True
+        # RenderVars live on a sibling additionalrendervars LOP, never as children of the product.
+        arv = stage.node("rp1_aovs")
+        assert arv is not None
+        assert product.input(0) is arv
+        assert product.createNode  # product never had createNode invoked successfully
+        # Vars wired into the product's orderedVars.
+        assert product.parm("orderedVars").eval() == (
+            "/Render/Products/Vars/diffuse /Render/Products/Vars/normal /Render/Products/Vars/cryptomatte"
+        )
+        # Product now emits a combined EXR for every AOV.
+        assert product.parm("xn__driverparametershuskimage_format_control_75bke").eval() == "set"
+        assert product.parm("xn__driverparametershuskimage_format_6sbke").eval() == "OpenEXR"
+
+    def test_add_writes_karma_canonical_driver_configuration(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["normal", "depth", "cryptomatte"])
+
+        assert result["success"] is True
+        arv = stage.node("rp1_aovs")
+        normal = arv.instance_fields(1)
+        assert normal["sourceName"] == "ray:hitN"
+        assert normal["sourceType"] == "raw"
+        assert normal["dataType"] == "normal3f"
+        assert normal["format"] == "half3"
+        assert normal["multisampled"] is False
+        assert normal["filter"] == '["ubox",{}]'
+        assert normal["cryptomatte"] is False
+
+        depth = arv.instance_fields(2)
+        assert depth["sourceName"] == "ray:hitPz"
+        assert depth["dataType"] == "float"
+        assert depth["format"] == "float"
+        assert depth["filter"] == '["minmax",{"mode":"zmin"}]'
+
+        crypto = arv.instance_fields(3)
+        assert crypto["sourceName"] == "material"
+        assert crypto["cryptomatte"] is True
+        assert crypto["cryptomatterank"] == 6
+        # Channel prefix and aov:name follow the requested AOV name.
+        assert crypto["name"] == "cryptomatte"
+
+    def test_add_deduplicates_and_reports_unsupported_names(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["normal", "normal", "bogus", ""])
+
+        assert result["success"] is True
+        assert [item["name"] for item in result["context"]["configured"]] == ["normal"]
+        assert result["context"]["unsupported"] == ["bogus"]
+        assert stage.node("rp1_aovs").parm("rendervars").eval() == 1
+
+    def test_add_is_idempotent(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            first = mod.configure_aovs("/stage/rp1", ["normal", "depth"])
+            second = mod.configure_aovs("/stage/rp1", ["normal"])
+
+        assert [item["name"] for item in first["context"]["configured"]] == ["normal", "depth"]
+        assert second["context"]["configured"] == []
+        arv = stage.node("rp1_aovs")
+        assert arv.parm("rendervars").eval() == 2
+        assert arv.authored_names() == ["normal", "depth"]
+
+    def test_add_preserves_an_existing_product_image_format(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        product.parm("xn__driverparametershuskimage_format_control_75bke").set("set")
+        product.parm("xn__driverparametershuskimage_format_6sbke").set("PNG")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["normal"])
+
+        assert result["success"] is True
+        assert product.parm("xn__driverparametershuskimage_format_6sbke").eval() == "PNG"
+
+    def test_add_rolls_back_when_a_render_var_write_fails(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        def fail_on_second_instance(*_args, **_kwargs):
+            raise RuntimeError("create failed")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            # Pre-create the owned var node so we can inject a failing parameter.
+            arv = _FakeAdditionalRenderVars("/stage/rp1_aovs", "rp1_aovs", stage)
+            stage.add(arv)
+            arv.setInput(0, None)
+            product.setInput(0, arv)
+            arv.set_failures.add("sourceName2")
+            result = mod.configure_aovs("/stage/rp1", ["normal", "depth"])
+
+        assert result["success"] is False
+        # Multipart state restored: no stray instances, orderedVars and image_format untouched.
+        assert arv.parm("rendervars").eval() == 1
+        assert arv.parm("name1").eval() == ""
+        assert product.parm("orderedVars").eval() == ""
+        assert product.parm("xn__driverparametershuskimage_format_control_75bke").eval() == "none"
+
+    def test_remove_compacts_render_vars_and_updates_product(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["diffuse", "normal", "cryptomatte"])
+            result = mod.configure_aovs("/stage/rp1", ["normal", "missing"], action="remove")
+
+        assert result["success"] is True
+        assert [item["name"] for item in result["context"]["configured"]] == ["normal"]
+        assert result["context"]["unsupported"] == ["missing"]
+        arv = stage.node("rp1_aovs")
+        assert arv is not None
+        assert arv.parm("rendervars").eval() == 2
+        assert arv.authored_names() == ["diffuse", "cryptomatte"]
+        assert product.parm("orderedVars").eval() == ("/Render/Products/Vars/diffuse /Render/Products/Vars/cryptomatte")
+
+    def test_remove_all_unwires_and_destroys_the_var_node(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["diffuse", "normal"])
+            result = mod.configure_aovs("/stage/rp1", ["diffuse", "normal"], action="remove")
+
+        assert result["success"] is True
+        assert [item["name"] for item in result["context"]["configured"]] == ["diffuse", "normal"]
+        assert stage.node("rp1_aovs") is None
+        assert product.input(0) is None
+        assert product.parm("orderedVars").eval() == ""
+
+    def test_remove_without_existing_vars_reports_unsupported(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["normal"], action="remove")
+
+        assert result["success"] is True
+        assert result["context"]["configured"] == []
+        assert result["context"]["unsupported"] == ["normal"]
+        assert stage.node("rp1_aovs") is None
+
+    def test_rejects_non_product_solaris_target_without_mutation(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        stage = _FakeStageNetwork()
+        settings = _FakeLopNode("/stage/rs1", "rs1", "rendersettings", stage)
+        stage.add(settings)
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda path: {settings.path(): settings, "/stage": stage}.get(path)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rs1", ["normal"])
+
+        assert result["success"] is False
+        assert "Render Product" in result["error"]
+        assert stage.children.get("rs1") is settings
+
+    def test_rejects_unknown_action_without_mutation(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.configure_aovs("/stage/rp1", ["normal"], action="replace")
+
+        assert result["success"] is False
+        assert stage.node("rp1_aovs") is None
+
+
 class TestRenderPassAuthoring:
     def test_mantra_component_presets_use_complete_light_path_expressions(self) -> None:
         mod = _load_script("houdini-render", "configure_aovs.py")

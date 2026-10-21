@@ -2,29 +2,177 @@
 
 from __future__ import annotations
 
+import re
 from typing import List
 
-from _render_common import get_node, node_summary, set_first_parm  # noqa: E402
+from _render_common import get_node, node_summary  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
-# Common AOV presets with their source names
-AOV_PRESETS = {
-    "diffuse": {"source": "diffuse", "type": "color"},
-    "specular": {"source": "specular", "type": "color"},
-    "transmission": {"source": "transmission", "type": "color"},
-    "normal": {"source": "normal", "type": "vector"},
-    "depth": {"source": "depth", "type": "float"},
-    "motionvector": {"source": "motionvector", "type": "vector"},
-    "albedo": {"source": "albedo", "type": "color"},
-    "opacity": {"source": "opacity", "type": "color"},
-    "emission": {"source": "emission", "type": "color"},
-    "volume": {"source": "volume", "type": "color"},
-    "cryptomatte": {"source": "cryptomatte", "type": "color"},
-    "objectid": {"source": "objectid", "type": "int"},
-    "materialid": {"source": "materialid", "type": "int"},
-    "uv": {"source": "uv", "type": "vector"},
-    "worldpos": {"source": "worldpos", "type": "vector"},
+_KARMA_UBOX = '["ubox",{}]'
+_KARMA_ZMIN = '["minmax",{"mode":"zmin"}]'
+
+# Karma / Solaris canonical AOV presets.
+#
+# These drive an ``additionalrendervars`` LOP, which authors each RenderVar with
+# the KarmaRenderVarAPI and HuskRenderVarAPI applied and the full
+# ``driver:parameters:aov:*`` attribute set (name, format, husk:channel_prefix,
+# karma:filter, multiSampled, clearValue, and the cryptomatte attributes). The
+# values below were validated against husk (BRAY_HdKarma): each one produces a
+# real EXR channel rather than a beauty-only image.
+KARMA_AOV_PRESETS = {
+    "diffuse": {
+        "sourceName": "C<RD>.*L",
+        "sourceType": "lpe",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": True,
+        "filter": _KARMA_UBOX,
+    },
+    "specular": {
+        "sourceName": "C<RG>.*L",
+        "sourceType": "lpe",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": True,
+        "filter": _KARMA_UBOX,
+    },
+    "transmission": {
+        "sourceName": "C<TG>.*L",
+        "sourceType": "lpe",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": True,
+        "filter": _KARMA_UBOX,
+    },
+    "normal": {
+        "sourceName": "ray:hitN",
+        "sourceType": "raw",
+        "dataType": "normal3f",
+        "format": "half3",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "depth": {
+        "sourceName": "ray:hitPz",
+        "sourceType": "raw",
+        "dataType": "float",
+        "format": "float",
+        "multisampled": False,
+        "filter": _KARMA_ZMIN,
+    },
+    "motionvector": {
+        "sourceName": "ray:motionvector",
+        "sourceType": "raw",
+        "dataType": "vector3f",
+        "format": "half3",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "albedo": {
+        "sourceName": "export_basecolor",
+        "sourceType": "raw",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "opacity": {
+        "sourceName": "Of",
+        "sourceType": "raw",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "emission": {
+        "sourceName": "C.*O",
+        "sourceType": "lpe",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": True,
+        "filter": _KARMA_UBOX,
+    },
+    "volume": {
+        "sourceName": "CV.*L",
+        "sourceType": "lpe",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": True,
+        "filter": _KARMA_UBOX,
+    },
+    "uv": {
+        "sourceName": "st",
+        "sourceType": "primvar",
+        "dataType": "float3",
+        "format": "float3",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "worldpos": {
+        "sourceName": "ray:hitP",
+        "sourceType": "raw",
+        "dataType": "point3f",
+        "format": "half3",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+    },
+    "cryptomatte": {
+        "sourceName": "material",
+        "sourceType": "raw",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+        "cryptomatte": True,
+        "cryptomatterank": 6,
+    },
+    "objectid": {
+        "sourceName": "object",
+        "sourceType": "raw",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+        "cryptomatte": True,
+        "cryptomatterank": 6,
+    },
+    "materialid": {
+        "sourceName": "material",
+        "sourceType": "raw",
+        "dataType": "color3f",
+        "format": "color3h",
+        "multisampled": False,
+        "filter": _KARMA_UBOX,
+        "cryptomatte": True,
+        "cryptomatterank": 6,
+    },
 }
+
+# Solaris Render Product LOP types this tool can configure.
+KARMA_PRODUCT_TYPES = ("renderproduct",)
+
+# USD property authored on the product so husk combines every AOV into one EXR.
+_IMAGE_FORMAT_PROP = "driver:parameters:husk:image_format"
+_IMAGE_FORMAT_VALUE = "OpenEXR"
+_ADDITIONAL_RENDERVARS_TYPE = "additionalrendervars"
+_ARV_PARENT_PATH = "parentprimpath"
+_ARV_COUNT_PARM = "rendervars"
+_DEFAULT_VAR_PARENT = "/Render/Products/Vars"
+
+# additionalrendervars multiparm instance fields we author.
+_ARV_VALUE_KEYS = (
+    "enable",
+    "name",
+    "sourceName",
+    "sourceType",
+    "dataType",
+    "format",
+    "multisampled",
+    "clearvalue",
+    "filter",
+    "cryptomatte",
+    "cryptomatterank",
+)
 
 MANTRA_AOV_PRESETS = {
     "diffuse": {"source": "lpe:C<RD>.*L", "type": "vector", "channel": "diffuse"},
@@ -205,6 +353,343 @@ def _configure_mantra_aovs(node, aovs: List[str], action: str) -> tuple:
     return configured, unsupported
 
 
+class UnsupportedSolarisTarget(ValueError):
+    """Raised when a /stage path does not point at a Solaris Render Product LOP."""
+
+
+def _node_type_name(node) -> str:
+    try:
+        return node.type().name().split("::", 1)[0]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _owned_arv_name(product) -> str:
+    return "{}_aovs".format(product.name())
+
+
+def _find_owned_arv(product):
+    """Return the additionalrendervars LOP owned by *product*, or None."""
+    name = _owned_arv_name(product)
+    parent = product.parent()
+    candidate = parent.node(name) if parent is not None else None
+    if candidate is not None and _node_type_name(candidate) == _ADDITIONAL_RENDERVARS_TYPE:
+        return candidate
+    incoming = product.input(0)
+    if (
+        incoming is not None
+        and _node_type_name(incoming) == _ADDITIONAL_RENDERVARS_TYPE
+        and incoming.name().startswith(name)
+    ):
+        return incoming
+    return None
+
+
+def _get_or_create_additional_rendervars(product):
+    """Return the product-owned additionalrendervars LOP, wired as its input."""
+    arv = _find_owned_arv(product)
+    if arv is not None:
+        if product.input(0) is not arv:
+            upstream = product.input(0)
+            arv.setInput(0, upstream)
+            product.setInput(0, arv)
+        return arv
+    parent = product.parent()
+    try:
+        arv = parent.createNode(_ADDITIONAL_RENDERVARS_TYPE, node_name=_owned_arv_name(product))
+    except Exception as exc:  # noqa: BLE001
+        raise UnsupportedSolarisTarget(
+            "Could not create an additionalrendervars LOP under '{}': {}".format(parent.path(), exc)
+        ) from exc
+    upstream = product.input(0)
+    arv.setInput(0, upstream)
+    product.setInput(0, arv)
+    return arv
+
+
+def _arv_var_parent(arv) -> str:
+    parm = arv.parm(_ARV_PARENT_PATH)
+    value = str(parm.eval()).strip().rstrip("/") if parm is not None else ""
+    return value or _DEFAULT_VAR_PARENT
+
+
+def _var_prim_path(var_parent: str, name: str) -> str:
+    return "{}/{}".format(var_parent, name)
+
+
+def _arv_existing_names(arv) -> list:
+    """Ordered, de-duplicated list of preset names currently authored on *arv*."""
+    count_parm = arv.parm(_ARV_COUNT_PARM)
+    count = int(count_parm.eval()) if count_parm is not None else 0
+    names = []
+    for index in range(1, count + 1):
+        parm = arv.parm("name{}".format(index))
+        name = str(parm.eval()).strip().lower() if parm is not None else ""
+        if name and name in KARMA_AOV_PRESETS and name not in names:
+            names.append(name)
+    return names
+
+
+def _arv_instance_values(name: str, preset: dict) -> dict:
+    return {
+        "enable": True,
+        "name": name,
+        "sourceName": preset["sourceName"],
+        "sourceType": preset["sourceType"],
+        "dataType": preset["dataType"],
+        "format": preset["format"],
+        "multisampled": bool(preset.get("multisampled", False)),
+        "clearvalue": 0,
+        "filter": preset.get("filter", _KARMA_UBOX),
+        "cryptomatte": bool(preset.get("cryptomatte", False)),
+        "cryptomatterank": int(preset.get("cryptomatterank", 6)),
+    }
+
+
+def _write_arv_instance(arv, index: int, values: dict) -> None:
+    missing = [key for key in values if arv.parm("{}{}".format(key, index)) is None]
+    if missing:
+        raise ValueError("additionalrendervars node is missing parameters: {}".format(", ".join(sorted(missing))))
+    for key, value in values.items():
+        arv.parm("{}{}".format(key, index)).set(value)
+
+
+def _snapshot_arv(arv) -> list:
+    count_parm = arv.parm(_ARV_COUNT_PARM)
+    count = int(count_parm.eval()) if count_parm is not None else 0
+    snapshot = []
+    for index in range(1, count + 1):
+        fields = {}
+        for key in _ARV_VALUE_KEYS:
+            parm = arv.parm("{}{}".format(key, index))
+            if parm is not None:
+                fields[key] = parm.eval()
+        snapshot.append(fields)
+    return snapshot
+
+
+def _restore_arv(arv, snapshot: list) -> None:
+    count_parm = arv.parm(_ARV_COUNT_PARM)
+    if count_parm is None:
+        return
+    count_parm.set(len(snapshot))
+    for index, fields in enumerate(snapshot, start=1):
+        for key, value in fields.items():
+            parm = arv.parm("{}{}".format(key, index))
+            if parm is not None:
+                parm.set(value)
+
+
+def _rewrite_arv(arv, names: list) -> None:
+    count_parm = arv.parm(_ARV_COUNT_PARM)
+    if count_parm is None:
+        raise ValueError("additionalrendervars node has no '{}' parameter".format(_ARV_COUNT_PARM))
+    count_parm.set(len(names))
+    for index, name in enumerate(names, start=1):
+        _write_arv_instance(arv, index, _arv_instance_values(name, KARMA_AOV_PRESETS[name]))
+
+
+def _read_ordered_vars(product) -> list:
+    parm = product.parm("orderedVars")
+    if parm is None:
+        return []
+    raw = str(parm.eval() or "").strip()
+    if not raw:
+        return []
+    return [token for token in re.split(r"[\s,]+", raw) if token]
+
+
+def _write_ordered_vars(product, paths: list) -> None:
+    parm = product.parm("orderedVars")
+    if parm is None:
+        raise ValueError("Render Product '{}' has no 'orderedVars' parameter".format(product.path()))
+    parm.set(" ".join(paths))
+
+
+def _ordered_vars_path(var_parent: str, names: list) -> list:
+    return [_var_prim_path(var_parent, name) for name in names]
+
+
+def _foreign_ordered_vars(original: list, var_parent: str) -> list:
+    prefix = "{}/".format(var_parent)
+    return [path for path in original if not path.startswith(prefix)]
+
+
+def _find_driver_parms(node, usd_prop: str):
+    """Map a USD property to its Houdini value/control parms via stem matching."""
+    stem = "".join(char for char in usd_prop if char.isalnum() or char == "_")
+    prefix = "xn__{}_".format(stem)
+    value_names = []
+    control_names = []
+    for parm in node.parms():
+        name = parm.name()
+        if not name.startswith(prefix):
+            continue
+        (control_names if "_control_" in name else value_names).append(name)
+    value_names.sort(key=len)
+    control_names.sort(key=len)
+    return value_names, control_names
+
+
+def _capture_image_format(product) -> dict:
+    value_names, control_names = _find_driver_parms(product, _IMAGE_FORMAT_PROP)
+    state = {"value_names": value_names, "control_names": control_names, "value": None, "controls": {}}
+    if value_names:
+        parm = product.parm(value_names[0])
+        state["value"] = parm.eval() if parm is not None else None
+    for name in control_names:
+        parm = product.parm(name)
+        state["controls"][name] = parm.eval() if parm is not None else None
+    return state
+
+
+def _restore_image_format(product, state: dict) -> None:
+    for name, value in state["controls"].items():
+        parm = product.parm(name)
+        if parm is not None and value is not None:
+            parm.set(value)
+    if state["value_names"]:
+        parm = product.parm(state["value_names"][0])
+        if parm is not None and state["value"] is not None:
+            parm.set(state["value"])
+
+
+def _ensure_product_image_format(product) -> bool:
+    """Author image_format=OpenEXR unless the product already sets one.
+
+    husk only merges every ordered RenderVar into a single EXR when the product
+    carries ``driver:parameters:husk:image_format``; without it the render
+    collapses to the beauty/first channel.
+    """
+    value_names, control_names = _find_driver_parms(product, _IMAGE_FORMAT_PROP)
+    if not value_names:
+        return False
+    value_parm = product.parm(value_names[0])
+    if value_parm is not None and str(value_parm.eval()).strip():
+        return False
+    for name in control_names:
+        control_parm = product.parm(name)
+        if control_parm is not None:
+            control_parm.set("set")
+    if value_parm is not None:
+        value_parm.set(_IMAGE_FORMAT_VALUE)
+    return True
+
+
+def _unwire_and_destroy_arv(product, arv) -> None:
+    upstream = arv.input(0)
+    product.setInput(0, upstream)
+    try:
+        arv.destroy()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _configured_record(name: str, preset: dict, var_parent: str, action: str) -> dict:
+    return {
+        "name": name,
+        "action": action,
+        "prim_path": _var_prim_path(var_parent, name),
+        "source_name": preset["sourceName"],
+        "source_type": preset["sourceType"],
+        "data_type": preset["dataType"],
+        "format": preset["format"],
+        "multi_sampled": bool(preset.get("multisampled", False)),
+        "cryptomatte": bool(preset.get("cryptomatte", False)),
+    }
+
+
+def _normalize_solaris_requests(aovs):
+    """Return (requests, unsupported); requests is [(raw, name, preset), ...]."""
+    seen = set()
+    requests = []
+    unsupported = []
+    for raw in aovs:
+        name = str(raw).strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        preset = KARMA_AOV_PRESETS.get(name)
+        if preset is None:
+            unsupported.append(raw)
+        else:
+            requests.append((raw, name, preset))
+    return requests, unsupported
+
+
+def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
+    requests, unsupported = _normalize_solaris_requests(aovs)
+    configured: list = []
+    if not requests:
+        return configured, unsupported
+
+    if action == "remove":
+        arv = _find_owned_arv(product)
+        if arv is None:
+            return configured, [raw for raw, _name, _preset in requests] + unsupported
+        var_parent = _arv_var_parent(arv)
+        current_names = _arv_existing_names(arv)
+        remove_set = {name for _raw, name, _preset in requests}
+        present = [name for name in current_names if name in remove_set]
+        present_set = set(present)
+        for raw, name, preset in requests:
+            if name in present_set:
+                configured.append(_configured_record(name, preset, var_parent, "removed"))
+            else:
+                unsupported.append(raw)
+        if not present:
+            return configured, unsupported
+        remaining = [name for name in current_names if name not in remove_set]
+        original_ordered = _read_ordered_vars(product)
+        snapshot = _snapshot_arv(arv)
+        try:
+            if remaining:
+                _rewrite_arv(arv, remaining)
+                _write_ordered_vars(product, _ordered_vars_path(var_parent, remaining))
+            else:
+                _rewrite_arv(arv, [])
+                _write_ordered_vars(product, _foreign_ordered_vars(original_ordered, var_parent))
+        except Exception:  # noqa: BLE001
+            _restore_arv(arv, snapshot)
+            _write_ordered_vars(product, original_ordered)
+            raise
+        if not remaining:
+            _unwire_and_destroy_arv(product, arv)
+        return configured, unsupported
+
+    # action == "add"
+    arv = _get_or_create_additional_rendervars(product)
+    var_parent = _arv_var_parent(arv)
+    current_names = _arv_existing_names(arv)
+    target_names = list(current_names)
+    existing_set = set(current_names)
+    added = []
+    for _raw, name, _preset in requests:
+        if name in existing_set:
+            continue
+        target_names.append(name)
+        existing_set.add(name)
+        added.append(name)
+    if not added:
+        return configured, unsupported
+
+    original_ordered = _read_ordered_vars(product)
+    snapshot = _snapshot_arv(arv)
+    image_state = _capture_image_format(product)
+    try:
+        _rewrite_arv(arv, target_names)
+        _write_ordered_vars(product, _ordered_vars_path(var_parent, target_names))
+        _ensure_product_image_format(product)
+    except Exception:  # noqa: BLE001
+        _restore_arv(arv, snapshot)
+        _write_ordered_vars(product, original_ordered)
+        _restore_image_format(product, image_state)
+        raise
+    for name in added:
+        configured.append(_configured_record(name, KARMA_AOV_PRESETS[name], var_parent, "added"))
+    return configured, unsupported
+
+
 def configure_aovs(
     rop_path: str,
     aovs: List[str],
@@ -229,28 +714,19 @@ def configure_aovs(
         unsupported: list = []
 
         if is_solaris:
-            # Solaris: iterate render vars under a render product
-            for aov_name in aovs:
-                if action == "remove":
-                    rv_node = node.node(aov_name)
-                    if rv_node:
-                        rv_node.destroy()
-                        configured.append({"name": aov_name, "action": "removed"})
-                    else:
-                        unsupported.append(aov_name)
-                else:
-                    preset = AOV_PRESETS.get(aov_name.lower(), {"source": aov_name, "type": "raw"})
-                    rv_node = node.createNode("rendervar", node_name=aov_name)
-                    set_first_parm(rv_node, ("sourceName", "sourcename"), preset["source"])
-                    set_first_parm(rv_node, ("sourceType", "sourcetype"), preset["type"])
-                    configured.append(
-                        {
-                            "name": aov_name,
-                            "source": preset["source"],
-                            "type": preset["type"],
-                            "path": rv_node.path(),
-                        }
-                    )
+            product_type = _node_type_name(node)
+            if product_type not in KARMA_PRODUCT_TYPES:
+                return skill_error(
+                    "Unsupported Solaris target",
+                    "configure_aovs on Solaris requires a Render Product LOP ({}); node at '{}' is a '{}'. "
+                    "Pass the path of the renderproduct LOP that should carry the AOVs.".format(
+                        ", ".join(KARMA_PRODUCT_TYPES), rop_path, product_type or "unknown"
+                    ),
+                    node=node_summary(node),
+                    node_type=product_type,
+                    is_solaris=is_solaris,
+                )
+            configured, unsupported = _configure_solaris_aovs(node, aovs, action)
         else:
             configured, unsupported = _configure_mantra_aovs(node, aovs, action)
 
@@ -262,6 +738,8 @@ def configure_aovs(
             action=action,
             is_solaris=is_solaris,
         )
+    except UnsupportedSolarisTarget as exc:
+        return skill_error("Unsupported Solaris target", str(exc))
     except Exception as exc:
         return skill_exception(exc, message="Failed to configure AOVs")
 
