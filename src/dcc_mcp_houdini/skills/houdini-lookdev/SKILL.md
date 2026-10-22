@@ -54,6 +54,12 @@ tools `list_presets` / `delete_preset` are `affinity: any`.
 `(applied, errors)`. Names the node does not expose are reported in `errors`
 with a reason.
 
+A `null` (`None`) value is never a valid parameter value: it is rejected into
+`errors` rather than coerced (coercion would otherwise write the literal
+`"None"` to a string parm or `False` to a toggle). Valid sibling overrides in
+the same call still apply, and `load_preset` fails instead of reporting success
+when every preset parameter is invalid.
+
 **Do not "clean up" `errors`.** It is populated, not a constant empty list. A
 parameter field is only dead when the tool routes overrides through a helper
 that returns an empty second list unconditionally while the underlying
