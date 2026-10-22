@@ -1731,6 +1731,82 @@ class TestSolarisConfigureAovs:
         assert product.input(0) is upstream
         assert arv.input(0) is None
 
+    def test_add_cleans_up_new_node_when_product_connection_fails(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/geo1", "geo1", "geo", stage)
+        stage.add(upstream)
+        product.setInput(0, upstream)
+        original_set_input = product.setInput
+
+        def reject_owned_node(index, node):
+            if isinstance(node, _FakeAdditionalRenderVars):
+                raise RuntimeError("product connection denied")
+            original_set_input(index, node)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            with patch.object(product, "setInput", side_effect=reject_owned_node):
+                with patch.object(product, "_set_parm_value", wraps=product._set_parm_value) as writes:
+                    result = mod.configure_aovs("/stage/rp1", ["normal"])
+
+        writes.assert_not_called()
+        assert result["success"] is False
+        assert "product connection denied" in json.dumps(result)
+        assert stage.node("rp1_aovs") is None
+        assert product.input(0) is upstream
+        assert product.parm("orderedVars").eval() == ""
+
+    def test_add_restores_inputs_after_persistent_parameter_restore_failure(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/geo1", "geo1", "geo", stage)
+        stage.add(upstream)
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal"])
+            arv = stage.node("rp1_aovs")
+            arv.setInput(0, None)
+            product.setInput(0, upstream)
+            arv.set_failures.add("sourceName1")
+            result = mod.configure_aovs("/stage/rp1", ["diffuse"])
+
+        assert result["success"] is False
+        assert product.input(0) is upstream
+        assert arv.input(0) is None
+        assert "cannot set sourceName1" in json.dumps(result)
+        assert "rollback incomplete" in json.dumps(result)
+
+    def test_add_restores_product_state_when_var_parameter_rollback_fails(self) -> None:
+        mod = _load_script("houdini-render", "configure_aovs.py")
+        product, stage, mock_hou = _build_solaris_product()
+        upstream = _FakeLopNode("/stage/geo1", "geo1", "geo", stage)
+        stage.add(upstream)
+
+        def fail_after_image_format_write(node):
+            node.parm("xn__driverparametershuskimage_format_6sbke").set("changed")
+            node.parm("xn__driverparametershuskimage_format_control_75bke").set("block")
+            raise RuntimeError("image format write failed")
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            mod.configure_aovs("/stage/rp1", ["normal"])
+            arv = stage.node("rp1_aovs")
+            original_ordered = product.parm("orderedVars").eval()
+            arv.setInput(0, None)
+            product.setInput(0, upstream)
+            with patch.object(mod, "_ensure_product_image_format", side_effect=fail_after_image_format_write):
+                with patch.object(mod, "_restore_arv", side_effect=RuntimeError("var restore denied")):
+                    result = mod.configure_aovs("/stage/rp1", ["diffuse"])
+
+        assert result["success"] is False
+        assert product.input(0) is upstream
+        assert arv.input(0) is None
+        assert product.parm("orderedVars").eval() == original_ordered
+        assert product.parm("xn__driverparametershuskimage_format_6sbke").eval() == "OpenEXR"
+        assert product.parm("xn__driverparametershuskimage_format_control_75bke").eval() == "set"
+        assert "image format write failed" in json.dumps(result)
+        assert "rollback incomplete" in json.dumps(result)
+        assert "var restore denied" in json.dumps(result)
+
     def test_add_authors_image_format_when_value_set_but_control_none(self) -> None:
         mod = _load_script("houdini-render", "configure_aovs.py")
         product, stage, mock_hou = _build_solaris_product()

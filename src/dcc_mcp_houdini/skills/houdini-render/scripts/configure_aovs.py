@@ -391,13 +391,9 @@ def _find_owned_arv(product):
 
 
 def _get_or_create_additional_rendervars(product):
-    """Return the product-owned additionalrendervars LOP, wired as its input."""
+    """Return the owned LOP; the caller wires it inside its rollback boundary."""
     arv = _find_owned_arv(product)
     if arv is not None:
-        if product.input(0) is not arv:
-            upstream = product.input(0)
-            arv.setInput(0, upstream)
-            product.setInput(0, arv)
         return arv
     parent = product.parent()
     try:
@@ -406,9 +402,6 @@ def _get_or_create_additional_rendervars(product):
         raise UnsupportedSolarisTarget(
             "Could not create an additionalrendervars LOP under '{}': {}".format(parent.path(), exc)
         ) from exc
-    upstream = product.input(0)
-    arv.setInput(0, upstream)
-    product.setInput(0, arv)
     return arv
 
 
@@ -721,48 +714,77 @@ def _configure_solaris_aovs(product, aovs: List[str], action: str) -> tuple:
     # action == "add"
     pre_existing = _find_owned_arv(product)
     original_input = product.input(0)
-    # Capture the node's own upstream before _get_or_create may rewire it, so a
-    # failed add can restore both the product's input and the node's input.
     original_arv_input = pre_existing.input(0) if pre_existing is not None else None
-    arv = _get_or_create_additional_rendervars(product)
-    arv_created = pre_existing is None
-    var_parent = _arv_var_parent(arv)
-    current_names = _arv_existing_names(arv)
-    target_names = list(current_names)
-    existing_set = set(current_names)
-    added = []
-    for _raw, name, _preset in requests:
-        if name in existing_set:
-            continue
-        target_names.append(name)
-        existing_set.add(name)
-        added.append(name)
-    if not added:
-        return configured, unsupported
-
+    # Capture existing state before creating or connecting any node. A failed
+    # snapshot must not leave a newly created or rewired node behind.
     original_ordered = _read_ordered_vars(product)
-    snapshot = _snapshot_arv(arv)
+    snapshot = _snapshot_arv(pre_existing) if pre_existing is not None else []
     image_state = _capture_image_format(product)
+    arv = pre_existing
+    arv_created = pre_existing is None
+    graph_write_started = False
+    arv_write_started = False
+    ordered_write_started = False
+    image_write_started = False
     try:
+        arv = _get_or_create_additional_rendervars(product)
+        # Keep the node reference before either connection can fail, so cleanup
+        # can destroy a new node or restore a reused node's original input.
+        if product.input(0) is not arv:
+            graph_write_started = True
+            arv.setInput(0, original_input)
+            product.setInput(0, arv)
+        var_parent = _arv_var_parent(arv)
+        current_names = _arv_existing_names(arv)
+        target_names = list(current_names)
+        existing_set = set(current_names)
+        added = []
+        for _raw, name, _preset in requests:
+            if name in existing_set:
+                continue
+            target_names.append(name)
+            existing_set.add(name)
+            added.append(name)
+        if not added:
+            return configured, unsupported
+
+        arv_write_started = True
         _rewrite_arv(arv, target_names)
+        ordered_write_started = True
         _write_ordered_vars(
             product,
             _merge_ordered_vars(original_ordered, var_parent, current_names, target_names),
         )
+        image_write_started = True
         _ensure_product_image_format(product)
-    except Exception:  # noqa: BLE001
-        if arv_created:
-            _unwire_and_destroy_arv(product, arv)
-        else:
-            _restore_arv(arv, snapshot)
-            # Undo the input rewire _get_or_create performed for a pre-existing
-            # node, so a failed add leaves the scene graph untouched.
-            arv.setInput(0, original_arv_input)
-        # Restore the product's original input unconditionally: _get_or_create
-        # may have rewired it even for a pre-existing node.
-        product.setInput(0, original_input)
-        _write_ordered_vars(product, original_ordered)
-        _restore_image_format(product, image_state)
+    except Exception as exc:  # noqa: BLE001
+        # One failed restoration must not prevent independent graph/product
+        # recovery. Preserve the original error and report any incomplete work.
+        # Do not rewrite untouched parameter state on a connection failure;
+        # a read/eval/set round trip could alter an existing expression.
+        rollback_steps = []
+        if graph_write_started:
+            rollback_steps.append(("product input", lambda: product.setInput(0, original_input)))
+        if arv is not None:
+            if arv_created:
+                rollback_steps.append(("new RenderVar node", arv.destroy))
+            else:
+                if arv_write_started:
+                    rollback_steps.append(("RenderVar parameters", lambda: _restore_arv(arv, snapshot)))
+                if graph_write_started:
+                    rollback_steps.append(("RenderVar input", lambda: arv.setInput(0, original_arv_input)))
+        if ordered_write_started:
+            rollback_steps.append(("orderedVars", lambda: _write_ordered_vars(product, original_ordered)))
+        if image_write_started:
+            rollback_steps.append(("image format", lambda: _restore_image_format(product, image_state)))
+        rollback_errors = []
+        for label, restore in rollback_steps:
+            try:
+                restore()
+            except Exception as rollback_exc:  # noqa: BLE001
+                rollback_errors.append("{}: {}".format(label, rollback_exc))
+        if rollback_errors:
+            raise RuntimeError("{}; rollback incomplete: {}".format(exc, "; ".join(rollback_errors))) from exc
         raise
     for name in added:
         configured.append(_configured_record(name, KARMA_AOV_PRESETS[name], var_parent, "added"))
