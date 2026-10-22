@@ -68,13 +68,70 @@ class _FailingAttribute(_Attribute):
         return False
 
 
+class _NotEditableError(RuntimeError):
+    """Stands in for pxr's Tf.ErrorException raised against a read-only edit target."""
+
+
+class _Layer:
+    """A USD layer whose editability the tests control explicitly.
+
+    OpenUSD exposes layer edit permission as the ``permissionToEdit`` property,
+    not a ``PermissionToEdit()`` method; mirroring that keeps the doubles honest.
+    """
+
+    def __init__(self, identifier, editable):
+        self.identifier = identifier
+        self._editable = editable
+
+    @property
+    def permissionToEdit(self):
+        return self._editable
+
+    def __repr__(self):
+        return "_Layer({!r}, editable={!r})".format(self.identifier, self._editable)
+
+
+class _EditTarget:
+    """A ``Usd.EditTarget`` double wrapping a single layer."""
+
+    def __init__(self, layer):
+        self._layer = layer
+
+    def IsValid(self):
+        return self._layer is not None
+
+    def GetLayer(self):
+        return self._layer
+
+
 class _Prim:
-    def __init__(self, fail_for=(), raise_for=()):
+    def __init__(self, fail_for=(), raise_for=(), stage=None):
         self.attributes = {}
         self.fail_for = fail_for
         self.raise_for = raise_for
+        self.stage = stage
+
+    def _current_layer(self):
+        if self.stage is None:
+            return None
+        target = self.stage.GetEditTarget()
+        if target is None or not target.IsValid():
+            return None
+        return target.GetLayer()
+
+    def _assert_editable(self, action, name):
+        # Doubles built without a stage (read-tool contracts) stay editable.
+        if self.stage is None:
+            return
+        layer = self._current_layer()
+        if layer is None or not layer.permissionToEdit:
+            identifier = getattr(layer, "identifier", "anon")
+            raise _NotEditableError(
+                "Cannot {} spec at </World/{}>. Layer @{}@ is not editable".format(action, name, identifier)
+            )
 
     def CreateAttribute(self, name, type_name):
+        self._assert_editable("create", name)
         if name in self.raise_for:
             attribute = _Attribute(type_name)
 
@@ -88,19 +145,42 @@ class _Prim:
         return attribute
 
     def RemoveProperty(self, name):
+        self._assert_editable("remove", name)
         self.attributes.pop(name, None)
 
     def GetAttribute(self, name):
         return self.attributes.get(name)
 
 
+_UNSET = object()
+
+
 class _Stage:
-    def __init__(self, prim, valid_path="/hero"):
+    def __init__(self, prim, valid_path="/hero", edit_target=_UNSET, session_layer=_UNSET):
         self._prim = prim
         self._valid_path = valid_path
+        # Default to an already-editable edit target (an editable LOP) so the
+        # original write contracts keep their behavior.
+        self._session_layer = _Layer("@session@", editable=True) if session_layer is _UNSET else session_layer
+        self._edit_target = (
+            _EditTarget(_Layer("@editable:LOP@", editable=True)) if edit_target is _UNSET else edit_target
+        )
+        self.edit_target_history = [self._edit_target]
+        if prim is not None:
+            prim.stage = self
 
     def GetPrimAtPath(self, path):
         return self._prim if path == self._valid_path else None
+
+    def GetEditTarget(self):
+        return self._edit_target
+
+    def SetEditTarget(self, target):
+        self._edit_target = target
+        self.edit_target_history.append(target)
+
+    def GetSessionLayer(self):
+        return self._session_layer
 
 
 def _hou_with_stage(stage):
@@ -110,7 +190,10 @@ def _hou_with_stage(stage):
 
 def _usd_modules():
     """USD doubles registered the way Houdini exposes them: as pxr.*."""
-    Usd = SimpleNamespace(TimeCode=SimpleNamespace(Default=lambda: "default"))
+    Usd = SimpleNamespace(
+        TimeCode=SimpleNamespace(Default=lambda: "default"),
+        EditTarget=_EditTarget,
+    )
     Sdf = SimpleNamespace(
         ValueTypeNames=SimpleNamespace(
             Bool="bool", Int="int", Float="float", String="string", Float2="float2", Float3="float3"
@@ -324,3 +407,103 @@ def test_vector_values_are_rejected_without_gf_conversion():
     attribute = prim.CreateAttribute("center", "float3")
     with pytest.raises(TypeError, match="float3 expects a Gf value"):
         attribute.Set([1.0, 2.0, 3.0], "default")
+
+
+# ---------------------------------------------------------------------------
+# DEF-1: sublayer/reference prims live under a read-only edit target.
+# node.stage() points at an anonymous "@anon:...:LOP@" layer that USD refuses to
+# author, so the tool must retarget to the (always-writable) session layer.
+# ---------------------------------------------------------------------------
+def _sublayer_stage(prim):
+    """A LOP stage whose default edit target is a read-only anonymous LOP layer.
+
+    Models sublayer/reference content: authoring against the default target raises
+    "not editable", exactly as a real Houdini LOP stage does for file-layer prims.
+    """
+    read_only = _Layer("@anon:0x0001:LOP@", editable=False)
+    return _Stage(prim, valid_path="/World/geo/cube", edit_target=_EditTarget(read_only))
+
+
+def test_set_prim_attributes_writes_a_sublayer_prim_through_the_session_layer():
+    """DEF-1: a file-layer (sublayer/reference) prim must accept the write.
+
+    The default edit target is read-only, so the tool retargets to the session
+    layer, authors there, and reads the composed value back.
+    """
+    prim = _Prim()
+    stage = _sublayer_stage(prim)
+    hou = _hou_with_stage(stage)
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/World/geo/cube", {"p77_density": 2.5, "p77_label": "hero"}
+        )
+    assert result["success"], result
+    context = result["context"]
+    assert context["applied_attributes"] == {"p77_density": 2.5, "p77_label": "hero"}
+    assert context["attribute_readback"] == context["applied_attributes"]
+    assert context["readback_matches"] is True
+    assert context["skipped_parameters"] == []
+
+
+def test_set_prim_attributes_restores_the_original_edit_target_after_a_sublayer_write():
+    """A write must not leave the shared stage pointing at the session layer."""
+    prim = _Prim()
+    read_only = _Layer("@anon:0x0001:LOP@", editable=False)
+    stage = _Stage(prim, valid_path="/World/geo/cube", edit_target=_EditTarget(read_only))
+    hou = _hou_with_stage(stage)
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/World/geo/cube", {"density": 1.0}
+        )
+    assert result["success"], result
+    # Retargeted once for the write, then put back to what the caller had.
+    assert len(stage.edit_target_history) >= 2
+    assert stage.GetEditTarget().GetLayer() is read_only
+
+
+def test_set_prim_attributes_leaves_an_editable_edit_target_in_place():
+    """An already-writable target is never swapped for the session layer.
+
+    Authoring on an editable LOP keeps using the node's own layer, so the edit
+    target is left exactly as it was found.
+    """
+    prim = _Prim()
+    stage = _Stage(prim)  # default: editable edit target
+    hou = _hou_with_stage(stage)
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes("/stage/lopnet1", "/hero", {"density": 2.5})
+    assert result["success"], result
+    assert stage.edit_target_history == [stage.GetEditTarget()]
+
+
+def test_set_prim_attributes_rolls_back_a_session_write_that_is_refused():
+    """Rollback must still work while retargeted to the session layer.
+
+    If the edit target were restored before rollback, RemoveProperty would hit the
+    read-only layer and the earlier write would be silently left behind.
+    """
+    prim = _Prim(raise_for=("density",))
+    stage = _sublayer_stage(prim)
+    hou = _hou_with_stage(stage)
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/World/geo/cube", {"center": [1.0, 2.0, 3.0], "density": 2.5}
+        )
+    assert not result["success"]
+    assert "stage refused the write" in skill_error_detail(result)
+    assert prim.attributes == {}
+
+
+def test_set_prim_attributes_reports_a_stage_without_a_writable_target():
+    """No session layer and a read-only target: a clear structured failure."""
+    prim = _Prim()
+    read_only = _Layer("@anon:0x0001:LOP@", editable=False)
+    stage = _Stage(prim, valid_path="/World/geo/cube", edit_target=_EditTarget(read_only), session_layer=None)
+    hou = _hou_with_stage(stage)
+    with patch.dict(sys.modules, dict(_pxr_modules(), hou=hou)):
+        result = _load("set_prim_attributes.py").set_prim_attributes(
+            "/stage/lopnet1", "/World/geo/cube", {"density": 2.5}
+        )
+    assert not result["success"]
+    assert "session layer" in skill_error_detail(result)
+    assert prim.attributes == {}

@@ -72,6 +72,18 @@ else fails the call rather than being coerced. Two- and three-component values
 are converted to `Gf.Vec2f` and `Gf.Vec3f` before the write, because OpenUSD maps
 Float2/Float3 onto those types and rejects a raw Python list.
 
+Writes author against a **writable edit target**. A LOP's composed stage
+(`node.stage()`) often defaults to a read-only edit target — for sublayer or
+reference content it is the anonymous `@anon:...:LOP@` layer — where
+`prim.CreateAttribute` would raise `Layer ... is not editable`. When the current
+target is already editable the tool leaves it in place, so authoring on an
+editable LOP keeps writing to the node's own layer; only when it is read-only
+does the tool retarget to the stage's **session layer**, which is always writable
+and composes above every file layer. The original edit target is restored once
+the write (and any rollback) is done, so the call leaves no lasting edit-target
+side effect on the stage. `readback_matches` reads the composed value and is
+therefore independent of which layer was authored.
+
 All requested attributes are pre-validated before the first write, so a rejected
 entry never leaves a partial write on the stage.
 
