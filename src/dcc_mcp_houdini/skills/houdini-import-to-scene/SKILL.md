@@ -72,10 +72,10 @@ The decode outcome is reported in `extra.status`:
 
 | `status` | Meaning | Warning |
 |-----------|---------|---------|
-| `as_authored` | Materials were decoded and created. | no |
+| `as_authored` | Every decoded material was created. | no |
 | `default_gray` | A neutral gray material was created and bound. | no |
-| `no_materials` | The carrier was read and genuinely carries no materials. | **no** — nothing was lost |
-| `carrier_unreadable` | The carrier declares materials that could not be read (missing `.mtl` sidecar, unknown `usemtl` name, dangling glTF material index, USD material with no resolvable surface shader). | **yes** |
+| `no_materials` | The carrier declares no materials (or no USD binding is available to read it). | no — nothing was proven lost |
+| `carrier_unreadable` | The carrier declares materials that could not be read (missing `.mtl` sidecar, unknown `usemtl` name, dangling glTF material index, truncated GLB, unopenable USD stage, USD material with no resolvable surface shader, non-`UsdPreviewSurface` shader such as `arnold:standard_surface` or MaterialX). When only *some* materials resolve, the readable ones are still imported and `materials_lost` says how many were dropped. | **yes** |
 | `decode_failed` | The carrier could not be decoded at all. | **yes** |
 | `unsupported_format` | This adapter has no material path for the format (fbx, abc, bgeo, …). | **yes** |
 
@@ -99,11 +99,17 @@ Material accounting is always machine-readable in `ImportToSceneResult.extra`:
 
 ```json
 {"material_mode": "as_authored", "status": "as_authored",
- "materials_detected": 1, "materials_imported": 1,
+ "materials_detected": 1, "materials_imported": 1, "materials_lost": 0,
  "material_paths": ["/mat/asset_brushed_metal"],
  "material_assignments": [{"object": "/obj/asset", "material": "/mat/asset_brushed_metal", "parm": "shop_materialpath"}],
  "unapplied_parameters": [], "unapplied_required": []}
 ```
+
+`materials_detected` counts what the carrier declares, including materials that
+could not be read; `materials_lost` is the part of that count which did not make
+it into the scene. A stage with two materials where only one resolves reports
+`"materials_detected": 2, "materials_imported": 1, "materials_lost": 1` and
+`"status": "carrier_unreadable"`.
 
 Check `warnings[].code == "material_fallback"` (or `extra.materials_imported`)
 before treating an import as look-complete — a silent `success: true` means the

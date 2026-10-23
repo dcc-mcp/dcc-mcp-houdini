@@ -49,6 +49,10 @@ dev = [
     "pyyaml>=6.0",
     "jsonschema==4.17.3; python_version < '3.8'",
     "jsonschema>=4.23; python_version >= '3.8'",
+    # Real pxr bindings so the USD material decode is covered by CI instead of
+    # being skipped on every lane. usd-core has no py3.7 wheel, and Houdini 20.5
+    # still ships Python 3.7, so the py37 tier keeps the pxr case skipped.
+    "usd-core>=25.8; python_version >= '3.8'",
 ]
 
 [project.urls]
