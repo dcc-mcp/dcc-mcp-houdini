@@ -258,6 +258,43 @@ def write_usda(path: Path) -> Path:
     return path
 
 
+# A surface this adapter cannot translate: Arnold's Standard Surface exposes
+# ``base_color``/``metalness``, not the UsdPreviewSurface input names.
+USDA_ARNOLD_SURFACE = """#usda 1.0
+def Material "arnold_mat" {
+    token outputs:surface.connect = </arnold_mat/standard_surface.outputs:surface>
+    def Shader "standard_surface" {
+        uniform token info:id = "arnold:standard_surface"
+        color3f inputs:base_color = (0.72, 0.45, 0.2)
+        float inputs:metalness = 1.0
+        token outputs:surface
+    }
+}
+"""
+
+# Two materials, only the first of which is UsdPreviewSurface.
+USDA_PARTIAL_SURFACES = """#usda 1.0
+def Material "brushed_metal" {
+    token outputs:surface.connect = </brushed_metal/PreviewSurface.outputs:surface>
+    def Shader "PreviewSurface" {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor = (0.72, 0.45, 0.2)
+        float inputs:metallic = 1.0
+        float inputs:roughness = 0.28
+        token outputs:surface
+    }
+}
+def Material "arnold_mat" {
+    token outputs:surface.connect = </arnold_mat/standard_surface.outputs:surface>
+    def Shader "standard_surface" {
+        uniform token info:id = "arnold:standard_surface"
+        color3f inputs:base_color = (0.1, 0.2, 0.3)
+        token outputs:surface
+    }
+}
+"""
+
+
 class _FakeUsdInput:
     """Stands in for ``UsdShade.Input``; unauthored inputs return ``None``."""
 
@@ -411,6 +448,96 @@ class TestUsdMaterials:
         assert shader.parm_tuples["basecolor"].values == [0.72, 0.45, 0.2]
         assert shader.parms["metallic"].value == 1.0
         assert round(shader.parms["rough"].value, 3) == 0.28
+
+    def test_non_preview_surface_shader_is_not_reported_as_authored(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path
+    ) -> None:
+        """An Arnold surface carries no input this adapter can read.
+
+        Reporting the neutral default as ``as_authored`` claims a grey look the
+        carrier never had, so the loss has to surface in the result.
+        """
+        pytest.importorskip("pxr")
+        carrier = tmp_path / "arnold_asset.usda"
+        carrier.write_text(USDA_ARNOLD_SURFACE, encoding="utf-8")
+
+        result = script.import_to_scene(_descriptor(carrier, "usd"), material_mode="as_authored")
+
+        assert result["success"] is True  # the geometry still imported
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert _extra(result)["materials_imported"] == 0
+        assert "/mat/showcase_gltf_arnold_mat" not in hou.registry
+        warnings = _warnings(result)
+        assert [w["code"] for w in warnings] == ["material_fallback"]
+        assert "arnold_mat" in warnings[0]["message"]
+
+    def test_unopenable_usd_warns_instead_of_reporting_no_materials(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path
+    ) -> None:
+        """``Usd.Stage.Open`` raises on an unresolvable layer; that is not "no materials"."""
+        pytest.importorskip("pxr")
+        carrier = tmp_path / "broken.usda"
+        carrier.write_bytes(b'#usda 1.0\ndef Material "x" {\n')  # truncated layer
+
+        result = script.import_to_scene(_descriptor(carrier, "usd"), material_mode="as_authored")
+
+        assert result["success"] is True
+        assert _extra(result)["status"] in ("carrier_unreadable", "decode_failed")
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
+        assert "inspect" in result["message"] or "material" in result["message"]
+
+    def test_partly_readable_usd_stage_reports_the_lost_material(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path
+    ) -> None:
+        """Two materials, one translated: the readable one lands, the gap is visible."""
+        pytest.importorskip("pxr")
+        carrier = tmp_path / "mixed_asset.usda"
+        carrier.write_text(USDA_PARTIAL_SURFACES, encoding="utf-8")
+
+        result = script.import_to_scene(_descriptor(carrier, "usd"), material_mode="as_authored")
+
+        extra = _extra(result)
+        assert result["success"] is True
+        assert extra["status"] == "carrier_unreadable"
+        assert extra["materials_detected"] == 2
+        assert extra["materials_lost"] == 1
+        assert extra["materials_imported"] == 1
+        assert extra["material_paths"] == ["/mat/showcase_gltf_brushed_metal"]
+        warnings = _warnings(result)
+        assert [w["code"] for w in warnings] == ["material_fallback"]
+        assert "arnold_mat" in warnings[0]["message"]
+        shader = hou.registry["/mat/showcase_gltf_brushed_metal"]
+        assert shader.parm_tuples["basecolor"].values == [0.72, 0.45, 0.2]
+
+    def test_truncated_glb_warns_instead_of_reporting_no_materials(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path
+    ) -> None:
+        """A GLB whose JSON chunk runs past the end of the file is a failed read."""
+        carrier = write_glb(
+            tmp_path / "showcase.glb",
+            [{"name": "brushed_metal", "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1]}}],
+        )
+        truncated = carrier.read_bytes()[:-8]
+        carrier.write_bytes(truncated)
+
+        result = script.import_to_scene(_descriptor(carrier, "glb"), material_mode="as_authored")
+
+        assert result["success"] is True
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
+        assert any("chunk" in w["message"] or "truncated" in w["message"] for w in _warnings(result))
+
+    def test_glb_without_json_chunk_warns(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
+        carrier = tmp_path / "binary_only.glb"
+        payload = b"\x00\x00\x00\x00" * 4
+        header = struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(payload))
+        chunk = struct.pack("<II", len(payload), 0x004E4942)  # BIN chunk only
+        carrier.write_bytes(header + chunk + payload)
+
+        result = script.import_to_scene(_descriptor(carrier, "glb"), material_mode="as_authored")
+
+        assert _extra(result)["status"] == "carrier_unreadable"
+        assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
 
 
 class TestMaterialModeIsNotSilent:

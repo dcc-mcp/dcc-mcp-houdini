@@ -11,7 +11,12 @@ import os
 import re
 from typing import Any, Mapping, Optional
 
-from _asset_material_import import build_materials, decode_materials_report, detect_material_format
+from _asset_material_import import (
+    build_materials,
+    decode_materials_report,
+    detect_material_format,
+    lost_material_count,
+)
 from dcc_mcp_core.asset_import import (
     AssetDescriptor,
     AssetFileVariant,
@@ -218,19 +223,26 @@ def _apply_material_mode(
         return report
 
     material_format = detect_material_format(filepath, variant_format)
-    specs, status, decode_detail = decode_materials_report(filepath, material_format)
-    report["status"] = status
+    specs, status, decode_detail, _partial = decode_materials_report(filepath, material_format)
 
-    if status == "decoded" and specs:
-        report["materials_detected"] = len(specs)
+    if specs:
+        # ``carrier_unreadable`` can still carry readable specs: the carrier was
+        # partly decoded, and dropping those would lose more than the decoder
+        # admitted to.
         built = build_materials(hou, specs, container, name_prefix=name_prefix)
         report["materials_imported"] = len(built["created"])
         report["material_paths"] = list(built["created"])
         report["material_assignments"] = list(built["assigned"])
         report["unapplied_parameters"] = list(built["unapplied"])
         report["unapplied_required"] = list(built["unapplied_required"])
-        if built["created"]:
-            report["status"] = "as_authored"
+
+    # ``materials_detected`` counts what the carrier declares, including the
+    # materials that could not be read — a stage with two materials where only
+    # one resolves must not look like a single-material asset.
+    declared = len(specs or []) + lost_material_count(decode_detail)
+    report["materials_detected"] = declared
+    report["materials_lost"] = max(0, declared - len(specs or []))
+    report["status"] = "as_authored" if status == "decoded" and report["materials_imported"] else status
 
     detail = "file={0}; format={1}".format(filepath, material_format or "unknown")
 
@@ -245,25 +257,25 @@ def _apply_material_mode(
             )
         )
 
-    if report["materials_imported"] == 0:
+    if status in ("carrier_unreadable", "decode_failed", "unsupported_format"):
         reason = {
             "unsupported_format": "this adapter has no material path for '{0}' carriers".format(
                 material_format or "unknown"
             ),
             "decode_failed": "the carrier could not be decoded for materials",
             "carrier_unreadable": "the carrier declares materials that could not be read",
-            "decoded": "no material node could be created in the scene",
-        }.get(status)
-        if reason is not None and decode_detail:
+        }[status]
+        if decode_detail:
             reason = "{0} ({1})".format(reason, decode_detail)
-        # ``no_materials`` is the only quiet outcome: the carrier was read and
-        # genuinely carries no materials, so nothing was lost.
-        if reason is not None:
-            _fallback(reason)
+        _fallback(reason)
+    elif status == "decoded" and not specs:
+        _fallback("no material node could be created in the scene")
     elif report["unapplied_required"]:
         # Materials exist but the shader did not expose the parms that carry
         # the base look, so the imported material is not the authored one.
         _fallback("the shader does not expose {0}".format(", ".join(report["unapplied_required"])))
+    # ``no_materials`` is the only quiet outcome: the carrier was read and
+    # genuinely carries no materials, so nothing was lost.
     return report
 
 
