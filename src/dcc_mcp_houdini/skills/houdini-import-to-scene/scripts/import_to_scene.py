@@ -176,6 +176,7 @@ def _apply_material_mode(
         "material_mode": material_mode,
         "materials_detected": 0,
         "materials_imported": 0,
+        "materials_lost": 0,
         "material_paths": [],
         "material_assignments": [],
         "unapplied_parameters": [],
@@ -207,7 +208,9 @@ def _apply_material_mode(
             name_prefix=name_prefix,
         )
         report["status"] = "default_gray" if built["created"] else "failed"
+        report["materials_detected"] = 1
         report["materials_imported"] = len(built["created"])
+        report["materials_lost"] = 1 - len(built["created"])
         report["material_paths"] = list(built["created"])
         report["material_assignments"] = list(built["assigned"])
         if not built["created"]:
@@ -225,6 +228,7 @@ def _apply_material_mode(
     material_format = detect_material_format(filepath, variant_format)
     specs, status, decode_detail, _partial = decode_materials_report(filepath, material_format)
 
+    skipped: list[str] = []
     if specs:
         # ``carrier_unreadable`` can still carry readable specs: the carrier was
         # partly decoded, and dropping those would lose more than the decoder
@@ -235,13 +239,16 @@ def _apply_material_mode(
         report["material_assignments"] = list(built["assigned"])
         report["unapplied_parameters"] = list(built["unapplied"])
         report["unapplied_required"] = list(built["unapplied_required"])
+        skipped = list(built.get("skipped") or [])
 
     # ``materials_detected`` counts what the carrier declares, including the
     # materials that could not be read — a stage with two materials where only
     # one resolves must not look like a single-material asset.
+    # ``materials_lost`` counts what did not reach the scene: the undecodable
+    # materials plus any spec no node could be created for.
     declared = len(specs or []) + lost_material_count(decode_detail)
     report["materials_detected"] = declared
-    report["materials_lost"] = max(0, declared - len(specs or []))
+    report["materials_lost"] = max(0, declared - report["materials_imported"])
     report["status"] = "as_authored" if status == "decoded" and report["materials_imported"] else status
 
     detail = "file={0}; format={1}".format(filepath, material_format or "unknown")
@@ -270,6 +277,10 @@ def _apply_material_mode(
         _fallback(reason)
     elif status == "decoded" and not specs:
         _fallback("no material node could be created in the scene")
+    elif skipped:
+        # ``build_materials`` could not create a node for these specs, so they
+        # never reached the scene whatever the decoded count says.
+        _fallback("no material node could be created for {0}".format(", ".join(skipped)))
     elif report["unapplied_required"]:
         # Materials exist but the shader did not expose the parms that carry
         # the base look, so the imported material is not the authored one.
