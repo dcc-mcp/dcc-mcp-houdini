@@ -466,10 +466,34 @@ class TestUsdMaterials:
         assert result["success"] is True  # the geometry still imported
         assert _extra(result)["status"] == "carrier_unreadable"
         assert _extra(result)["materials_imported"] == 0
+        # A stage whose only material is unreadable still declares one.
+        assert _extra(result)["materials_detected"] == 1
+        assert _extra(result)["materials_lost"] == 1
         assert "/mat/showcase_gltf_arnold_mat" not in hou.registry
         warnings = _warnings(result)
         assert [w["code"] for w in warnings] == ["material_fallback"]
         assert "arnold_mat" in warnings[0]["message"]
+
+    def test_shader_with_only_an_untranslatable_input_is_not_imported(self) -> None:
+        """A shader exposing a single non-PreviewSurface input is not "mostly readable".
+
+        Translating it would carry the neutral defaults for every other channel
+        and report the result as the authored look.
+        """
+        helper = _load_helper()
+        shader = _FakeUsdShader({"base_color": _FakeVec3f(0.72, 0.45, 0.2), "roughness": 0.28})
+
+        with pytest.raises(helper.CarrierUnreadableError, match="diffuseColor"):
+            helper._shader_spec(shader, "arnold_mat")
+
+    def test_shader_with_one_preview_surface_input_is_still_translated(self) -> None:
+        helper = _load_helper()
+        shader = _FakeUsdShader({"diffuseColor": _FakeVec3f(0.1, 0.2, 0.3)})
+
+        spec = helper._shader_spec(shader, "flat")
+
+        assert spec is not None
+        assert spec["base_color"] == [0.1, 0.2, 0.3]
 
     def test_unopenable_usd_warns_instead_of_reporting_no_materials(
         self, script: ModuleType, hou: FakeHou, tmp_path: Path

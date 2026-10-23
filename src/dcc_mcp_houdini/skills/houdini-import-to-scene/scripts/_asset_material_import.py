@@ -412,10 +412,11 @@ def _surface_shader(material: Any, UsdShade: Any) -> Optional[Any]:
 def _shader_spec(shader: Any, name: str) -> Optional[Dict[str, Any]]:
     """Translate a UsdPreviewSurface-style *shader* into a material spec.
 
-    Returns ``None`` when the shader exposes none of the PBR inputs read here.
-    That is what an Arnold / MaterialX surface looks like from ``UsdShade``:
-    it resolves fine but carries no value this adapter can translate, and
-    reporting the defaults would claim a neutral grey is the authored look.
+    Returns ``None`` when the shader exposes none of the PBR inputs read here,
+    and raises :class:`CarrierUnreadableError` when it exposes some of them but
+    not the base colour.  Either way the material does not become a neutral
+    grey reported as ``as_authored``: an Arnold / MaterialX surface resolves
+    fine through ``UsdShade`` yet carries no value this adapter can translate.
 
     Kept free of ``pxr`` imports so it can be exercised with plain doubles:
     USD hands back ``Gf.Vec3f`` colours and ``UsdShade.Input`` objects whose
@@ -438,7 +439,18 @@ def _shader_spec(shader: Any, name: str) -> Optional[Dict[str, Any]]:
     base_color = _input("diffuseColor")
     metallic = _input("metallic")
     roughness = _input("roughness")
-    if base_color is None and metallic is None and roughness is None:
+    # A shader can expose some of these while its colour lives in an input this
+    # adapter does not know (Arnold's ``base_color``).  Keeping the metallic /
+    # roughness half and leaving the colour at the neutral default would still
+    # report a look the carrier never had, so any *readable* input must also be
+    # accompanied by a readable base colour.
+    if base_color is None:
+        if metallic is not None or roughness is not None:
+            raise CarrierUnreadableError(
+                "material '{0}' exposes metallic/roughness but no diffuseColor; its base colour cannot be read".format(
+                    name
+                )
+            )
         return None
     return _material_spec(
         name=name,
@@ -495,14 +507,9 @@ def _decode_usd(file_path: str) -> Optional[List[Dict[str, Any]]]:
 
     if not unresolved:
         return specs
-    if not specs:
-        # The stage declares materials whose shading we could not resolve —
-        # that is a lost look, not an asset without materials.
-        raise CarrierUnreadableError(
-            "USD declares material(s) {0} but no surface shader could be resolved".format(", ".join(unresolved))
-        )
-    # Some materials landed, some did not: keep the readable ones and let the
-    # caller report the gap instead of dropping it on the floor.
+    # The stage declares materials we could not translate — that is a lost
+    # look, not an asset without materials.  The readable ones are kept and
+    # the count-bearing error lets the caller report the gap.
     raise _partial_loss(specs, unresolved, "the USD stage")
 
 
@@ -685,10 +692,11 @@ def build_materials(
 
     Returns a report dict with ``created`` (list of node paths), ``assigned``
     (list of ``{object, material}`` pairs), ``unapplied`` (every channel the
-    shader did not expose, as ``"<material path>:<channel>"``) and
-    ``unapplied_required`` (the subset that changes the base look).
+    shader did not expose, as ``"<material path>:<channel>"``),
+    ``unapplied_required`` (the subset that changes the base look) and
+    ``skipped`` (specs no node could be created for, by name).
     """
-    report: Dict[str, Any] = {"created": [], "assigned": [], "unapplied": [], "unapplied_required": []}
+    report: Dict[str, Any] = {"created": [], "assigned": [], "unapplied": [], "unapplied_required": [], "skipped": []}
     if not specs or container is None:
         return report
 
@@ -705,6 +713,7 @@ def build_materials(
 
         material, unapplied_required, unapplied_optional = _create_shader(network, spec, node_name)
         if material is None:
+            report["skipped"].append(str(spec.get("name") or node_name))
             continue
         material_path = material.path()
         report["created"].append(material_path)
