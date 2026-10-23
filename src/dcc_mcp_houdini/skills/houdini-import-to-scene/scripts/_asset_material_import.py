@@ -48,7 +48,36 @@ class CarrierUnreadableError(Exception):
 
     Distinct from "this carrier has no materials": the caller must warn when a
     declared look is lost, and stay quiet when there was nothing to carry.
+
+    *partial* carries any specs the decoder did resolve before giving up, so a
+    stage that only partly decodes does not lose its readable materials.
     """
+
+    def __init__(self, message: str, partial: Optional[List[Dict[str, Any]]] = None) -> None:
+        super().__init__(message)
+        self.partial = list(partial or [])
+
+
+def _partial_loss(specs: List[Dict[str, Any]], lost: List[str], context: str) -> CarrierUnreadableError:
+    """Build the error that makes a partly decoded carrier visible to the caller.
+
+    The ``detail`` starts with ``"N material(s) ..."``; :func:`decode_materials_report`
+    callers read that count back through :func:`lost_material_count` so the
+    report can state how many materials the carrier declares in total.
+    """
+    return CarrierUnreadableError(
+        "{0} material(s) [{1}] in {2} could not be read".format(len(lost), ", ".join(lost), context),
+        partial=specs,
+    )
+
+
+_LOST_MATERIAL_PREFIX = re.compile(r"^(\d+) material\(s\) \[")
+
+
+def lost_material_count(detail: str) -> int:
+    """Return how many materials *detail* says were dropped (0 when unknown)."""
+    match = _LOST_MATERIAL_PREFIX.match(detail or "")
+    return int(match.group(1)) if match else 0
 
 
 def _clamp01(value: Any, default: float = 0.0) -> float:
@@ -126,31 +155,50 @@ def _material_spec(
     }
 
 
-def _read_gltf_json(file_path: str) -> Optional[Dict[str, Any]]:
-    """Return the glTF JSON document for a ``.gltf`` or ``.glb`` file."""
-    with open(file_path, "rb") as handle:
-        head = handle.read(4)
-        if len(head) < 4:
-            return None
-        if struct.unpack("<I", head)[0] != _GLB_MAGIC:
-            handle.seek(0)
-            return json.loads(handle.read().decode("utf-8", "replace"))
+def _read_gltf_json(file_path: str) -> Dict[str, Any]:
+    """Return the glTF JSON document for a ``.gltf`` or ``.glb`` file.
 
-        # Binary container: header (magic, version, length) then chunks.
-        handle.seek(0)
-        blob = handle.read()
+    Raises :class:`CarrierUnreadableError` when the document cannot be obtained:
+    a truncated file reads as "no materials" otherwise, which hides a lost look.
+    """
+    try:
+        with open(file_path, "rb") as handle:
+            blob = handle.read()
+    except OSError as exc:
+        raise CarrierUnreadableError("glTF carrier could not be read: {0}".format(exc)) from exc
+
+    if len(blob) < 4:
+        raise CarrierUnreadableError(
+            "glTF carrier is truncated: {0} byte(s), too short to hold a header".format(len(blob))
+        )
+    if struct.unpack_from("<I", blob, 0)[0] != _GLB_MAGIC:
+        try:
+            return json.loads(blob.decode("utf-8", "replace"))
+        except ValueError as exc:
+            raise CarrierUnreadableError("glTF JSON could not be parsed: {0}".format(exc)) from exc
+
+    # Binary container: header (magic, version, length) then chunks.
     if len(blob) < 20:
-        return None
+        raise CarrierUnreadableError(
+            "GLB carrier is truncated: {0} byte(s), too short to hold a header and a JSON chunk".format(len(blob))
+        )
     offset = 12
     while offset + 8 <= len(blob):
         chunk_length, chunk_type = struct.unpack_from("<II", blob, offset)
-        if chunk_length < 0 or offset + 8 + chunk_length > len(blob):
-            return None
+        if offset + 8 + chunk_length > len(blob):
+            raise CarrierUnreadableError(
+                "GLB chunk at byte {0} claims {1} byte(s) but the file holds {2}".format(
+                    offset, chunk_length, len(blob) - offset - 8
+                )
+            )
         if chunk_type == _GLB_JSON_CHUNK:
             payload = blob[offset + 8 : offset + 8 + chunk_length]
-            return json.loads(payload.decode("utf-8", "replace"))
+            try:
+                return json.loads(payload.decode("utf-8", "replace"))
+            except ValueError as exc:
+                raise CarrierUnreadableError("GLB JSON chunk could not be parsed: {0}".format(exc)) from exc
         offset += 8 + chunk_length
-    return None
+    raise CarrierUnreadableError("GLB carrier holds no JSON chunk")
 
 
 def _decode_gltf(file_path: str) -> Optional[List[Dict[str, Any]]]:
@@ -162,7 +210,7 @@ def _decode_gltf(file_path: str) -> Optional[List[Dict[str, Any]]]:
     """
     document = _read_gltf_json(file_path)
     if not isinstance(document, dict):
-        return None
+        raise CarrierUnreadableError("glTF carrier holds a JSON document that is not an object")
 
     # Only keep materials that are actually referenced by a mesh primitive:
     # unreferenced definitions are not part of the imported look.
@@ -361,8 +409,14 @@ def _surface_shader(material: Any, UsdShade: Any) -> Optional[Any]:
         return None
 
 
-def _shader_spec(shader: Any, name: str) -> Dict[str, Any]:
+def _shader_spec(shader: Any, name: str) -> Optional[Dict[str, Any]]:
     """Translate a UsdPreviewSurface-style *shader* into a material spec.
+
+    Returns ``None`` when the shader exposes none of the PBR inputs read here,
+    and raises :class:`CarrierUnreadableError` when it exposes some of them but
+    not the base colour.  Either way the material does not become a neutral
+    grey reported as ``as_authored``: an Arnold / MaterialX surface resolves
+    fine through ``UsdShade`` yet carries no value this adapter can translate.
 
     Kept free of ``pxr`` imports so it can be exercised with plain doubles:
     USD hands back ``Gf.Vec3f`` colours and ``UsdShade.Input`` objects whose
@@ -380,11 +434,29 @@ def _shader_spec(shader: Any, name: str) -> Dict[str, Any]:
             return default
 
     emissive = _input("emissiveColor")
+    # ``None`` means "not authored"; 0.0 is an authored value, so the checks
+    # below must test identity rather than truthiness.
+    base_color = _input("diffuseColor")
+    metallic = _input("metallic")
+    roughness = _input("roughness")
+    # A shader can expose some of these while its colour lives in an input this
+    # adapter does not know (Arnold's ``base_color``).  Keeping the metallic /
+    # roughness half and leaving the colour at the neutral default would still
+    # report a look the carrier never had, so any *readable* input must also be
+    # accompanied by a readable base colour.
+    if base_color is None:
+        if metallic is not None or roughness is not None:
+            raise CarrierUnreadableError(
+                "material '{0}' exposes metallic/roughness but no diffuseColor; its base colour cannot be read".format(
+                    name
+                )
+            )
+        return None
     return _material_spec(
         name=name,
-        base_color=_rgb(_input("diffuseColor", [0.8, 0.8, 0.8]), [0.8, 0.8, 0.8]),
-        metallic=_input("metallic", 0.0),
-        roughness=_input("roughness", 0.5),
+        base_color=_rgb(base_color, [0.8, 0.8, 0.8]),
+        metallic=0.0 if metallic is None else metallic,
+        roughness=0.5 if roughness is None else roughness,
         emissive=_rgb(emissive, [0.0, 0.0, 0.0]) if emissive else None,
         opacity=_input("opacity", 1.0),
     )
@@ -393,8 +465,11 @@ def _shader_spec(shader: Any, name: str) -> Dict[str, Any]:
 def _decode_usd(file_path: str) -> Optional[List[Dict[str, Any]]]:
     """Extract UsdPreviewSurface material specs from a USD carrier.
 
-    Uses Houdini's bundled ``pxr`` bindings when available.  Returns ``None``
-    when USD cannot be inspected at all.
+    Uses Houdini's bundled ``pxr`` bindings, falling back to ``usd-core`` when
+    the host has no USD.  Returns ``None`` when no USD binding is available at
+    all (nothing could be inspected), and raises
+    :class:`CarrierUnreadableError` when the stage cannot be opened or when
+    some of its materials cannot be translated.
     """
     try:
         from pxr import Usd, UsdShade  # type: ignore[import-not-found]  # noqa: PLC0415
@@ -403,10 +478,10 @@ def _decode_usd(file_path: str) -> Optional[List[Dict[str, Any]]]:
 
     try:
         stage = Usd.Stage.Open(file_path)
-        if stage is None:
-            return None
-    except Exception:  # noqa: BLE001
-        return None
+    except Exception as exc:  # noqa: BLE001 - USD raises Tf.ErrorException on bad layers
+        raise CarrierUnreadableError("USD stage could not be opened: {0}".format(exc)) from exc
+    if stage is None:
+        raise CarrierUnreadableError("USD stage could not be opened")
 
     specs: List[Dict[str, Any]] = []
     unresolved: List[str] = []
@@ -419,20 +494,23 @@ def _decode_usd(file_path: str) -> Optional[List[Dict[str, Any]]]:
             if shader is None:
                 unresolved.append(name)
                 continue
-            specs.append(_shader_spec(shader, name))
+            spec = _shader_spec(shader, name)
+            if spec is None:
+                unresolved.append(name)
+                continue
+            specs.append(spec)
         except Exception:  # noqa: BLE001 - skip prims we cannot interpret
             try:
                 unresolved.append(str(prim.GetName() or "material"))
             except Exception:  # noqa: BLE001
                 unresolved.append("<unnamed>")
 
-    if not specs and unresolved:
-        # The stage declares materials whose shading we could not resolve —
-        # that is a lost look, not an asset without materials.
-        raise CarrierUnreadableError(
-            "USD declares material(s) {0} but no surface shader could be resolved".format(", ".join(unresolved))
-        )
-    return specs
+    if not unresolved:
+        return specs
+    # The stage declares materials we could not translate — that is a lost
+    # look, not an asset without materials.  The readable ones are kept and
+    # the count-bearing error lets the caller report the gap.
+    raise _partial_loss(specs, unresolved, "the USD stage")
 
 
 _DECODERS = {
@@ -446,38 +524,44 @@ _DECODERS = {
 }
 
 
-def decode_materials_report(file_path: str, material_format: str) -> Tuple[Optional[List[Dict[str, Any]]], str, str]:
+def decode_materials_report(
+    file_path: str, material_format: str
+) -> Tuple[Optional[List[Dict[str, Any]]], str, str, bool]:
     """Decode the materials carried by *file_path*.
 
-    Returns ``(specs, status, detail)`` where ``status`` is one of:
+    Returns ``(specs, status, detail, partial)`` where ``status`` is one of:
 
     ``"decoded"``
-        Materials were found and decoded.
-    ``"no_materials"``
-        The carrier was read and simply carries no materials (no warning).
+        Materials were found and decoded (and nothing was lost).
     ``"carrier_unreadable"``
         The carrier declares materials that could not be read — the caller
-        must warn, this is a lost look.
+        must warn, this is a lost look.  ``specs`` holds whatever *was*
+        readable and ``partial`` is ``True`` when some materials still landed.
     ``"decode_failed"``
         The carrier could not be decoded at all.
     ``"unsupported_format"``
         This adapter has no material path for the format.
+    ``"no_materials"``
+        The carrier declares nothing: either it was read and simply carries no
+        materials, or no USD binding is available to read it.  Nothing was
+        proven lost, so the default carrier case stays quiet; ``detail`` names
+        the missing binding when that is why the answer is empty.
 
     ``detail`` carries the decoder's own explanation (empty when there is
     nothing more to say) so warnings can name the actual cause.
     """
     decoder = _DECODERS.get(material_format)
     if decoder is None:
-        return None, "unsupported_format", ""
+        return None, "unsupported_format", "", False
     try:
         specs = decoder(file_path)
     except CarrierUnreadableError as exc:
-        return None, "carrier_unreadable", str(exc)
+        return (exc.partial or None), "carrier_unreadable", str(exc), bool(exc.partial)
     except Exception as exc:  # noqa: BLE001 - a broken carrier must not fail the import
-        return None, "decode_failed", "{0}: {1}".format(type(exc).__name__, exc)
+        return None, "decode_failed", "{0}: {1}".format(type(exc).__name__, exc), False
     if not specs:
-        return None, "no_materials", ""
-    return specs, "decoded", ""
+        return None, "no_materials", "", False
+    return specs, "decoded", "", False
 
 
 def decode_materials(file_path: str, material_format: str) -> Tuple[Optional[List[Dict[str, Any]]], str]:
@@ -486,7 +570,7 @@ def decode_materials(file_path: str, material_format: str) -> Tuple[Optional[Lis
     Returns ``(specs, status)``; see :func:`decode_materials_report` for the
     status vocabulary.
     """
-    specs, status, _detail = decode_materials_report(file_path, material_format)
+    specs, status, _detail, _partial = decode_materials_report(file_path, material_format)
     return specs, status
 
 
@@ -608,10 +692,11 @@ def build_materials(
 
     Returns a report dict with ``created`` (list of node paths), ``assigned``
     (list of ``{object, material}`` pairs), ``unapplied`` (every channel the
-    shader did not expose, as ``"<material path>:<channel>"``) and
-    ``unapplied_required`` (the subset that changes the base look).
+    shader did not expose, as ``"<material path>:<channel>"``),
+    ``unapplied_required`` (the subset that changes the base look) and
+    ``skipped`` (specs no node could be created for, by name).
     """
-    report: Dict[str, Any] = {"created": [], "assigned": [], "unapplied": [], "unapplied_required": []}
+    report: Dict[str, Any] = {"created": [], "assigned": [], "unapplied": [], "unapplied_required": [], "skipped": []}
     if not specs or container is None:
         return report
 
@@ -628,6 +713,7 @@ def build_materials(
 
         material, unapplied_required, unapplied_optional = _create_shader(network, spec, node_name)
         if material is None:
+            report["skipped"].append(str(spec.get("name") or node_name))
             continue
         material_path = material.path()
         report["created"].append(material_path)
