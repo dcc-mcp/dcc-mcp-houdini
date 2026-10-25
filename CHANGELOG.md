@@ -16,6 +16,29 @@
 * avoid false failures for successful ROP chains without discoverable output paths
 * preserve `ignore_inputs` for isolated Solaris ROP chains
 
+## [0.45.0](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.44.2...v0.45.0) (2026-10-25)
+
+
+### Features
+
+* **hda:** add HDA library uninstall and definition removal tools ([cc4d976](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/cc4d9763cc300d167ab95b309eea4a30ba16c668))
+
+
+### Bug Fixes
+
+* **hda:** fail closed on unknown HDA instances and isolate dry-run ([20a8733](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/20a87339e4c6806670c378aaaa7c897eecf510c0))
+* **hda:** fail safe on unknown HDA load state in remove rollback ([8fd9231](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/8fd9231897fdf3b5ad1cab7013345b6678f684ba))
+* **hda:** force-promote target library and verify version in sync_hda_instance ([#351](https://github.com/dcc-mcp/dcc-mcp-houdini/issues/351)) ([0056aaf](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/0056aaf6efb46b698455aad585952c1fbdfc71c9))
+* **hda:** guard uninstall reads and roll back refused-removal installs ([914ff61](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/914ff617fdc2d27f81a56cf6fc5afbdc0b164e53))
+* **import:** count lost materials from what reached the scene ([f4be56e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f4be56ea6734b34b6728a0a48ac32743e87f770c))
+* **import:** surface unreadable material carriers instead of claiming as_authored ([97c6ed1](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/97c6ed1a6c691067714929e5939fb013c5f2d618))
+* **lookdev:** reject null parameter values instead of silent "None"/False ([f518d59](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/f518d59b24ccb0edfebcceccbc89435dea8321cb))
+* **parameters,hda:** reject null/empty semantics instead of silent "None" ([449502e](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/449502e950e5ca9a601cd737576a864bdf482a64))
+* **render:** author husk-renderable AOVs on Solaris Render Products ([26e7e8c](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/26e7e8c825f351109d41d23186adaaee1a17eb98))
+* **render:** preserve foreign RenderVars in Solaris configure_aovs ([538cc22](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/538cc2236e3c5f573a3cb4f64ad74aab2850d07f))
+* **render:** preserve Solaris inputs and author husk image_format ([d66dd0b](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/d66dd0b2c72d65cdd8a131caf24c2f3c2e9ef086))
+* **render:** recover Solaris AOV connections after failed writes ([9993fa8](https://github.com/dcc-mcp/dcc-mcp-houdini/commit/9993fa8e7b41fdbb5b0bc0353a264692c021f2f2))
+
 ## [0.44.2](https://github.com/dcc-mcp/dcc-mcp-houdini/compare/v0.44.1...v0.44.2) (2026-10-10)
 
 
