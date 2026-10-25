@@ -517,6 +517,9 @@ def test_existing_import_entrypoint_uses_native_and_reports_partial(tmp_path, mo
     assert report["native_importer"] == "gltf_hierarchy"
     assert report["status"] == "partial_native_materials"
     assert result["context"]["warnings"]
+    assert "native materials were created but could not be fully verified" in result["prompt"]
+    assert "materials were dropped" not in result["prompt"]
+    assert "context.warnings (code=material_fallback)" in result["prompt"]
     assert len(result["context"]["imported_nodes"]) == len(set(result["context"]["imported_nodes"]))
     assert not any(n.kind == "file" for n in hou.nodes.values())
 
@@ -535,6 +538,24 @@ def test_existing_import_entrypoint_rejects_missing_texture_without_mutation(tmp
     assert result["success"] is False
     assert list(hou.nodes) == ["/obj"]
     assert not (tmp_path / "extract").exists()
+
+
+def test_partial_prompt_does_not_claim_creation_without_verified_materials(tmp_path, monkeypatch):
+    carrier = tmp_path / "boat.gltf"
+    doc = fixture(carrier)
+    for index, material in enumerate(doc["materials"]):
+        material["name"] = "unmapped_" + str(index)
+    carrier.write_text(json.dumps(doc))
+    monkeypatch.setitem(sys.modules, "hou", NativeHou(tmp_path))
+    script = load_module("import_to_scene")
+    result = script.import_to_scene(
+        {"asset_id": "boat", "variants": [{"local_path": str(carrier), "format": "gltf"}]},
+        texture_output_dir=str(tmp_path / "extract"),
+    )
+    assert result["context"]["extra"]["materials_imported"] == 0
+    assert "native materials could not be fully verified" in result["prompt"]
+    assert "were created" not in result["prompt"]
+    assert "materials were dropped" not in result["prompt"]
 
 
 def test_packed_metallic_roughness_is_raw_and_keeps_blue_green_channels(tmp_path):

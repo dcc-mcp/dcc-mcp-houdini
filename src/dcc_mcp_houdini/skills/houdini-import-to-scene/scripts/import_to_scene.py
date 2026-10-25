@@ -446,18 +446,24 @@ def import_to_scene(
     if imported_count == 0 and mode != MaterialMode.SKIP:
         material_note += " (material_mode='{0}' was not honoured)".format(mode)
 
+    warning_note = ""
+    if material_report["status"] == "partial_native_materials":
+        native_note = (
+            "native materials were created but could not be fully verified"
+            if imported_count
+            else "native materials could not be fully verified"
+        )
+        warning_note = " WARNING: " + native_note + " — see context.warnings (code=material_fallback)."
+    elif any(w.code == ImportWarningCode.MATERIAL_FALLBACK for w in warnings):
+        warning_note = " WARNING: materials were dropped — see context.warnings (code=material_fallback)."
+
     return skill_success(
         f"Imported '{desc.asset_id}' into Houdini ({len(imported_nodes)} node(s), {material_note})",
         **result.to_dict(),
         prompt=(
             f"Imported {len(imported_nodes)} geometry node(s) into {parent_path}. "
             f"material_mode='{mode}' -> {material_report['status']}, "
-            f"{imported_count} material(s) created at {material_report['material_paths'] or 'n/a'}."
-            + (
-                " WARNING: materials were dropped — see context.warnings (code=material_fallback)."
-                if any(w.code == ImportWarningCode.MATERIAL_FALLBACK for w in warnings)
-                else ""
-            )
+            f"{imported_count} material(s) created at {material_report['material_paths'] or 'n/a'}." + warning_note
         ),
     )
 
