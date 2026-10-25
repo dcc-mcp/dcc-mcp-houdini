@@ -162,6 +162,7 @@ def test_missing_texture_fails_before_scene_mutation(tmp_path):
             "extension",
         ),
         (lambda d: d["meshes"][0]["primitives"][0].update(material=8), "material index"),
+        (lambda d: d["materials"][0].update(doubleSided=True), "doubleSided"),
     ],
 )
 def test_unsupported_source_is_explicit(tmp_path, change, reason):
@@ -177,8 +178,10 @@ def test_unsupported_source_is_explicit(tmp_path, change, reason):
 class Parm:
     def __init__(self, value=None, button=None):
         self.value, self.button = value, button
+        self.set_count = 0
 
     def set(self, value):
+        self.set_count += 1
         self.value = value
 
     def eval(self):
@@ -312,12 +315,14 @@ class NativeHou:
             paths.append(shader.path())
         if self.corrupt == "assignment":
             paths[1] = paths[0]
+        if self.corrupt == "assignment_swap":
+            paths.reverse()
         geo = NativeNode(self, importer.path() + "/mesh", "geo")
         NativeNode(self, geo.path() + "/OUT", "gltf")
         self.geometry = Geometry(paths)
 
 
-def test_native_route_preserves_two_primitive_assignments_and_texture_semantics(tmp_path):
+def test_native_route_reports_two_material_counts_without_claiming_face_identity(tmp_path):
     mod = load_module("_gltf_native_import")
     carrier = tmp_path / "boat.gltf"
     fixture(carrier)
@@ -326,7 +331,8 @@ def test_native_route_preserves_two_primitive_assignments_and_texture_semantics(
         hou, str(carrier), "boat", "/obj", mod.inspect_gltf_source(str(carrier)), str(tmp_path / "extract")
     )
     assert nodes[0] == "/obj/boat"
-    assert report["status"] == "as_authored"
+    assert report["status"] == "partial_native_materials"
+    assert report["primitive_identity_verified"] is False
     assert [a["source_material_index"] for a in report["material_assignments"]] == [0, 1]
     assert [a["primitive_count"] for a in report["material_assignments"]] == [1, 1]
     assert all(
@@ -334,7 +340,26 @@ def test_native_route_preserves_two_primitive_assignments_and_texture_semantics(
     )
     assert all(u["uv_present"] for u in report["uv_readback"])
     assert all(p["verified"] for p in report["pbr_factor_readback"])
+    corrected = [p for p in report["pbr_factor_readback"] if p["correction_applied"]]
+    assert corrected and all(not p["native_verified"] for p in corrected)
+    assert all(p["initial_value"] != p["actual"] for p in corrected)
+    assert all(t["color_space_readback"]["initial_value"] == "automatic" for t in report["texture_bindings"])
+    assert all(t["color_space_readback"]["correction_applied"] for t in report["texture_bindings"])
     assert report["texture_bindings"][0]["path"] == str(tmp_path / "oak.png")
+
+
+def test_equal_counts_cannot_verify_primitive_material_identity(tmp_path):
+    mod = load_module("_gltf_native_import")
+    carrier = tmp_path / "boat.gltf"
+    fixture(carrier)
+    hou = NativeHou(tmp_path, corrupt="assignment_swap")
+    _, report = mod.import_native_gltf(
+        hou, str(carrier), "boat", "/obj", mod.inspect_gltf_source(str(carrier)), str(tmp_path / "extract")
+    )
+    assert [a["primitive_count"] for a in report["material_assignments"]] == [1, 1]
+    assert report["status"] == "partial_native_materials"
+    assert report["primitive_identity_verified"] is False
+    assert "counts alone are insufficient" in "; ".join(report["unapplied_required"])
 
 
 @pytest.mark.parametrize("corrupt", ["color_space", "disabled", "assignment", "texture_path"])
@@ -365,6 +390,97 @@ def test_native_unavailable_does_not_fall_back_to_first_material(tmp_path):
             hou, str(carrier), "boat", "/obj", mod.inspect_gltf_source(str(carrier)), str(tmp_path / "extract")
         )
     assert list(hou.nodes) == ["/obj"]
+    assert not (tmp_path / "extract").exists()
+
+
+def test_missing_parent_does_not_create_texture_directory(tmp_path):
+    mod = load_module("_gltf_native_import")
+    carrier = tmp_path / "boat.gltf"
+    fixture(carrier)
+    with pytest.raises(ValueError, match="parent does not exist"):
+        mod.import_native_gltf(
+            NativeHou(tmp_path),
+            str(carrier),
+            "boat",
+            "/missing",
+            mod.inspect_gltf_source(str(carrier)),
+            str(tmp_path / "extract"),
+        )
+    assert not (tmp_path / "extract").exists()
+
+
+def test_failed_build_keeps_newly_extracted_files(tmp_path):
+    mod = load_module("_gltf_native_import")
+    carrier = tmp_path / "boat.gltf"
+    fixture(carrier)
+    hou = NativeHou(tmp_path)
+
+    def failing_build(importer):
+        output = Path(importer.parm("assetfolder").evalAsString())
+        (output / "diagnostic.txt").write_text("preserve")
+        raise RuntimeError("build failed after extraction")
+
+    hou.build = failing_build
+    with pytest.raises(RuntimeError, match="after extraction"):
+        mod.import_native_gltf(
+            hou, str(carrier), "boat", "/obj", mod.inspect_gltf_source(str(carrier)), str(tmp_path / "extract")
+        )
+    assert (tmp_path / "extract" / "diagnostic.txt").read_text() == "preserve"
+    assert list(hou.nodes) == ["/obj"]
+
+
+def test_material_paths_only_reports_mapped_source_materials(tmp_path):
+    mod = load_module("_gltf_native_import")
+    carrier = tmp_path / "boat.gltf"
+    doc = fixture(carrier)
+    doc["materials"][1]["name"] = "unmapped"
+    carrier.write_text(json.dumps(doc))
+    _, report = mod.import_native_gltf(
+        NativeHou(tmp_path),
+        str(carrier),
+        "boat",
+        "/obj",
+        mod.inspect_gltf_source(str(carrier)),
+        str(tmp_path / "extract"),
+    )
+    assert report["materials_imported"] == 1
+    assert report["material_paths"] == ["/obj/boat/materials/oak"]
+
+
+def test_already_correct_color_space_is_read_without_writing(tmp_path):
+    mod = load_module("_gltf_native_import")
+    hou = NativeHou(tmp_path)
+    shader = NativeNode(hou, "/mat/oak", "principledshader::2.0")
+    parm = Parm("sRGB")
+    shader.params["basecolor_textureColorSpace"] = parm
+    record = mod._colorspace(shader, "basecolor", "sRGB")
+    assert record["verified"] and record["native_verified"]
+    assert not record["correction_applied"]
+    assert parm.set_count == 0
+
+
+def test_failed_factor_correction_is_not_reported_as_applied(tmp_path):
+    mod = load_module("_gltf_native_import")
+    carrier = tmp_path / "boat.gltf"
+    fixture(carrier)
+    hou = NativeHou(tmp_path)
+    original_build = hou.build
+
+    class StuckParm(Parm):
+        def set(self, value):
+            self.set_count += 1
+
+    def build(importer):
+        original_build(importer)
+        hou.node(importer.path() + "/materials/oak").params["rough"] = StuckParm(0)
+
+    hou.build = build
+    _, report = mod.import_native_gltf(
+        hou, str(carrier), "boat", "/obj", mod.inspect_gltf_source(str(carrier)), str(tmp_path / "extract")
+    )
+    record = next(p for p in report["pbr_factor_readback"] if p["material_index"] == 0 and p["parameter"] == "rough")
+    assert not record["verified"] and not record["native_verified"]
+    assert record["correction_attempted"] and not record["correction_applied"]
 
 
 def test_existing_texture_folder_is_never_overwritten(tmp_path):
@@ -399,8 +515,9 @@ def test_existing_import_entrypoint_uses_native_and_reports_partial(tmp_path, mo
     assert result["success"] is True
     report = result["context"]["extra"]
     assert report["native_importer"] == "gltf_hierarchy"
-    assert report["status"] == ("as_authored" if corrupt is None else "partial_native_materials")
-    assert bool(result["context"]["warnings"]) == (corrupt is not None)
+    assert report["status"] == "partial_native_materials"
+    assert result["context"]["warnings"]
+    assert len(result["context"]["imported_nodes"]) == len(set(result["context"]["imported_nodes"]))
     assert not any(n.kind == "file" for n in hou.nodes.values())
 
 
@@ -437,7 +554,7 @@ def test_packed_metallic_roughness_is_raw_and_keeps_blue_green_channels(tmp_path
         mod.inspect_gltf_source(str(carrier)),
         str(tmp_path / "extract"),
     )
-    assert report["status"] == "as_authored"
+    assert report["status"] == "partial_native_materials"
     packed = [t for t in report["texture_bindings"] if t["slot"] in ("metallic", "rough")]
     assert [t["mono_channel"] for t in packed] == [3, 2]
     assert all(t["colorspace"] == "raw" and t["channel_verified"] for t in packed)

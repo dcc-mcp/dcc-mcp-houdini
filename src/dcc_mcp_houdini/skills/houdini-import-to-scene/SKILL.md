@@ -13,7 +13,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: import
-    version: "1.1.0"
+    version: "1.1.1"
     tags: [houdini, asset-import, pipeline, destructive]
     search-hint: >-
       import to scene, asset import, import asset, import fbx, import obj,
@@ -133,13 +133,19 @@ Preflight retains each source mesh/primitive/material index, TEXCOORD_0 accessor
 texture path or embedded-image identity, image SHA-256 and color/data semantics
 (base color/emissive sRGB; normal and metallic/roughness raw). Missing local
 dependencies, nonlocal URIs, unsupported texture coordinate sets, texture
-extensions, required glTF extensions, occlusion and nonopaque modes fail explicitly.
+extensions, required glTF extensions, occlusion, doubleSided and nonopaque modes fail explicitly.
 After build, `extra` reports primitive counts per source material, native UV
 presence, texture file hashes, enable switches, packed G/B channel selections and
 explicit shader color-space menu readback. Any mismatch or unsupported color-space
 menu yields `partial_native_materials` plus `material_fallback`, never clean
-`as_authored`. Source UV accessor retention and native UV presence are not a
+`as_authored`. Multi-material readback is limited to aggregate counts; equal-count
+swaps cannot be distinguished without source-face identities. It therefore reports
+`primitive_identity_verified=false` and `partial_native_materials` until that
+correspondence can be verified. Source UV accessor retention and native UV presence are not a
 pixel/render or numeric UV-conversion acceptance test.
+PBR factors and color spaces retain their initial native values separately from
+any applied correction and final readback; a corrected value is not reported as
+having been produced correctly by the native importer.
 
 Native texture/multi-material behavior still needs licensed-host acceptance on
 the installed Houdini build. The synthetic GLB/glTF and HOM-double regression

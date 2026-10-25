@@ -433,7 +433,7 @@ def import_to_scene(
         )
         warnings.extend(material_report.pop("warnings"))
 
-    scene_nodes = list(imported_nodes) + list(material_report["material_paths"])
+    scene_nodes = list(dict.fromkeys(list(imported_nodes) + list(material_report["material_paths"])))
     result = ImportToSceneResult(
         success=True,
         imported_nodes=scene_nodes,

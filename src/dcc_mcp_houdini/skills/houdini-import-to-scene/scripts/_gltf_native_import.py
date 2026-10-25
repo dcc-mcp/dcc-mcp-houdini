@@ -175,7 +175,9 @@ def inspect_gltf_source(filepath):
             or material.get("alphaMode", "OPAQUE") != "OPAQUE"
             or material.get("doubleSided", False)
         ):
-            raise ValueError("material extension, occlusion or nonopaque mode requires unsupported shader handling")
+            raise ValueError(
+                "material extension, occlusion, doubleSided or nonopaque mode requires unsupported shader handling"
+            )
         source_name = str(material.get("name", ""))
         native_name = source_name + ("_" + str(index) if names[source_name] > 1 else "")
         native_name = re.sub(r"[^a-zA-Z0-9_]", "_", native_name)
@@ -255,11 +257,28 @@ def _colorspace(shader, slot, expected):
         if parm is None:
             continue
         accepted = {"srgb", "utility - srgb - texture"} if expected == "sRGB" else {"raw", "utility - raw"}
+        initial = parm.evalAsString()
+        if initial in parm.menuItems() and initial.lower() in accepted:
+            return {
+                "parameter": name,
+                "value": initial,
+                "initial_value": initial,
+                "verified": True,
+                "native_verified": True,
+                "correction_applied": False,
+            }
         for token in parm.menuItems():
             if token.lower() in accepted:
                 parm.set(token)
                 if parm.evalAsString() == token:
-                    return {"parameter": name, "value": token, "verified": True}
+                    return {
+                        "parameter": name,
+                        "value": token,
+                        "initial_value": initial,
+                        "verified": True,
+                        "native_verified": False,
+                        "correction_applied": True,
+                    }
     return {
         "verified": False,
         "reason": "native shader has no verified explicit " + expected + " texture color-space menu",
@@ -271,10 +290,10 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
     if not texture_output_dir or not os.path.isabs(texture_output_dir):
         raise ValueError("textured/multi-material glTF requires an absolute texture_output_dir")
     # Native extraction can overwrite files. Require a new directory, not a shared cache.
-    os.mkdir(texture_output_dir)
     parent = hou.node(parent_path)
     if parent is None:
         raise ValueError("native glTF parent does not exist")
+    os.mkdir(texture_output_dir)
     importer = None
     try:
         importer = parent.createNode("gltf_hierarchy", node_name=node_name)
@@ -294,7 +313,6 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
         button.pressButton()
         descendants = list(importer.allSubChildren())
         shaders = [n for n in descendants if n.type().name() in ("principledshader", "principledshader::2.0")]
-        paths = {n.path(): n for n in shaders}
         by_index = {}
         problems = []
         factor_readback = []
@@ -310,17 +328,26 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
                 if parm is None:
                     problems.append("missing native PBR factor parameter " + name)
                     continue
-                parm.set(tuple(expected) if isinstance(expected, list) else expected)
                 actual = parm.eval()
                 wanted = expected if isinstance(expected, list) else [expected]
                 observed = list(actual) if isinstance(actual, (tuple, list)) else [actual]
                 verified = len(observed) == len(wanted) and all(abs(a - b) < 1e-6 for a, b in zip(observed, wanted))
+                initial, native_verified = actual, verified
+                if not verified:
+                    parm.set(tuple(expected) if isinstance(expected, list) else expected)
+                    actual = parm.eval()
+                    observed = list(actual) if isinstance(actual, (tuple, list)) else [actual]
+                    verified = len(observed) == len(wanted) and all(abs(a - b) < 1e-6 for a, b in zip(observed, wanted))
                 factor_readback.append(
                     {
                         "material_index": source["material_index"],
                         "parameter": name,
                         "expected": expected,
                         "actual": actual,
+                        "initial_value": initial,
+                        "native_verified": native_verified,
+                        "correction_attempted": not native_verified,
+                        "correction_applied": not native_verified and verified,
                         "verified": verified,
                     }
                 )
@@ -362,6 +389,26 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
                     "expected_primitive_count": expected,
                 }
             )
+        # Equal material totals cannot distinguish a swap between source faces.
+        # The native HDA does not expose a verified source-face identity here.
+        identity_verified = (
+            len([n for n in plan["triangle_counts"].values() if n]) == 1
+            and bool(by_index)
+            and len(by_index) == len(plan["materials"])
+            and all(
+                observed_counts[shader.path()] == plan["triangle_counts"].get(index, 0)
+                for index, shader in by_index.items()
+            )
+        )
+        if not identity_verified:
+            problems.append("source/native primitive material identity is unverified; counts alone are insufficient")
+        if sum(observed_counts.values()) != sum(plan["triangle_counts"].values()):
+            problems.append("source/native total primitive count differs")
+            identity_verified = False
+        known_materials = {shader.path() for shader in by_index.values()}
+        if any(path not in known_materials for path in observed_counts):
+            problems.append("native geometry has unexpected primitive material assignments")
+            identity_verified = False
         textures = []
         for source in plan["textures"]:
             shader = by_index.get(source["material_index"])
@@ -409,8 +456,10 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
             "materials_detected": len(plan["materials"]),
             "materials_imported": len(by_index),
             "materials_lost": len(plan["materials"]) - len(by_index),
-            "material_paths": list(paths),
+            "material_paths": [shader.path() for shader in by_index.values()],
             "material_assignments": assignments,
+            "primitive_identity_verified": identity_verified,
+            "primitive_assignment_verification": "aggregate_counts_only",
             "source_primitive_materials": plan["primitives"],
             "texture_bindings": textures,
             "uv_readback": uv_records,
@@ -422,5 +471,10 @@ def import_native_gltf(hou, filepath, node_name, parent_path, plan, texture_outp
     except Exception:
         if importer is not None:
             importer.destroy()
-        # Keep any newly extracted files for inspection; never delete another import's data.
+        # mkdir above proves ownership; rmdir removes only this attempt's empty directory.
+        # Keep extracted files for inspection, and never delete another import's data.
+        try:
+            os.rmdir(texture_output_dir)
+        except OSError:
+            pass
         raise
