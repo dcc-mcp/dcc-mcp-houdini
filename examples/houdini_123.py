@@ -21,9 +21,14 @@ def _autostart_enabled() -> bool:
 
 if _autostart_enabled():
     try:
-        import dcc_mcp_houdini
+        import hou
 
-        server = dcc_mcp_houdini.start_server()
-        print(f"[dcc-mcp-houdini] auto-started: {server.mcp_url}")
+        if hou.isUIAvailable():
+            import dcc_mcp_houdini
+
+            server = dcc_mcp_houdini.start_server()
+            print(f"[dcc-mcp-houdini] auto-started: {server.mcp_url}")
+        else:
+            print("[dcc-mcp-houdini] headless startup hook skipped")
     except Exception as exc:  # noqa: BLE001
         print(f"[dcc-mcp-houdini] autostart failed: {exc}")
