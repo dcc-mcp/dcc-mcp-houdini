@@ -17,6 +17,7 @@ from _asset_material_import import (
     detect_material_format,
     lost_material_count,
 )
+from _gltf_native_import import import_native_gltf, inspect_gltf_source, requires_native_gltf
 from dcc_mcp_core.asset_import import (
     AssetDescriptor,
     AssetFileVariant,
@@ -296,6 +297,7 @@ def import_to_scene(
     placement: Optional[Mapping[str, Any]] = None,
     target_collection: Optional[str] = None,
     skip_existing: bool = False,
+    texture_output_dir: Optional[str] = None,
 ) -> dict:
     """Import an asset into Houdini.
 
@@ -305,6 +307,8 @@ def import_to_scene(
         placement: Optional placement hint dict.
         target_collection: Optional parent network path (default /obj).
         skip_existing: Skip if asset_id already present in the scene.
+        texture_output_dir: New absolute native glTF extraction directory. Required
+            for textured or multi-material glTF/GLB in as_authored mode.
 
     Returns:
         ActionResultModel dict with ImportToSceneResult in context.  Material
@@ -371,8 +375,26 @@ def import_to_scene(
     if placement:
         placement_hint = PlacementHint.from_dict(placement)
 
+    material_report = None
     try:
-        imported_nodes, warnings = _import_file_to_houdini(hou, filepath, node_name, parent_path)
+        gltf = detect_material_format(filepath, getattr(variant, "format", None)) in ("glb", "gltf")
+        if gltf and mode == MaterialMode.AS_AUTHORED and requires_native_gltf(filepath):
+            plan = inspect_gltf_source(filepath)
+            if plan["requires_native"]:
+                imported_nodes, material_report = import_native_gltf(
+                    hou, filepath, node_name, parent_path, plan, texture_output_dir
+                )
+                warnings = []
+                if material_report["status"] != "as_authored":
+                    warnings.append(
+                        ImportWarning(
+                            code=ImportWarningCode.MATERIAL_FALLBACK,
+                            message="Native glTF material readback is incomplete: "
+                            + "; ".join(material_report["unapplied_required"]),
+                        )
+                    )
+        if material_report is None:
+            imported_nodes, warnings = _import_file_to_houdini(hou, filepath, node_name, parent_path)
     except Exception as exc:
         return skill_exception(exc, message=f"Failed to import {filepath}")
 
@@ -400,15 +422,16 @@ def import_to_scene(
 
     # Materials: the File SOP carries geometry only, so the requested mode has
     # to be honoured explicitly (and reported, never dropped in silence).
-    material_report = _apply_material_mode(
-        hou,
-        container,
-        mode,
-        filepath,
-        getattr(variant, "format", None),
-        _safe_node_name(desc.asset_id) + "_",
-    )
-    warnings.extend(material_report.pop("warnings"))
+    if material_report is None:
+        material_report = _apply_material_mode(
+            hou,
+            container,
+            mode,
+            filepath,
+            getattr(variant, "format", None),
+            _safe_node_name(desc.asset_id) + "_",
+        )
+        warnings.extend(material_report.pop("warnings"))
 
     scene_nodes = list(imported_nodes) + list(material_report["material_paths"])
     result = ImportToSceneResult(

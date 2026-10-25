@@ -36,6 +36,13 @@ tools:
         skip_existing:
           type: boolean
           description: Skip import if asset_id is already present in the scene.
+        texture_output_dir:
+          type: string
+          minLength: 1
+          description: >-
+            New absolute directory for native glTF image extraction. Required for
+            as_authored imports of textured or multi-material GLB/glTF. Must not
+            already exist; existing extraction files are never overwritten.
     output_schema:
       type: object
       additionalProperties: true

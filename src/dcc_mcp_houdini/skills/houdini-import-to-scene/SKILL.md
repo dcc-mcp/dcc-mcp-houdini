@@ -13,7 +13,7 @@ metadata:
     dcc: houdini
     layer: domain
     stage: import
-    version: "1.0.0"
+    version: "1.1.0"
     tags: [houdini, asset-import, pipeline, destructive]
     search-hint: >-
       import to scene, asset import, import asset, import fbx, import obj,
@@ -119,10 +119,36 @@ The asset path is expanded (`~`, environment variables) exactly once, before it
 is handed to both the File SOP and the material decoder, so `$ASSETS/x.glb`
 cannot reach the geometry import while missing the material decode.
 
-Known limits: only surface PBR values (base colour, metallic, roughness,
-emissive, opacity) are translated; textures, UDIM sets and non-PBR shader graphs
-are not rebuilt, and a multi-material carrier binds its first material to the
-container.
+Textured or multi-material glTF/GLB carriers use SideFX's native
+`gltf_hierarchy` importer rather than the geometry-only File SOP. Supply
+`texture_output_dir` as a new absolute directory for persistent image extraction;
+existing directories are refused to prevent replacement of prior textures.
+The native importer owns mesh/UV conversion, image extraction, Principled shaders
+and primitive material assignments. Its documented parameter contract is checked
+at runtime; missing controls fail instead of silently returning to first-material
+binding. Only the newly created importer is removed on a build failure. Extracted
+files remain available for inspection.
+
+Preflight retains each source mesh/primitive/material index, TEXCOORD_0 accessor,
+texture path or embedded-image identity, image SHA-256 and color/data semantics
+(base color/emissive sRGB; normal and metallic/roughness raw). Missing local
+dependencies, nonlocal URIs, unsupported texture coordinate sets, texture
+extensions, required glTF extensions, occlusion and nonopaque modes fail explicitly.
+After build, `extra` reports primitive counts per source material, native UV
+presence, texture file hashes, enable switches, packed G/B channel selections and
+explicit shader color-space menu readback. Any mismatch or unsupported color-space
+menu yields `partial_native_materials` plus `material_fallback`, never clean
+`as_authored`. Source UV accessor retention and native UV presence are not a
+pixel/render or numeric UV-conversion acceptance test.
+
+Native texture/multi-material behavior still needs licensed-host acceptance on
+the installed Houdini build. The synthetic GLB/glTF and HOM-double regression
+tests establish adapter contracts, not native shader fidelity. The non-glTF
+legacy path still translates surface PBR values only; UDIMs/non-PBR graphs and
+multi-material OBJ/USD binding remain outside this change.
+
+Native API references: [SideFX glTF object](https://www.sidefx.com/docs/houdini/nodes/obj/gltf_hierarchy.html)
+and the official [HDA parameter definitions](https://github.com/sideeffects/HoudiniGLTF/blob/Houdini18.0/src/gltf_hierarchy.hda/Object_1gltf__hierarchy/DialogScript).
 
 ## Gateway flow
 
