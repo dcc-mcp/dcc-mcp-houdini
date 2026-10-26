@@ -45,6 +45,10 @@ metadata:
 Typed HOM node-graph operations for agents. Prefer these tools before using
 `houdini-scripting.execute_python`.
 
+`set_node_parms` writes literal values to the named parameters, replacing their
+channel references without changing the referenced drivers. Use animation tools
+when authoring expressions or keyframes.
+
 ## Common Flow
 
 1. `create_node`

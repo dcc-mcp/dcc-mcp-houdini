@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 from _hda_auto_common import get_node, node_summary  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import set_parm_value
+
 
 def instantiate_hda(
     parent_path: str,
@@ -48,14 +50,14 @@ def instantiate_hda(
                     if parm_tuple is None:
                         warnings.append("No parm tuple {!r}".format(name))
                         continue
-                    parm_tuple.set(tuple(value))
+                    set_parm_value(node, name, value)
                     applied[name] = list(value)
                 else:
                     parm = node.parm(name)
                     if parm is None:
                         warnings.append("No parm {!r}".format(name))
                         continue
-                    parm.set(value)
+                    parm.set(value, follow_parm_reference=False)
                     applied[name] = value
 
         cook_error = None

@@ -6,6 +6,8 @@ from typing import Any, Iterable
 
 from dcc_mcp_core.skill import skill_error
 
+from dcc_mcp_houdini.api import set_parm_value as set_parm_value
+
 
 def get_node(hou: Any, node_path: str) -> Any:
     """Return a Houdini node or raise a useful error."""
@@ -23,20 +25,6 @@ def node_summary(node: Any) -> dict:
         "name": node.name(),
         "type": type_obj.name() if hasattr(type_obj, "name") else str(type_obj),
     }
-
-
-def set_parm_value(node: Any, name: str, value: Any) -> None:
-    """Set either a scalar parm or a tuple parm."""
-    if isinstance(value, (list, tuple)):
-        parm_tuple = node.parmTuple(name)
-        if parm_tuple is not None:
-            parm_tuple.set(tuple(value))
-            return
-
-    parm = node.parm(name)
-    if parm is None:
-        raise ValueError("Parameter {!r} not found on {}".format(name, node.path()))
-    parm.set(value)
 
 
 def press_buttons(node: Any, names: Iterable[str]) -> list:

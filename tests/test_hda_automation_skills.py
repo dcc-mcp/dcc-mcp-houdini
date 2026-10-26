@@ -119,7 +119,7 @@ class TestHdaEdit:
         new_node.errors.return_value = []
         new_node.children.return_value = []
         scalar = MagicMock()
-        tuple_parm = MagicMock()
+        tuple_parm = [MagicMock() for _ in range(3)]
         new_node.parm.side_effect = lambda n: scalar if n == "scale" else None
         new_node.parmTuple.side_effect = lambda n: tuple_parm if n == "color" else None
         parent = _node("/obj", "obj", "obj")
@@ -138,8 +138,9 @@ class TestHdaEdit:
         assert result["success"] is True
         parent.createNode.assert_called_once_with("labs::my_asset", node_name=None)
         new_node.setInput.assert_called_once_with(0, src)
-        scalar.set.assert_called_once_with(2.0)
-        tuple_parm.set.assert_called_once_with((1, 0, 0))
+        scalar.set.assert_called_once_with(2.0, follow_parm_reference=False)
+        for component, value in zip(tuple_parm, (1, 0, 0)):
+            component.set.assert_called_once_with(value, follow_parm_reference=False)
         new_node.cook.assert_called_once_with(force=True)
 
     def test_instantiate_hda_missing_input_warns(self) -> None:

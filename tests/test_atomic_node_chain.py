@@ -62,7 +62,8 @@ class FakeParm:
         self.fail = fail
         self.value: Any = None
 
-    def set(self, value: Any) -> None:
+    def set(self, value: Any, *, follow_parm_reference: bool = True) -> None:
+        assert follow_parm_reference is False
         if self.fail:
             raise RuntimeError("parameter write failed")
         self.value = value

@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from dcc_mcp_core.skill import skill_error
 
+from dcc_mcp_houdini.api import set_parm_value
+
 ENV_LIBRARY_DIR = "DCC_MCP_HOUDINI_MATERIAL_LIBRARY_DIR"
 
 # Known texture file-node type names (checked in priority order).
@@ -91,7 +93,7 @@ def set_node_parameter(node: Any, name: str, value: Any) -> Any:
         parm_tuple = node.parmTuple(name)
         if parm_tuple is None:
             raise ValueError("No parameter tuple named {!r} on {}".format(name, node.path()))
-        parm_tuple.set(tuple(value))
+        set_parm_value(node, name, value)
         return list(value)
     parm = node.parm(name)
     if parm is None:
@@ -101,7 +103,7 @@ def set_node_parameter(node: Any, name: str, value: Any) -> Any:
     except Exception:  # noqa: BLE001
         current = None
     coerced = coerce_value(value, current)
-    parm.set(coerced)
+    parm.set(coerced, follow_parm_reference=False)
     return coerced
 
 

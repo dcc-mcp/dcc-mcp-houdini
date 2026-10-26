@@ -7,6 +7,8 @@ from typing import Any, Iterable
 
 from dcc_mcp_core.skill import skill_error
 
+from dcc_mcp_houdini.api import set_parm_value as set_parm_value
+
 _HDA_SUFFIXES = {".hda", ".hdalc", ".hdanc", ".otl", ".otllc", ".otlnc"}
 
 
@@ -61,19 +63,6 @@ def definitions_in_file(hou: Any, file_path: str) -> list:
     """Return HDA definitions in a file as JSON-safe dicts."""
     path = validate_hda_path(file_path, must_exist=True)
     return [definition_summary(defn, str(path)) for defn in hou.hda.definitionsInFile(str(path))]
-
-
-def set_parm_value(node: Any, name: str, value: Any) -> None:
-    """Set either a scalar parm or tuple parm on *node*."""
-    if isinstance(value, (list, tuple)):
-        parm_tuple = node.parmTuple(name)
-        if parm_tuple is not None:
-            parm_tuple.set(tuple(value))
-            return
-    parm = node.parm(name)
-    if parm is None:
-        raise ValueError("Parameter {!r} not found on {}".format(name, node.path()))
-    parm.set(value)
 
 
 def press_buttons(node: Any, names: Iterable[str]) -> list:

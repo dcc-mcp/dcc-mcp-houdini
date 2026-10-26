@@ -1224,7 +1224,7 @@ class TestNodeSkills:
     def test_set_node_parms_with_scalar_tuple_and_button(self) -> None:
         mod = _load_script("houdini-nodes", "set_node_parms.py")
         parm = MagicMock()
-        tuple_parm = MagicMock()
+        tuple_parm = [MagicMock() for _ in range(3)]
         button = MagicMock()
         node = MagicMock()
         node.path.return_value = "/obj/geo1"
@@ -1239,8 +1239,9 @@ class TestNodeSkills:
             result = mod.set_node_parms("/obj/geo1", {"t": [1, 2, 3], "scale": 2}, ["execute"])
 
         assert result["success"] is True
-        tuple_parm.set.assert_called_once_with((1, 2, 3))
-        parm.set.assert_called_once_with(2)
+        for component, value in zip(tuple_parm, (1, 2, 3)):
+            component.set.assert_called_once_with(value, follow_parm_reference=False)
+        parm.set.assert_called_once_with(2, follow_parm_reference=False)
         button.pressButton.assert_called_once()
 
     def test_connect_nodes_with_mock_hou(self) -> None:
@@ -1285,7 +1286,7 @@ class TestHdaSkills:
 
         assert result["success"] is True
         mock_hou.hda.installFile.assert_called_once_with(str(hda_file))
-        parm.set.assert_called_once_with(2)
+        parm.set.assert_called_once_with(2, follow_parm_reference=False)
         button.pressButton.assert_called_once()
         node.cook.assert_called_once_with(force=False)
 
@@ -1316,7 +1317,7 @@ class TestHdaSkills:
 class TestMaterialSkills:
     def test_create_material_sets_parameters(self) -> None:
         mod = _load_script("houdini-materials", "create_material.py")
-        tuple_parm = MagicMock()
+        tuple_parm = [MagicMock() for _ in range(3)]
         scalar_parm = MagicMock()
         material = MagicMock()
         material.path.return_value = "/mat/clay"
@@ -1338,8 +1339,9 @@ class TestMaterialSkills:
 
         assert result["success"] is True
         parent.createNode.assert_called_once()
-        tuple_parm.set.assert_called_once_with((0.8, 0.4, 0.2))
-        scalar_parm.set.assert_called_once_with(0.65)
+        for component, value in zip(tuple_parm, (0.8, 0.4, 0.2)):
+            component.set.assert_called_once_with(value, follow_parm_reference=False)
+        scalar_parm.set.assert_called_once_with(0.65, follow_parm_reference=False)
         assert result["context"]["material"]["path"] == "/mat/clay"
 
     def test_assign_material_sets_material_path(self) -> None:
