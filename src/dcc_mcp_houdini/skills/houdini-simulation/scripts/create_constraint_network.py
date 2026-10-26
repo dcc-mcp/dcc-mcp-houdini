@@ -40,6 +40,8 @@ def create_constraint_network(
         )
         if relation_parent is not None and relation_parent != dopnet:
             raise ValueError("relationship_parent must be the same DOP network as dopnet_path")
+        if relation_parent is not None and network_name == relationship_name:
+            raise ValueError("network_name and relationship_name must be different")
         network = dopnet.node(network_name)
         if network is not None and base_node_type(network.type().name()) != "constraintnetwork":
             raise ValueError("Existing network_name must name a constraintnetwork DOP")

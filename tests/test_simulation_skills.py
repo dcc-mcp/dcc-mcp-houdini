@@ -180,13 +180,46 @@ def test_create_constraint_network_reuses_nodes_and_keeps_sop_geometry_separate(
     assert network.parm("soppath").eval() == geometry.path()
 
 
-def test_create_constraint_network_without_relationship_keeps_skeleton_contract():
+@pytest.mark.parametrize("network_name", ["constraintnetwork1", "glueconrel"])
+def test_create_constraint_network_without_relationship_keeps_skeleton_contract(network_name):
     root, geo, hou = scene()
     dopnet = root.createNode("dopnet")
     with patch.dict(sys.modules, {"hou": hou}):
-        result = _load("create_constraint_network.py").create_constraint_network(dopnet.path(), "glue")
+        result = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(), "glue", network_name=network_name
+        )
     assert result["success"] and result["context"]["relationship_path"] is None
     assert len(dopnet.children()) == 1 and dopnet.children()[0].inputs() == ()
+
+
+@pytest.mark.parametrize(
+    ("constraint_type", "default_relationship_name"),
+    [("glue", "glueconrel"), ("soft", "bulletsoftconrel"), ("cone", "conetwistconrel")],
+)
+@pytest.mark.parametrize("explicit_name", [False, True])
+def test_create_constraint_network_rejects_colliding_names_before_mutation(
+    constraint_type, default_relationship_name, explicit_name
+):
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    preserved = dopnet.createNode("null", "preserved")
+    preserved.parm("size").value = 7
+    name = "shared" if explicit_name else default_relationship_name
+    with patch.dict(sys.modules, {"hou": hou}), patch.object(dopnet, "createNode", wraps=dopnet.createNode) as create:
+        result = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(),
+            constraint_type,
+            network_name=name,
+            relationship_parent=dopnet.path(),
+            relationship_name=name if explicit_name else None,
+            parameters={"size": 2},
+        )
+    assert not result["success"]
+    assert "network_name and relationship_name must be different" in skill_error_detail(result)
+    create.assert_not_called()
+    assert dopnet.children() == (preserved,)
+    assert preserved.parm("size").eval() == 7
+    assert geo.children() == ()
 
 
 @pytest.mark.parametrize("parent_kind", ["sop", "foreign_dop"])
