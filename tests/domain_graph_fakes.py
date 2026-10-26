@@ -81,6 +81,11 @@ class Node:
     def createNode(self, node_type, node_name=None):
         if self.reject_create:
             raise RuntimeError("type unavailable")
+        if node_type in {"constraintnetwork", "glueconrel", "bulletsoftconrel", "conetwistconrel"}:
+            if self.child_category != "Dop":
+                raise RuntimeError("Invalid node type name")
+        if node_type in {"softconrel", "wireconrel"}:
+            raise RuntimeError("Invalid node type name")
         name = node_name or node_type.replace("::", "_") + "1"
         if name in self._children:
             name += "1"

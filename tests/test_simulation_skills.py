@@ -135,44 +135,119 @@ def test_create_fracture_requires_sop_parent():
     assert "Sop" in skill_error_detail(result)
 
 
-def test_create_constraint_network_creates_relationship_and_sets_sop_path():
+@pytest.mark.parametrize(
+    ("constraint_type", "node_type"),
+    [("glue", "glueconrel"), ("soft", "bulletsoftconrel"), ("cone", "conetwistconrel")],
+)
+def test_create_constraint_network_wires_relationship_in_same_dop_network(constraint_type, node_type):
     root, geo, hou = scene()
     dopnet = root.createNode("dopnet")
     network = _load("create_constraint_network.py")
     with patch.dict(sys.modules, {"hou": hou}):
-        result = network.create_constraint_network(dopnet.path(), "glue", relationship_parent=geo.path())
+        result = network.create_constraint_network(dopnet.path(), constraint_type, relationship_parent=dopnet.path())
     assert result["success"]
     context = result["context"]
-    assert context["relationship_path"].endswith("/glueconrel")
-    # The fake exposes no soppath parameter, so the override is reported, not applied.
-    assert context["skipped_parameters"] == ["soppath"]
+    relationship = hou.node(context["relationship_path"])
+    created = dopnet.node("constraintnetwork1")
+    assert relationship.type().name() == node_type and relationship.parent() is dopnet
+    assert [(c.inputIndex(), c.inputItem()) for c in created.inputConnections()] == [(1, relationship)]
+    assert context["applied_parameters"] == {} and context["skipped_parameters"] == []
     assert context["simulation_verified"] is False
-    assert dopnet.node("constraintnetwork1") is not None
+    assert geo.children() == ()
 
 
-def test_create_constraint_network_applies_sop_path_when_exposed():
+def test_create_constraint_network_reuses_nodes_and_keeps_sop_geometry_separate():
     root, geo, hou = scene()
     dopnet = root.createNode("dopnet")
+    geometry = geo.createNode("null", "constraints")
+    network = dopnet.createNode("constraintnetwork", "constraintnetwork1")
+    network.parms["soppath"] = Parm("soppath", "")
+    relationship = dopnet.createNode("glueconrel", "glueconrel")
+    source = dopnet.createNode("rbdobject")
+    network.setInput(0, source)
     mod = _load("create_constraint_network.py")
     with patch.dict(sys.modules, {"hou": hou}):
-        result = mod.create_constraint_network(dopnet.path(), "wire", relationship_parent=geo.path())
+        result = mod.create_constraint_network(
+            dopnet.path(), "glue", relationship_parent=dopnet.path(), parameters={"soppath": geometry.path()}
+        )
+        again = mod.create_constraint_network(dopnet.path(), "glue", relationship_parent=dopnet.path())
     assert result["success"]
-    assert result["context"]["skipped_parameters"] == ["soppath"]
-    network = hou.node(result["context"]["network_path"])
-    network.parms["soppath"] = Parm("soppath", "")
-    with patch.dict(sys.modules, {"hou": hou}):
-        result = mod.create_constraint_network(dopnet.path(), "wire", relationship_parent=geo.path())
-    assert result["success"]
-    assert result["context"]["created_network"] is False
-    assert result["context"]["applied_parameters"]["soppath"].endswith("/wireconrel")
+    assert again["success"] and again["context"]["created_network"] is False
+    assert result["context"]["applied_parameters"] == {"soppath": geometry.path()}
     assert result["context"]["skipped_parameters"] == []
+    assert dopnet.children() == (network, relationship, source)
+    assert network.inputs() == (source, relationship)
+    assert network.parm("soppath").eval() == geometry.path()
 
 
-def test_create_constraint_network_rejects_unknown_type():
+def test_create_constraint_network_without_relationship_keeps_skeleton_contract():
     root, geo, hou = scene()
     dopnet = root.createNode("dopnet")
     with patch.dict(sys.modules, {"hou": hou}):
-        result = _load("create_constraint_network.py").create_constraint_network(dopnet.path(), "rope")
+        result = _load("create_constraint_network.py").create_constraint_network(dopnet.path(), "glue")
+    assert result["success"] and result["context"]["relationship_path"] is None
+    assert len(dopnet.children()) == 1 and dopnet.children()[0].inputs() == ()
+
+
+@pytest.mark.parametrize("parent_kind", ["sop", "foreign_dop"])
+def test_create_constraint_network_rejects_invalid_relationship_parent_before_mutation(parent_kind):
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    parent = geo if parent_kind == "sop" else root.createNode("dopnet", "foreign")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(), "glue", relationship_parent=parent.path()
+        )
+    assert not result["success"]
+    assert dopnet.children() == parent.children() == ()
+
+
+@pytest.mark.parametrize("conflict", ["network_type", "relationship_type", "occupied_input"])
+def test_create_constraint_network_rejects_existing_conflicts(conflict):
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    network = dopnet.createNode("null" if conflict == "network_type" else "constraintnetwork", "constraintnetwork1")
+    other = dopnet.createNode("null", "glueconrel" if conflict == "relationship_type" else "other")
+    if conflict == "occupied_input":
+        network.setInput(1, other)
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(), "glue", relationship_parent=dopnet.path()
+        )
+    assert not result["success"]
+    assert dopnet.children() == (network, other)
+    assert network.inputs() == ((other,) if conflict == "occupied_input" else ())
+
+
+@pytest.mark.parametrize("failure", ["parameter", "wiring", "readback"])
+def test_create_constraint_network_rolls_back_new_relationship_and_existing_edits(failure):
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    network = dopnet.createNode("constraintnetwork", "constraintnetwork1")
+    source = dopnet.createNode("rbdobject")
+    network.setInput(0, source)
+    if failure == "parameter":
+        network.parm("size").fail_next_set = True
+    elif failure == "wiring":
+        network.reject_input = True
+    else:
+        network.errors = lambda: (_ for _ in ()).throw(RuntimeError("readback failed"))
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_constraint_network.py").create_constraint_network(
+            dopnet.path(), "glue", relationship_parent=dopnet.path(), parameters={"timescale": 0.5, "size": 2}
+        )
+    assert not result["success"]
+    assert dopnet.children() == (network, source)
+    assert network.inputs() == (source,)
+    assert network.parm("timescale").eval() == network.parm("size").eval() == 1
+
+
+@pytest.mark.parametrize("constraint_type", ["rope", "wire"])
+def test_create_constraint_network_rejects_unknown_type(constraint_type):
+    root, geo, hou = scene()
+    dopnet = root.createNode("dopnet")
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = _load("create_constraint_network.py").create_constraint_network(dopnet.path(), constraint_type)
     assert not result["success"]
     assert "Unsupported constraint_type" in skill_error_detail(result)
     assert dopnet.children() == ()
@@ -367,7 +442,7 @@ def test_best_effort_defaults_keep_real_skipped_parameters():
     with patch.dict(sys.modules, {"hou": hou}):
         fracture = _load("create_fracture.py").create_fracture(geo.path(), "voronoi")
         constraint = _load("create_constraint_network.py").create_constraint_network(
-            dopnet.path(), "glue", relationship_parent=geo.path()
+            dopnet.path(), "glue", relationship_parent=dopnet.path()
         )
         collision = _load("create_collision_source.py").create_collision_source(dopnet.path(), geo.path())
     for result in (fracture, constraint, collision):

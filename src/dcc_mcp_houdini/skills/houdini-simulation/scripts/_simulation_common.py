@@ -14,8 +14,7 @@ FRACTURE_TYPES = {
 
 CONSTRAINT_TYPES = {
     "glue": "glueconrel",
-    "soft": "softconrel",
-    "wire": "wireconrel",
+    "soft": "bulletsoftconrel",
     "cone": "conetwistconrel",
 }
 

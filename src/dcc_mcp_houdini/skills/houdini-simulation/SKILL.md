@@ -45,13 +45,13 @@ creating a different simulation.
 | Tool | Creates | Notes |
 |------|---------|-------|
 | `create_fracture` | `voronoifracture`, `booleanfracture`, `rbdmaterialfracture` | SOP level; wires `source_path` into input 0 when given |
-| `create_constraint_network` | `constraintnetwork` (+ `glueconrel`, `softconrel`, `wireconrel`, `conetwistconrel`) | DOP level; sets `soppath` to the relationship SOP when the node exposes it |
+| `create_constraint_network` | `constraintnetwork` (+ `glueconrel`, `bulletsoftconrel`, `conetwistconrel`) | DOP level; optional relationship is created in the same DOP network and wired to input 1; pass constraint geometry through `parameters.soppath` |
 | `create_collision_source` | `staticobject` | DOP level; sets `soppath` and attaches to the first solver input |
 
 These three tools report parameters they cannot apply through
-`skipped_parameters`, because they seed best-effort defaults (`soppath`,
-`deforming`) that node types and Houdini builds may not expose, and a missing
-optional default is not an authoring error.
+`skipped_parameters`. Fracture and collision tools seed best-effort defaults
+that Houdini builds may not expose; constraint geometry is only assigned when
+the caller explicitly supplies `parameters.soppath`.
 
 Every other tool in this package has no `skipped_parameters` field: it applies
 caller overrides through `parameter_edit`, so an override the node does not
@@ -70,9 +70,17 @@ expose **fails the call and rolls back** rather than being skipped silently.
 
 1. `create_fracture(parent_path="/obj/geo1", fracture_type="voronoi", source_path="/obj/geo1/box1")`
 2. `create_simulation_network(parent_path="/obj", simulation_type="rbd")`
-3. `create_constraint_network(dopnet_path="/obj/dopnet1", constraint_type="glue", relationship_parent="/obj/geo1")`
+3. `create_constraint_network(dopnet_path="/obj/dopnet1", constraint_type="glue", relationship_parent="/obj/dopnet1", parameters={"soppath": "/obj/geo1/constraints"})`
 4. `create_collision_source(dopnet_path="/obj/dopnet1", source_path="/obj/geo1/ground1")`
 5. `validate_simulation_setup(network_path="/obj/dopnet1", simulation_type="rbd")`
+
+Constraint geometry and relationship data are separate: `soppath` reads SOP
+geometry, while the relationship is a DOP whose Data Name must match the
+geometry's `constraint_name` attribute. Glue, Bullet soft and cone-twist
+relationships require a Bullet solver. `relationship_parent` now requires the
+same DOP network; the previous SOP-parent contract could not create these node
+types. The previously advertised `wire` choice had no native `wireconrel`
+node and is rejected rather than substituted with a different constraint.
 
 ## Pyro and volumetric building blocks
 
