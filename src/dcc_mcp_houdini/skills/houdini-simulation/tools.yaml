@@ -129,7 +129,7 @@ tools:
           type: object
           description: Bounded Houdini parameter name to value overrides.
   - name: create_constraint_network
-    description: Create a DOP constraint network with an optional glue, soft, wire or cone-twist relationship SOP.
+    description: Create a DOP constraint network and optionally wire a glue, Bullet soft or cone-twist relationship DOP into input 1. Supply constraint geometry through parameters.soppath.
     source_file: scripts/create_constraint_network.py
     execution: sync
     affinity: main
@@ -151,19 +151,19 @@ tools:
           description: Absolute path of a DOP network.
         constraint_type:
           type: string
-          enum: [glue, soft, wire, cone]
+          enum: [glue, soft, cone]
         network_name:
           type: string
           default: constraintnetwork1
         relationship_parent:
           type: string
-          description: Absolute path of a SOP network that hosts the relationship SOP.
+          description: Optional relationship DOP parent; must equal dopnet_path. SOP parents are rejected before mutation.
         relationship_name:
           type: string
-          description: Relationship SOP name; defaults to the constraint type.
+          description: Relationship DOP name; defaults to its native node type. Existing nodes must have that type.
         parameters:
           type: object
-          description: Bounded Houdini parameter name to value overrides.
+          description: Bounded constraintnetwork parameter overrides, including soppath for the constraint geometry SOP. The relationship DOP is never used as soppath.
   - name: create_collision_source
     description: Create a DOP collision object bound to a SOP path and attach it to the solver.
     source_file: scripts/create_collision_source.py
