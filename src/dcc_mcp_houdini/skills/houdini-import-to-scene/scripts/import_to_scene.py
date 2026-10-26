@@ -250,6 +250,8 @@ def _apply_material_mode(
     report["materials_detected"] = declared
     report["materials_lost"] = max(0, declared - report["materials_imported"])
     report["status"] = "as_authored" if status == "decoded" and report["materials_imported"] else status
+    if report["status"] == "as_authored" and (skipped or report["unapplied_required"]):
+        report["status"] = "partial"
 
     detail = "file={0}; format={1}".format(filepath, material_format or "unknown")
 
@@ -284,7 +286,9 @@ def _apply_material_mode(
     elif report["unapplied_required"]:
         # Materials exist but the shader did not expose the parms that carry
         # the base look, so the imported material is not the authored one.
-        _fallback("the shader does not expose {0}".format(", ".join(report["unapplied_required"])))
+        _fallback(
+            "required material channels could not be applied: {0}".format(", ".join(report["unapplied_required"]))
+        )
     # ``no_materials`` is the only quiet outcome: the carrier was read and
     # genuinely carries no materials, so nothing was lost.
     return report
