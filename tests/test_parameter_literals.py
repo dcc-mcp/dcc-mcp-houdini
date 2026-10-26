@@ -67,13 +67,21 @@ class Node:
         ("materials", "_material_common.py"),
     ],
 )
-def test_skill_helpers_share_literal_setter(skill, filename):
+def test_skill_helpers_preserve_reference_drivers(skill, filename):
     path = Path(__file__).parents[1] / "src/dcc_mcp_houdini/skills" / ("houdini-" + skill) / "scripts" / filename
     spec = importlib.util.spec_from_file_location("literal_helper_" + skill, path)
     module = importlib.util.module_from_spec(spec)
     with skill_script_import_context(spec):
         spec.loader.exec_module(module)
-    assert module.set_parm_value is set_parm_value
+    driver = ReferencingParm(4.0)
+    scalar = ReferencingParm(None, driver)
+    parms = [ReferencingParm(None, driver) for _ in range(3)]
+    node = Node(scalar, ReferencingTuple(parms))
+    module.set_parm_value(node, "shrink", 2.5)
+    module.set_parm_value(node, "t", [1, 2, 3])
+    assert driver.eval() == 4.0
+    assert scalar.eval() == 2.5
+    assert [parm.eval() for parm in parms] == [1, 2, 3]
 
 
 def test_scalar_literal_leaves_referenced_driver_unchanged():
