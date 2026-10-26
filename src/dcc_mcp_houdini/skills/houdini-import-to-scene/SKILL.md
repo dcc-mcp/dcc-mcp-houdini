@@ -72,7 +72,8 @@ The decode outcome is reported in `extra.status`:
 
 | `status` | Meaning | Warning |
 |-----------|---------|---------|
-| `as_authored` | Every decoded material was created. | no |
+| `as_authored` | Every decoded material was created and its required channels were applied. | no |
+| `partial` | Material nodes were created, but a required channel or texture could not be applied, or some nodes could not be created. | **yes** |
 | `default_gray` | A neutral gray material was created and bound. | no |
 | `no_materials` | The carrier declares no materials (or no USD binding is available to read it). | no — nothing was proven lost |
 | `carrier_unreadable` | The carrier declares materials that could not be read (missing `.mtl` sidecar, unknown `usemtl` name, dangling glTF material index, truncated GLB, unopenable USD stage, USD material with no resolvable surface shader, non-`UsdPreviewSurface` shader such as `arnold:standard_surface` or MaterialX). When only *some* materials resolve, the readable ones are still imported and `materials_lost` says how many were dropped. | **yes** |
@@ -119,10 +120,15 @@ The asset path is expanded (`~`, environment variables) exactly once, before it
 is handed to both the File SOP and the material decoder, so `$ASSETS/x.glb`
 cannot reach the geometry import while missing the material decode.
 
+OBJ/MTL also binds `map_Kd` to the native Principled base-colour texture and
+enables it. Nested relative `mtllib` paths and quoted filenames are retained;
+textures resolve relative to their MTL sidecar. Missing files, URL/UNC paths
+and texture options are reported as `partial` with `material_fallback`.
+
 Known limits: only surface PBR values (base colour, metallic, roughness,
-emissive, opacity) are translated; textures, UDIM sets and non-PBR shader graphs
-are not rebuilt, and a multi-material carrier binds its first material to the
-container.
+emissive, opacity) and plain local OBJ diffuse textures are translated. Other
+texture slots, UDIM sets and non-PBR shader graphs are not rebuilt, and a
+multi-material carrier binds its first material to the container.
 
 ## Gateway flow
 

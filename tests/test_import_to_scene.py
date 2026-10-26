@@ -29,18 +29,24 @@ _SCRIPT = _SCRIPT_DIR / "import_to_scene.py"
 
 
 class FakeParmTuple:
-    def __init__(self, name: str, size: int = 3) -> None:
+    def __init__(self, name: str, size: int = 3, parm: Optional[FakeParm] = None) -> None:
         self._name = name
         self.values = [0.0] * size
+        self._parm = parm
 
     def name(self) -> str:
         return self._name
 
     def set(self, values: Any) -> None:
-        self.values = list(values)
+        components = list(values)
+        if len(components) != len(self.values):
+            raise ValueError("Incorrect number of parameter tuple components")
+        self.values = components
+        if self._parm is not None:
+            self._parm.set(components[0])
 
     def eval(self) -> List[float]:
-        return list(self.values)
+        return [self._parm.eval()] if self._parm is not None else list(self.values)
 
 
 class FakeParm:
@@ -63,8 +69,22 @@ _NODE_PARM_TUPLES = {"principledshader::2.0": {"basecolor": 3}, "principledshade
 _NODE_PARMS = {
     "geo": {"scale": 1.0, "shop_materialpath": ""},
     "file": {"file": ""},
-    "principledshader::2.0": {"metallic": 0.0, "rough": 1.0, "opacity": 1.0, "emitcolor": 0.0},
-    "principledshader": {"metallic": 0.0, "rough": 1.0, "opacity": 1.0, "emitcolor": 0.0},
+    "principledshader::2.0": {
+        "metallic": 0.0,
+        "rough": 1.0,
+        "opacity": 1.0,
+        "emitcolor": 0.0,
+        "basecolor_texture": "",
+        "basecolor_useTexture": 0,
+    },
+    "principledshader": {
+        "metallic": 0.0,
+        "rough": 1.0,
+        "opacity": 1.0,
+        "emitcolor": 0.0,
+        "basecolor_texture": "",
+        "basecolor_useTexture": 0,
+    },
     "matnet": {},
 }
 
@@ -80,6 +100,8 @@ class FakeNode:
         self.parm_tuples = {
             name: FakeParmTuple(name, size) for name, size in _NODE_PARM_TUPLES.get(type_name, {}).items()
         }
+        # HOM also exposes singleton tuples for float, toggle and string parms.
+        self.parm_tuples.update({name: FakeParmTuple(name, 1, parm) for name, parm in self.parms.items()})
         self.comment = ""
         self.user_data: Dict[str, Any] = {}
         self.cooked = 0
@@ -349,6 +371,27 @@ def _extra(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class TestMaterialModeAsAuthored:
+    def test_scalar_parms_with_singleton_tuples_are_applied(self, hou: FakeHou) -> None:
+        helper = _load_helper()
+        shader = hou.obj.createNode("principledshader::2.0", "scalar_test")
+
+        assert shader.parmTuple("rough") is not None
+        assert helper._set_first_parm(shader, ("rough",), 0.408248) == "rough"
+        assert shader.parm("rough").eval() == 0.408248
+        assert shader.parmTuple("rough").eval() == [0.408248]
+
+    def test_rejected_tuple_write_still_tries_scalar_parm(self, hou: FakeHou, monkeypatch: pytest.MonkeyPatch) -> None:
+        helper = _load_helper()
+        shader = hou.obj.createNode("principledshader::2.0", "scalar_fallback")
+
+        def _reject_tuple(values: Any) -> None:
+            raise ValueError("Tuple write unavailable")
+
+        monkeypatch.setattr(shader.parmTuple("rough"), "set", _reject_tuple)
+
+        assert helper._set_first_parm(shader, ("rough",), [0.25]) == "rough"
+        assert shader.parm("rough").eval() == 0.25
+
     def test_gltf_materials_are_imported_and_bound(self, script: ModuleType, hou: FakeHou, tmp_path: Path) -> None:
         carrier = write_glb(
             tmp_path / "showcase.glb",
@@ -395,6 +438,102 @@ class TestMaterialModeAsAuthored:
         assert 0.0 < shader.parms["rough"].value < 0.3  # Ns 120 -> glossy
         assert shader.parms["metallic"].value > 0.5  # bright Ks -> metallic
         assert _warnings(result) == []
+
+
+class TestObjDiffuseTextures:
+    @pytest.mark.parametrize("quoted_texture", [False, True])
+    def test_nested_mtl_resolves_texture_relative_to_sidecar(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path, quoted_texture: bool
+    ) -> None:
+        material_dir = tmp_path / "materials with spaces"
+        texture = material_dir / "textures" / "hull paint.png"
+        texture.parent.mkdir(parents=True)
+        texture.write_bytes(b"texture")
+        reference = "textures/hull paint.png"
+        if quoted_texture:
+            reference = '"' + reference + '"'
+        (material_dir / "boat material.mtl").write_text(
+            'newmtl "hull paint"\nKd 0.8 0.7 0.6\nNs 10\nmap_Kd ' + reference + "\n", encoding="utf-8"
+        )
+        carrier = tmp_path / "boat.obj"
+        carrier.write_text(
+            'mtllib "materials with spaces/boat material.mtl"\nusemtl "hull paint"\nv 0 0 0\n', encoding="utf-8"
+        )
+
+        result = script.import_to_scene(_descriptor(carrier, "obj"))
+
+        assert _extra(result)["status"] == "as_authored"
+        assert _warnings(result) == []
+        shader = hou.registry["/mat/showcase_gltf_hull_paint"]
+        assert Path(shader.parm("basecolor_texture").eval()) == texture
+        assert shader.parm("basecolor_useTexture").eval() == 1
+        assert shader.parm("rough").eval() == pytest.approx((2.0 / 12.0) ** 0.5)
+
+    @pytest.mark.parametrize(
+        "reference, reason",
+        [
+            ("textures/missing.png", "local file"),
+            ("-s 2 2 2 textures/hull.png", "options"),
+        ],
+    )
+    def test_unavailable_texture_reports_partial_material(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path, reference: str, reason: str
+    ) -> None:
+        carrier = write_obj_with_mtl(tmp_path / "asset.obj")
+        with (tmp_path / "asset.mtl").open("a", encoding="utf-8") as handle:
+            handle.write("map_Kd " + reference + "\n")
+
+        result = script.import_to_scene(_descriptor(carrier, "obj"))
+
+        extra = _extra(result)
+        assert result["success"] is True
+        assert extra["status"] == "partial"
+        assert extra["materials_imported"] == 1
+        assert len(extra["unapplied_required"]) == 1
+        assert "base_color_texture" in extra["unapplied_required"][0]
+        assert reason in extra["unapplied_required"][0]
+        assert [warning["code"] for warning in _warnings(result)] == ["material_fallback"]
+        assert hou.registry["/mat/showcase_gltf_brushed_metal"].parm("basecolor_useTexture").eval() == 0
+
+    @pytest.mark.parametrize(
+        "reference",
+        ["https://example.invalid/texture.png", "file:///texture.png", "//host/share/x.png", r"\\host\share\x.png"],
+    )
+    def test_remote_texture_reference_is_rejected_before_file_access(
+        self, reference: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        helper = _load_helper()
+
+        def _unexpected_stat(path: str) -> bool:
+            pytest.fail("Remote path reached file access: " + path)
+
+        monkeypatch.setattr(helper.os.path, "isfile", _unexpected_stat)
+        assert helper._local_file_path(str(tmp_path), reference) is None
+
+    @pytest.mark.parametrize("missing_parm", ["basecolor_texture", "basecolor_useTexture"])
+    def test_missing_texture_shader_parm_reports_partial_material(
+        self, script: ModuleType, hou: FakeHou, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing_parm: str
+    ) -> None:
+        original = FakeNode.__init__
+
+        def _init_without_texture_parm(
+            self: FakeNode, path: str, type_name: str, parent: Any, registry: Dict[str, Any]
+        ) -> None:
+            original(self, path, type_name, parent, registry)
+            self.parms.pop(missing_parm, None)
+            self.parm_tuples.pop(missing_parm, None)
+
+        monkeypatch.setattr(FakeNode, "__init__", _init_without_texture_parm)
+        carrier = write_obj_with_mtl(tmp_path / "asset.obj")
+        (tmp_path / "diffuse.png").write_bytes(b"texture")
+        with (tmp_path / "asset.mtl").open("a", encoding="utf-8") as handle:
+            handle.write("map_Kd diffuse.png\n")
+
+        result = script.import_to_scene(_descriptor(carrier, "obj"))
+
+        assert _extra(result)["status"] == "partial"
+        assert _extra(result)["unapplied_required"] == ["/mat/showcase_gltf_brushed_metal:base_color_texture"]
+        assert [warning["code"] for warning in _warnings(result)] == ["material_fallback"]
 
 
 class TestUsdMaterials:
@@ -679,6 +818,7 @@ class TestMaterialModeIsNotSilent:
         result = script.import_to_scene(_descriptor(carrier, "glb"), material_mode="as_authored")
 
         assert _extra(result)["materials_imported"] == 1
+        assert _extra(result)["status"] == "partial"
         assert _extra(result)["unapplied_required"] == ["/mat/showcase_gltf_brushed_metal:base_color"]
         assert [w["code"] for w in _warnings(result)] == ["material_fallback"]
 
