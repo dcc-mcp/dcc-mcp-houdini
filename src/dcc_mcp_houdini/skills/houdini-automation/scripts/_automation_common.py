@@ -7,6 +7,8 @@ from typing import Any
 
 from dcc_mcp_core.skill import skill_error
 
+from dcc_mcp_houdini.api import set_parm_value as set_parm_value
+
 
 def hou_import_error() -> dict:
     """Standard error when the HOM module is unavailable."""
@@ -21,19 +23,6 @@ def existing_file(path: str, *, suffixes: set = None) -> Path:
     if suffixes and resolved.suffix.lower() not in suffixes:
         raise ValueError("Unsupported file extension: {}".format(resolved.suffix))
     return resolved
-
-
-def set_parm_value(node: Any, name: str, value: Any) -> None:
-    """Set a scalar or tuple parameter."""
-    if isinstance(value, (list, tuple)):
-        parm_tuple = node.parmTuple(name)
-        if parm_tuple is not None:
-            parm_tuple.set(tuple(value))
-            return
-    parm = node.parm(name)
-    if parm is None:
-        raise ValueError("Parameter {!r} not found on {}".format(name, node.path()))
-    parm.set(value)
 
 
 def node_summary(node: Any) -> dict:

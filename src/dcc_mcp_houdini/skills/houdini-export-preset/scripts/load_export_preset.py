@@ -13,6 +13,8 @@ from _export_preset_common import (  # noqa: E402
 )
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+from dcc_mcp_houdini.api import set_parm_value
+
 
 def load_export_preset(
     preset_name: str,
@@ -94,12 +96,12 @@ def load_export_preset(
                     if isinstance(value, (list, tuple)):
                         parm_tuple = rop_node.parmTuple(name)
                         if parm_tuple is not None:
-                            parm_tuple.set(tuple(value))
+                            set_parm_value(rop_node, name, value)
                             applied += 1
                             continue
                     parm = rop_node.parm(name)
                     if parm is not None:
-                        parm.set(value)
+                        parm.set(value, follow_parm_reference=False)
                         applied += 1
                 except Exception as exc:  # noqa: BLE001
                     errors[name] = str(exc)

@@ -81,6 +81,23 @@ def is_houdini_available() -> bool:
         return False
 
 
+def set_parm_value(node: Any, name: str, value: Any) -> None:
+    """Set a literal scalar or tuple on this node without following references."""
+    if isinstance(value, (list, tuple)):
+        parm_tuple = node.parmTuple(name)
+        if parm_tuple is not None:
+            if len(parm_tuple) != len(value):
+                raise ValueError("Parameter tuple {!r} requires {} values".format(name, len(parm_tuple)))
+            # ParmTuple.set follows existing references even with its flag disabled.
+            for parm, item in zip(parm_tuple, value):
+                parm.set(item, follow_parm_reference=False)
+            return
+    parm = node.parm(name)
+    if parm is None:
+        raise ValueError("Parameter {!r} not found on {}".format(name, node.path()))
+    parm.set(value, follow_parm_reference=False)
+
+
 # ---------------------------------------------------------------------------
 # Safe HOM wrappers — guard against SIGSEGV when accessing stale/deleted
 # Houdini objects whose backing native memory has been freed.

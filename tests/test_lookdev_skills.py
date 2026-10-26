@@ -127,7 +127,7 @@ class TestLookdevQuery:
 class TestLookdevEdit:
     def test_set_material_parms_coerces(self) -> None:
         mod = _load_script("set_material_parms.py")
-        tuple_parm = MagicMock()
+        tuple_parm = [MagicMock() for _ in range(3)]
         scalar_parm = MagicMock()
         scalar_parm.eval.return_value = 0.0
         node = _node("/mat/clay", "clay", "principledshader::2.0")
@@ -138,8 +138,9 @@ class TestLookdevEdit:
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.set_material_parms("/mat/clay", {"basecolor": [0.8, 0.4, 0.2], "rough": 0.6})
         assert result["success"] is True
-        tuple_parm.set.assert_called_once_with((0.8, 0.4, 0.2))
-        scalar_parm.set.assert_called_once_with(0.6)
+        for component, value in zip(tuple_parm, (0.8, 0.4, 0.2)):
+            component.set.assert_called_once_with(value, follow_parm_reference=False)
+        scalar_parm.set.assert_called_once_with(0.6, follow_parm_reference=False)
 
     def test_set_material_parms_rejects_null_for_string_parm(self) -> None:
         # DEF-1: null must not become the literal "None" and must not be reported
@@ -209,7 +210,7 @@ class TestLookdevEdit:
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.set_material_parms("/mat/clay", {"rough": 0.6, "name": None})
         assert result["success"] is True
-        rough_parm.set.assert_called_once_with(0.6)
+        rough_parm.set.assert_called_once_with(0.6, follow_parm_reference=False)
         str_parm.set.assert_not_called()
         assert result["context"]["applied"] == {"rough": 0.6}
         assert "name" in result["context"]["errors"]
@@ -287,7 +288,7 @@ class TestPresets:
         with patch.dict(sys.modules, {"hou": load_hou}):
             load_result = load_mod.load_preset("warm_clay", "/mat/clay2")
         assert load_result["success"] is True
-        target_parm.set.assert_called_once_with(0.6)
+        target_parm.set.assert_called_once_with(0.6, follow_parm_reference=False)
 
         delete_mod = _load_script("delete_preset.py")
         delete_result = delete_mod.delete_preset("warm_clay")
@@ -341,7 +342,7 @@ class TestPresets:
         with patch.dict(sys.modules, {"hou": load_hou}):
             result = load_mod.load_preset("mixed", "/mat/clay2")
         assert result["success"] is True
-        rough_parm.set.assert_called_once_with(0.6)
+        rough_parm.set.assert_called_once_with(0.6, follow_parm_reference=False)
         str_parm.set.assert_not_called()
         assert result["context"]["applied"] == {"rough": 0.6}
         assert "name" in result["context"]["errors"]
