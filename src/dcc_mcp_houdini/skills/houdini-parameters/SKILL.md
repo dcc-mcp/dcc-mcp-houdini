@@ -40,3 +40,6 @@ and expression work.
 2. `set_parms` for static, type-coerced edits (errors reported per parameter;
    keyframed or expression-driven parms are preserved)
 3. `set_expression` / `clear_expression` to drive or freeze a value
+
+`get_expression` reports parameters with multiple keyframes as an error;
+use `houdini_animation__get_keyframes` to inspect their individual expressions.

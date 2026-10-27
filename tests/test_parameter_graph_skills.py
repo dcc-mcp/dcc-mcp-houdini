@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -409,10 +410,13 @@ class TestExpressions:
         assert result["success"] is True
         parm.setExpression.assert_called_once_with("$F", language="HSCRIPT")
 
-    def test_get_expression_none(self) -> None:
+    @pytest.mark.parametrize("keyframe_count", [0, 1])
+    def test_get_expression_none(self, keyframe_count: int) -> None:
         mod = _load_script("houdini-parameters", "get_expression.py")
         parm = MagicMock()
-        parm.expression.side_effect = Exception("no expression")
+        keyframe = MagicMock()
+        keyframe.isExpressionSet.return_value = False
+        parm.keyframes.return_value = [keyframe] * keyframe_count
         parm.eval.return_value = 1.0
         node = _node()
         node.parm.return_value = parm
@@ -425,6 +429,80 @@ class TestExpressions:
         assert result["success"] is True
         assert result["context"]["has_expression"] is False
         assert result["context"]["value"] == 1.0
+        parm.expression.assert_not_called()
+
+    def test_get_expression_single(self) -> None:
+        mod = _load_script("houdini-parameters", "get_expression.py")
+        parm = MagicMock()
+        keyframe = MagicMock()
+        keyframe.isExpressionSet.return_value = True
+        parm.keyframes.return_value = [keyframe]
+        parm.expression.return_value = "$T"
+        parm.expressionLanguage.return_value = "Hscript"
+        node = _node()
+        node.parm.return_value = parm
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_expression("/obj/geo1", "tx")
+
+        assert result["success"] is True
+        assert result["context"] == {
+            "node_path": "/obj/geo1",
+            "parm": "tx",
+            "has_expression": True,
+            "expression": "$T",
+            "language": "Hscript",
+        }
+        parm.eval.assert_not_called()
+
+    @pytest.mark.parametrize("expressions", [("$T", "$T"), ("$T", "sin($T)"), (None, None)])
+    def test_get_expression_multiple_keyframes(self, expressions: tuple) -> None:
+        mod = _load_script("houdini-parameters", "get_expression.py")
+        parm = MagicMock()
+        keyframes = [MagicMock(), MagicMock()]
+        for keyframe, expression in zip(keyframes, expressions):
+            keyframe.expression.return_value = expression
+        parm.keyframes.return_value = keyframes
+        parm.expression.side_effect = RuntimeError("More than one keyframe")
+        node = _node()
+        node.parm.return_value = parm
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_expression("/obj/geo1", "tx")
+
+        assert result["success"] is False
+        assert result["error"] == "multiple_keyframes"
+        assert result["context"]["keyframe_count"] == 2
+        assert "has_expression" not in result["context"]
+        assert "houdini_animation__get_keyframes" in result["prompt"]
+        parm.expression.assert_not_called()
+        parm.eval.assert_not_called()
+
+    @pytest.mark.parametrize("failure", ["keyframes", "isExpressionSet", "expression", "expressionLanguage", "eval"])
+    def test_get_expression_read_failure(self, failure: str) -> None:
+        mod = _load_script("houdini-parameters", "get_expression.py")
+        parm = MagicMock()
+        keyframe = MagicMock()
+        keyframe.isExpressionSet.return_value = True
+        parm.keyframes.return_value = [] if failure == "eval" else [keyframe]
+        parm.expression.return_value = "$T"
+        target = keyframe if failure == "isExpressionSet" else parm
+        getattr(target, failure).side_effect = PermissionError("Cannot inspect parameter")
+        node = _node()
+        node.parm.return_value = parm
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_expression("/obj/geo1", "tx")
+
+        assert result["success"] is False
+        assert result["error"] == "PermissionError"
+        assert "has_expression" not in result["context"]
 
     def test_clear_expression_freezes_value(self) -> None:
         mod = _load_script("houdini-parameters", "clear_expression.py")

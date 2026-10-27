@@ -5,8 +5,6 @@ from __future__ import annotations
 from _parm_common import get_node  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
-from dcc_mcp_houdini.api import safe_parm_eval
-
 
 def get_expression(node_path: str, parm_name: str) -> dict:
     """Return the parm's expression and language, or the plain value when none."""
@@ -24,21 +22,26 @@ def get_expression(node_path: str, parm_name: str) -> dict:
                 "No parameter named {!r}".format(parm_name),
                 node_path=node.path(),
             )
-        try:
-            expression = parm.expression()
-        except Exception:  # noqa: BLE001 - HOM raises when there is no expression
+        keyframes = parm.keyframes()
+        if len(keyframes) > 1:
+            return skill_error(
+                "Parameter has multiple keyframes",
+                "multiple_keyframes",
+                prompt="Use houdini_animation__get_keyframes to inspect each keyframe's expression.",
+                node_path=node.path(),
+                parm=parm_name,
+                keyframe_count=len(keyframes),
+            )
+        if not keyframes or not keyframes[0].isExpressionSet():
             return skill_success(
                 "No expression set",
                 node_path=node.path(),
                 parm=parm_name,
                 has_expression=False,
-                value=safe_parm_eval(parm),
+                value=parm.eval(),
             )
-        language = None
-        try:
-            language = str(parm.expressionLanguage())
-        except Exception:  # noqa: BLE001
-            pass
+        expression = parm.expression()
+        language = str(parm.expressionLanguage())
         return skill_success(
             "Read expression",
             node_path=node.path(),
