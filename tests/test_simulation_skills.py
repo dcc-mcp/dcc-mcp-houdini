@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -481,3 +483,242 @@ def test_best_effort_defaults_keep_real_skipped_parameters():
     for result in (fracture, constraint, collision):
         assert result["success"]
         assert "skipped_parameters" in result["context"]
+
+
+def _forbidden_field_call(*args, **kwargs):
+    pytest.fail("Field metadata inspection must not cook, change time, copy geometry, or read voxels")
+
+
+def _volume(name, resolution=(8, 9, 10), voxel_size=(0.1, 0.2, 0.3)):
+    return SimpleNamespace(
+        type=lambda: SimpleNamespace(name=lambda: "Volume"),
+        attribValue=lambda attrib: name,
+        resolution=lambda: resolution,
+        voxelSize=lambda: voxel_size,
+        voxel=_forbidden_field_call,
+        allVoxels=_forbidden_field_call,
+        allVoxelsAsString=_forbidden_field_call,
+        voxelRange=_forbidden_field_call,
+        sample=_forbidden_field_call,
+    )
+
+
+def _dop_data(data_type, components=None, children=None):
+    data = SimpleNamespace(dataType=lambda: data_type, children=children or {}, field_reads=[])
+    data.subData = lambda: data.children
+    data.freeze = _forbidden_field_call
+    data.geometry = _forbidden_field_call
+
+    def field_geometry(name):
+        data.field_reads.append(name)
+        child = data.children[name]
+        if isinstance(child.components, Exception):
+            raise child.components
+        if child.components is None:
+            return None
+        return SimpleNamespace(
+            iterPrims=lambda: iter(child.components),
+            findPrimAttrib=lambda name: name,
+            merge=_forbidden_field_call,
+            freeze=_forbidden_field_call,
+        )
+
+    def find_subdata(path):
+        current = data
+        for name in path.split("/"):
+            current = current.children.get(name)
+            if current is None:
+                break
+        return current
+
+    data.fieldGeometry, data.findSubData, data.components = field_geometry, find_subdata, components
+    return data
+
+
+@pytest.fixture
+def field_scene():
+    root, _, hou = scene()
+    network = root.createNode("dopnet")
+    obj = _dop_data("SIM_Object", children={"surface": _dop_data("SIM_ScalarField", [_volume("surface")])})
+    obj.name, obj.objid = lambda: "water", lambda: 7
+    simulation = SimpleNamespace(time=lambda: 0.125, findObject=lambda name: obj if name == "water" else None)
+    simulation.setTime = _forbidden_field_call
+    network.cookCount, network.needsToCook = lambda: 4, lambda: False
+    network.simulation = lambda: simulation
+    network.cook = _forbidden_field_call
+    hou.frame = lambda: 4.0
+    hou.setFrame = hou.setTime = _forbidden_field_call
+    return network, hou, simulation, obj
+
+
+def _inspect_fields(field_scene, **kwargs):
+    network, hou, _, _ = field_scene
+    arguments = {"network_path": network.path(), "object_name": "water"}
+    arguments.update(kwargs)
+    with patch.dict(sys.modules, {"hou": hou}):
+        return _load("inspect_simulation_fields.py").inspect_simulation_fields(**arguments)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"network_path": "relative"},
+        {"network_path": "/obj/../dopnet1"},
+        {"object_name": "water*"},
+        {"object_name": "water/Geometry"},
+        {"field_names": "surface"},
+        {"field_names": []},
+        {"field_names": ["surface"] * 33},
+        {"field_names": ["surface", "surface"]},
+        {"field_names": ["../surface"]},
+        {"field_names": ["/surface"]},
+        {"field_names": ["surface\n"]},
+        {"field_names": ["vel?"]},
+        {"max_fields": 0},
+        {"max_fields": 33},
+        {"max_fields": True},
+        {"max_fields": 1.5},
+    ],
+)
+def test_inspect_fields_rejects_invalid_arguments_before_hom(field_scene, arguments):
+    _, hou, _, _ = field_scene
+    with patch.object(hou, "node", side_effect=_forbidden_field_call):
+        assert not _inspect_fields(field_scene, **arguments)["success"]
+
+
+@pytest.mark.parametrize("guard", ["uncooked", "dirty", "missing", "raises", "unknown"])
+def test_inspect_fields_rejects_unsafe_network_before_simulation(field_scene, guard):
+    network, _, _, _ = field_scene
+    if guard == "uncooked":
+        network.cookCount = lambda: 0
+    elif guard == "dirty":
+        network.needsToCook = lambda: True
+    elif guard == "missing":
+        del network.needsToCook
+    elif guard == "raises":
+        network.needsToCook = lambda: (_ for _ in ()).throw(RuntimeError("guard unavailable"))
+    else:
+        network.needsToCook = lambda: None
+    with patch.object(network, "simulation", side_effect=_forbidden_field_call):
+        assert not _inspect_fields(field_scene)["success"]
+
+
+def test_inspect_fields_preserves_scalar_vector_and_staggered_metadata(field_scene):
+    _, _, _, obj = field_scene
+    obj.children["vel"] = _dop_data("SIM_VectorField", [_volume("vel." + axis) for axis in "xyz"])
+    staggered = [(9, 9, 10), (8, 10, 10), (8, 9, 11)]
+    obj.children["collisionweights"] = _dop_data(
+        "SIM_VectorField", [_volume("weight." + str(index), size) for index, size in enumerate(staggered)]
+    )
+    result = _inspect_fields(field_scene, field_names=["surface", "vel", "collisionweights"])
+    assert result["success"]
+    context = result["context"]
+    assert context["object_id"] == 7 and context["object_name"] == "water"
+    assert context["before"] == context["after"] == {"frame": 4.0, "cook_count": 4, "simulation_time": 0.125}
+    scalar, vector, weights = context["fields"]
+    assert scalar == {
+        "name": "surface",
+        "data_type": "SIM_ScalarField",
+        "status": "ok",
+        "components": [
+            {"name": "surface", "primitive_type": "Volume", "resolution": [8, 9, 10], "voxel_size": [0.1, 0.2, 0.3]}
+        ],
+    }
+    assert [component["name"] for component in vector["components"]] == ["vel.x", "vel.y", "vel.z"]
+    assert [component["resolution"] for component in weights["components"]] == [list(size) for size in staggered]
+
+
+def test_inspect_fields_exact_paths_and_entry_bound(field_scene):
+    _, _, _, obj = field_scene
+    group = _dop_data("SIM_Data", children={"pressure": _dop_data("SIM_ScalarField", [_volume("pressure")])})
+    obj.children["nested"] = group
+    explicit = _inspect_fields(field_scene, field_names=["nested/pressure", "surface"], max_fields=1)["context"]
+    assert explicit["fields"][0]["name"] == "nested/pressure"
+    assert explicit["total_entries"] == 2 and explicit["truncated"] is True
+    assert group.field_reads == ["pressure"] and obj.field_reads == []
+    direct = _inspect_fields(field_scene, max_fields=1)["context"]
+    assert direct["fields"] == [{"name": "nested", "data_type": "SIM_Data", "status": "not_field"}]
+    assert direct["total_entries"] == 2 and direct["truncated"] is True
+    assert group.field_reads == ["pressure"]
+
+
+def test_inspect_fields_distinguishes_missing_nonfield_and_read_errors(field_scene):
+    _, _, _, obj = field_scene
+    obj.children["Geometry"] = _dop_data("SIM_Geometry")
+    obj.children["broken"] = _dop_data("SIM_ScalarField", RuntimeError("field unavailable"))
+    result = _inspect_fields(field_scene, field_names=["absent", "Geometry", "broken"])
+    assert result["success"]
+    fields = result["context"]["fields"]
+    assert [field["status"] for field in fields] == ["missing", "not_field", "read_error"]
+    assert fields[2]["error"] == "field unavailable" and fields[2]["error_type"] == "RuntimeError"
+
+
+def test_inspect_fields_component_bound_is_an_explicit_read_error(field_scene):
+    _, _, _, obj = field_scene
+
+    def components():
+        yield from (_volume(str(index)) for index in range(17))
+        pytest.fail("Must not read beyond the component limit sentinel")
+
+    obj.children["large"] = _dop_data("SIM_MatrixField", components())
+    result = _inspect_fields(field_scene, field_names=["large"])
+    assert result["success"]
+    field = result["context"]["fields"][0]
+    assert field["status"] == "read_error" and "16-component" in field["error"]
+    assert "components" not in field
+
+
+@pytest.mark.parametrize("state", ["frame", "cook_count", "simulation_time"])
+def test_inspect_fields_fails_when_state_changes_during_read(field_scene, state):
+    network, hou, simulation, obj = field_scene
+    original = obj.fieldGeometry
+
+    def changed(name):
+        if state == "frame":
+            hou.frame = lambda: 5.0
+        elif state == "cook_count":
+            network.cookCount = lambda: 5
+        else:
+            simulation.time = lambda: 0.25
+        return original(name)
+
+    obj.fieldGeometry = changed
+    result = _inspect_fields(field_scene)
+    assert not result["success"]
+    assert result["context"]["before"][state] != result["context"]["after"][state]
+
+
+def test_inspect_fields_detects_cook_during_simulation_access(field_scene):
+    network, _, simulation, obj = field_scene
+
+    def changed():
+        network.cookCount = lambda: 5
+        return simulation
+
+    network.simulation = changed
+    result = _inspect_fields(field_scene)
+    assert not result["success"] and obj.field_reads == []
+    assert result["context"]["after"]["cook_count"] == 5
+
+
+def test_inspect_fields_requires_exact_existing_object(field_scene):
+    assert not _inspect_fields(field_scene, object_name="missing")["success"]
+    field_scene[2].findObject = lambda name: field_scene[3]
+    result = _inspect_fields(field_scene, object_name="other")
+    assert not result["success"] and "exact requested name" in skill_error_detail(result)
+
+
+def test_inspect_fields_is_discoverable_without_importing_hou(monkeypatch):
+    import dcc_mcp_core
+
+    monkeypatch.setenv("DCC_MCP_DISABLE_DEFAULT_SKILL_PATHS", "1")
+    catalog = dcc_mcp_core.SkillCatalog(dcc_mcp_core.ToolRegistry())
+    catalog.set_in_process_executor(_forbidden_field_call)
+    assert catalog.discover(extra_paths=[str(_ROOT.parent)], dcc_name="houdini") >= 1
+    assert any(skill.name == "houdini-simulation" for skill in catalog.search_skills(query="field metadata"))
+    assert "houdini_simulation__inspect_simulation_fields" in catalog.load_skill("houdini-simulation")
+    tool = next(
+        tool for tool in catalog.get_skill("houdini-simulation").tools if tool.name == "inspect_simulation_fields"
+    )
+    assert json.loads(tool.input_schema)["properties"]["max_fields"]["maximum"] == 32
+    assert tool.next_tools == {"on_success": [], "on_failure": ["houdini_simulation__inspect_simulation_network"]}

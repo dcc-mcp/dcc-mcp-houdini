@@ -2,12 +2,13 @@
 name: houdini-simulation
 description: >-
   Typed DOP simulation tools for Pyro, FLIP, RBD, and Vellum. Create a
-  solver network, apply bounded parameters, inspect solver state, validate a
+  solver network, apply bounded parameters, inspect solver state and cached
+  DOP field dimensions, validate a
   setup before committing to a long cook, and build the fracture, constraint
   network, collision, pyro source and gas micro-solver building blocks that
   those solver families need.
 license: MIT
-compatibility: "dcc-mcp-houdini 0.38+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
+compatibility: "Python 3.7+, dcc-mcp-houdini 0.38+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
 allowed-tools: Bash Read Write Edit
 metadata:
   dcc-mcp:
@@ -16,7 +17,7 @@ metadata:
     stage: pipeline
     version: "1.0.0"
     tags: [houdini, dop, simulation, pyro, flip, rbd, vellum, fracture, constraint, collision, gas, solver, validation]
-    search-hint: "pyro flip fluid rbd rigid vellum cloth grains dop solver simulation fracture glue collision gas turbulence cache validate"
+    search-hint: "pyro flip fluid rbd rigid vellum cloth grains dop solver simulation fracture glue collision gas turbulence cache validate field metadata resolution voxel size pressure velocity"
     tools: tools.yaml
 ---
 
@@ -65,6 +66,30 @@ expose **fails the call and rolls back** rather than being skipped silently.
 4. `validate_simulation_setup(network_path="/obj/dopnet1", simulation_type="pyro")`
 5. Supply the required object/source and output connections, then use the
    existing render or automation skills for an explicitly requested cook.
+
+## Cached field inspection
+
+`inspect_simulation_fields(network_path="/obj/dopnet1", object_name="water",
+field_names=["surface", "vel", "pressure"])` reads the current simulation's
+field types and per-component names, primitive types, resolutions and voxel
+sizes. Staggered vector components keep their distinct dimensions. No field
+values are sampled and no pressure units are inferred.
+
+The network must have a positive `cookCount()` and `needsToCook() is False`;
+missing or failing guards refuse inspection before accessing the simulation.
+There is no frame selection or cook option. The tool compares frame, cook count
+and simulation time before and after reading, and fails if they change.
+HOM does not document a cached-only guarantee for
+[`fieldGeometry`](https://www.sidefx.com/docs/houdini/hom/hou/DopData.html#fieldGeometry); this guard
+and readback are not a substitute for native validation on the target build.
+
+Names are exact, without patterns. Omit `field_names` to inspect only direct
+subdata entries; explicit relative paths can select nested data without a
+recursive search. At most `max_fields` entries (default 16, maximum 32) are
+read, with `total_entries` and `truncated` reporting the bound. Each entry has
+`status` `ok`, `missing`, `not_field`, or `read_error`; inspect these statuses
+even when the overall inspection succeeds. More than 16 components is a
+`read_error`. This is metadata inspection, not simulation verification.
 
 ## Rigid-body flow
 
