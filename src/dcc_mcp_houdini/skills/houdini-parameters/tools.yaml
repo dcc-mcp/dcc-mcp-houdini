@@ -87,7 +87,8 @@ tools:
   - name: get_parm_templates
     description: >-
       Inspect parameter templates for one parm or all top-level templates.
-      Read-only.
+      Includes declared menu items and labels where supported, not dynamically
+      generated choices or the current selection. Read-only.
     source_file: scripts/get_parm_templates.py
     execution: sync
     affinity: main
@@ -109,6 +110,49 @@ tools:
         parm_name:
           type: string
           description: Optional single parameter name; all templates when omitted.
+    output_schema:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        context:
+          type: object
+          properties:
+            node_path:
+              type: string
+            count:
+              type: integer
+            template:
+              $ref: '#/$defs/parm_template'
+            templates:
+              type: array
+              items:
+                $ref: '#/$defs/parm_template'
+      $defs:
+        parm_template:
+          type: object
+          properties:
+            name:
+              type: [string, 'null']
+            label:
+              type: [string, 'null']
+            data_type:
+              type: [string, 'null']
+            template_type:
+              type: [string, 'null']
+            num_components:
+              type: [integer, 'null']
+            menu_items:
+              type: [array, 'null']
+              items:
+                type: string
+              description: Ordered declared items; omitted if unsupported, null on read failure, empty array for a successful empty read.
+            menu_labels:
+              type: [array, 'null']
+              items:
+                type: string
+              description: Ordered declared labels; omitted if unsupported, null on read failure, empty array for a successful empty read.
   - name: add_spare_parm
     description: >-
       Add a spare parameter of type float, int, string, or toggle. Unsupported

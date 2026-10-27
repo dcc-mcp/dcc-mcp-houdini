@@ -34,6 +34,13 @@ def template_info(template: Any) -> dict:
             info["num_components"] = int(template.numComponents())
         except Exception:  # noqa: BLE001
             info["num_components"] = None
+    for key, method in (("menu_items", "menuItems"), ("menu_labels", "menuLabels")):
+        getter = getattr(template, method, None)
+        if callable(getter):
+            try:
+                info[key] = list(getter())
+            except Exception:  # noqa: BLE001
+                info[key] = None
     return info
 
 
