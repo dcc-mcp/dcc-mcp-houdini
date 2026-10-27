@@ -77,6 +77,9 @@ values are sampled and no pressure units are inferred.
 
 The network must have a positive `cookCount()` and `needsToCook() is False`;
 missing or failing guards refuse inspection before accessing the simulation.
+This checks the network's reported state, not whether every child edit has
+reached the simulation. A child parameter edit can leave the network reporting
+`False` while cached metadata still describes the previous solve.
 There is no frame selection or cook option. The tool compares frame, cook count
 and simulation time before and after reading, and fails if they change.
 HOM does not document a cached-only guarantee for

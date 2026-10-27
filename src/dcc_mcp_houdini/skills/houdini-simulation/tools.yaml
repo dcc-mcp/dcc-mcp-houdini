@@ -74,7 +74,7 @@ tools:
         network_path:
           type: string
   - name: inspect_simulation_fields
-    description: Read bounded DOP field metadata on one exact object in a clean, already-cooked network at the current frame. Reports each component's dimensions; no voxel sampling or explicit cook.
+    description: Read bounded DOP field metadata on one exact object when the network reports it has cooked and needs no cook. Cached metadata can describe the previous solve after child edits; no voxel sampling or explicit cook.
     source_file: scripts/inspect_simulation_fields.py
     execution: sync
     affinity: main
@@ -98,7 +98,7 @@ tools:
       properties:
         network_path:
           type: string
-          description: Exact absolute DOP network path; it must already be cooked and clean.
+          description: Exact absolute DOP network path; requires positive cookCount and needsToCook false. This does not prove child edits reached the cached simulation.
         object_name:
           type: string
           description: Exact simulation object name, without patterns or a data path.
