@@ -1150,7 +1150,7 @@ def test_two_processes_finalize_different_frames_without_lost_status(tmp_path: P
     results = [result_queue.get(timeout=5.0) for _ in processes]
     result_queue.close()
     result_queue.join_thread()
-    assert [result[0] for result in results] == ["ok", "ok"]
+    assert [result[0] for result in results] == ["ok", "ok"], results
 
     status = json.loads(status_path.read_text(encoding="utf-8"))
     transaction = status["artifact_transaction"]
