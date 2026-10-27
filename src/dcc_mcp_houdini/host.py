@@ -417,20 +417,24 @@ class HoudiniHost(HostAdapter):
                 self._headless_run_thread_ident = None
                 self._headless_run_exited.set()
 
+    def request_stop_from_headless_thread(self) -> bool:
+        """Defer teardown when the caller is inside the foreground pump."""
+        with self._headless_state_lock:
+            if self._headless_run_thread_ident != threading.get_ident():
+                return False
+            self._stop_event.set()
+            return True
+
     def stop(self, timeout: float = 5.0) -> None:
         """Stop only after a caller-owned blocking tick releases its drain lock."""
+        if self.request_stop_from_headless_thread():
+            return
         started_wait = time.monotonic()
         with self._headless_state_lock:
-            run_thread_ident = self._headless_run_thread_ident
             run_active = not self._headless_run_exited.is_set()
 
         if run_active:
             self._stop_event.set()
-            if run_thread_ident == threading.get_ident():
-                # A signal handler can re-enter shutdown on the same thread
-                # while the native blocking tick still owns its receiver lock.
-                # Let run_headless unwind; its finally path performs teardown.
-                return
             if not self._headless_run_exited.wait(timeout=max(timeout, 0.0)):
                 raise RuntimeError(f"Houdini headless pump did not stop within {timeout}s")
 

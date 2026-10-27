@@ -60,8 +60,11 @@ def test_start_server_rejects_headless_mode_before_server_construction(monkeypat
     assert constructed == []
 
 
-def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tmp_path) -> None:
-    from dcc_mcp_houdini.server import serve_headless
+@pytest.mark.parametrize("stop_mode", ["external", "module", "instance"])
+def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tmp_path, stop_mode) -> None:
+    from dcc_mcp_core import DccServerBase
+
+    import dcc_mcp_houdini.server as server_module
 
     monkeypatch.setenv("MCP_LOG_LEVEL", "WARN")
     monkeypatch.setenv("DCC_MCP_LOG_LEVEL", "WARN")
@@ -74,11 +77,39 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
     client_errors = []
     client_threads = []
     observations = {}
-    hou = SimpleNamespace(isUIAvailable=lambda: False)
+    callback_active = threading.Event()
+    hou = SimpleNamespace(isUIAvailable=lambda: False, callback_active=callback_active)
+    original_stop = DccServerBase.stop
+
+    def checked_stop(server) -> None:
+        assert not callback_active.is_set(), "Full teardown must wait for the tool callback to return"
+        original_stop(server)
+
+    monkeypatch.setattr(DccServerBase, "stop", checked_stop)
+    code = "import threading\nresult = threading.get_ident()"
+    if stop_mode != "external":
+        stop_call = "server_module.stop_server()" if stop_mode == "module" else "server.stop()"
+        code = (
+            "import threading\n"
+            "import dcc_mcp_houdini.server as server_module\n"
+            "server = server_module.get_server()\n"
+            "host = server._houdini_host\n"
+            "hou.callback_active.set()\n"
+            "try:\n"
+            f"    {stop_call}\n"
+            "    assert server_module.get_server() is server\n"
+            "    assert server.is_running\n"
+            "    assert server._houdini_host is host\n"
+            "    result = threading.get_ident()\n"
+            "finally:\n"
+            "    hou.callback_active.clear()"
+        )
 
     def on_started(server) -> None:
         observations["url"] = server.mcp_url
         observations["instance_type"] = server._config.instance_metadata["dcc_mcp_instance_type"]
+        observations["host"] = server._houdini_host
+        observations["dispatcher"] = server._houdini_host._dispatcher
 
         def client() -> None:
             try:
@@ -108,7 +139,7 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
                         "params": {
                             "name": "execute_python",
                             "arguments": {
-                                "code": "import threading\nresult = threading.get_ident()",
+                                "code": code,
                             },
                         },
                     },
@@ -124,7 +155,7 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
         thread.start()
 
     with patch.dict(sys.modules, {"hou": hou}):
-        serve_headless(
+        server_module.serve_headless(
             gateway_port=0,
             registry_dir=str(tmp_path / "registry"),
             stop_event=stop_event,
@@ -138,12 +169,13 @@ def test_serve_headless_runs_real_main_affinity_on_owning_thread(monkeypatch, tm
     assert observations["instance_type"] == "standalone"
     assert observations["loaded"]["result"]["isError"] is False
     called = observations["called"]
-    assert called["result"]["isError"] is False
+    assert called["result"]["isError"] is False, called
     assert called["result"]["structuredContent"]["context"]["result"] == str(owner_thread)
 
-    from dcc_mcp_houdini.server import get_server
-
-    assert get_server() is None
+    assert server_module.get_server() is None
+    assert server_module._host_instance is None
+    assert observations["host"].is_running is False
+    assert observations["dispatcher"].is_shutdown() is True
 
 
 def test_headless_dispatch_wait_times_out_and_shutdown_cancels_pending_work() -> None:
