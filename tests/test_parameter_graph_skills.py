@@ -11,6 +11,9 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import jsonschema
+import pytest
+import yaml
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -34,6 +37,65 @@ def _node(path: str = "/obj/geo1") -> MagicMock:
 
 
 class TestParameterQuery:
+    @pytest.mark.parametrize("single", [True, False])
+    @pytest.mark.parametrize(
+        ("template_type", "items", "labels"),
+        [
+            ("hou.parmTemplateType.Menu", ("bullet", "rbd"), ("Bullet", "RBD")),
+            ("hou.parmTemplateType.Int", ("0", "1"), ("Off", "On")),
+            ("hou.parmTemplateType.String", ("fast", "accurate"), ("Fast", "Accurate")),
+            ("hou.parmTemplateType.Int", (), ()),
+        ],
+    )
+    def test_get_parm_templates_preserves_declared_menu_metadata(self, single, template_type, items, labels):
+        mod = _load_script("houdini-parameters", "get_parm_templates.py")
+        template = MagicMock(spec=["name", "label", "type", "menuItems", "menuLabels"])
+        template.name.return_value = "solver"
+        template.label.return_value = "Solver"
+        template.type.return_value = template_type
+        template.menuItems.return_value = items
+        template.menuLabels.return_value = labels
+        node = _node()
+        node.parm.return_value.parmTemplate.return_value = template
+        node.parmTemplateGroup.return_value.entries.return_value = (template,)
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = node
+
+        with patch.dict(sys.modules, {"hou": mock_hou}):
+            result = mod.get_parm_templates(node.path(), "solver" if single else None)
+
+        assert result["success"] is True
+        summary = result["context"]["template"] if single else result["context"]["templates"][0]
+        assert summary["template_type"] == template_type
+        assert summary["menu_items"] == list(items)
+        assert summary["menu_labels"] == list(labels)
+        manifest = yaml.safe_load((_SKILLS_ROOT / "houdini-parameters" / "tools.yaml").read_text(encoding="utf-8"))
+        schema = next(tool["output_schema"] for tool in manifest["tools"] if tool["name"] == "get_parm_templates")
+        jsonschema.validate(result, schema)
+        node.cook.assert_not_called()
+
+    def test_template_menu_getters_unsupported_are_omitted(self):
+        mod = _load_script("houdini-parameters", "_parm_common.py")
+        template = MagicMock(spec=["name", "label"])
+        template.name.return_value = "folder"
+        template.label.return_value = "Folder"
+
+        assert mod.template_info(template) == {"name": "folder", "label": "Folder"}
+
+    def test_template_menu_read_failure_is_distinct_from_empty_menu(self):
+        mod = _load_script("houdini-parameters", "_parm_common.py")
+        template = MagicMock(spec=["name", "label", "menuItems", "menuLabels"])
+        template.name.return_value = "solver"
+        template.label.return_value = "Solver"
+        template.menuItems.side_effect = RuntimeError("HOM menu read failed")
+        template.menuLabels.return_value = ()
+
+        result = mod.template_info(template)
+
+        assert result["menu_items"] is None
+        assert result["menu_labels"] == []
+        assert result["name"] == "solver"
+
     def test_list_parms_with_filter(self) -> None:
         mod = _load_script("houdini-parameters", "list_parms.py")
         p1 = MagicMock()
