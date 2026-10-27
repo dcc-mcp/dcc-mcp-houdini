@@ -570,8 +570,17 @@ class HoudiniMcpServer(DccServerBase):
         """Store the active :class:`~dcc_mcp_houdini.host.HoudiniHost` for teardown."""
         self._houdini_host = host
 
+    def _defer_headless_stop(self) -> bool:
+        from dcc_mcp_houdini.host import HoudiniHost
+
+        host = self._houdini_host
+        return isinstance(host, HoudiniHost) and host.request_stop_from_headless_thread()
+
     def stop(self) -> None:
-        """Stop the MCP server and detach the Houdini host adapter."""
+        """Stop the server, deferring headless tool teardown until its callback exits."""
+        if self._defer_headless_stop():
+            # serve_headless finishes teardown after the tool leaves its runtime callback.
+            return
         if self._resources is not None:
             try:
                 self._resources.unbind()
@@ -780,9 +789,9 @@ def serve_headless(
 
 
 def stop_server() -> None:
-    """Stop the running Houdini MCP server."""
+    """Stop the server, or request shutdown after the active headless callback."""
     global _server_instance, _host_instance  # noqa: PLW0603
-    if _server_instance is None:
+    if _server_instance is None or _server_instance._defer_headless_stop():
         return
     try:
         _server_instance.stop()
