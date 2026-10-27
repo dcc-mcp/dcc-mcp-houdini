@@ -206,7 +206,8 @@ tools:
   - name: get_expression
     description: >-
       Read a parameter's expression and language, or its plain value when no
-      expression is set. Read-only.
+      expression is set. Multiple keyframes return an error directing callers
+      to houdini_animation__get_keyframes. Read-only.
     source_file: scripts/get_expression.py
     execution: sync
     affinity: main
