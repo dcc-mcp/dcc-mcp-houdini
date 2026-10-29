@@ -82,7 +82,7 @@ result = gtest.run_terrain_gtest(OUTPUT_DIR)   # returns the evidence dict
 
 The script uses only the standard library plus Houdini's own `hou`, so it runs
 on legacy embedded Python hosts too. As `__main__` it prints
-`TERRAIN_GTEST=<json>` and honors the `PIP5114_TERRAIN_OUT` output directory.
+`TERRAIN_GTEST=<json>` and honors the `COPS_TERRAIN_OUT` output directory.
 
 ### 3. Equivalent typed-tool drive (core authoring chain)
 

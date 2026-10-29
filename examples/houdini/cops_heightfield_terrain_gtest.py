@@ -190,9 +190,9 @@ def run_terrain_gtest(output_dir):
         evidence["cop_probe_error"] = str(exc)[:200]
 
     obj = hou.node("/obj")
-    geo = obj.node("pip5114_cops_hf_terrain")
+    geo = obj.node("cops_hf_terrain")
     if geo is None:
-        geo = obj.createNode("geo", "pip5114_cops_hf_terrain")
+        geo = obj.createNode("geo", "cops_hf_terrain")
     for child in list(geo.children()):
         child.destroy()
     evidence["geo"] = geo.path()
@@ -329,8 +329,8 @@ def run_terrain_gtest(output_dir):
 
 def main():
     out_dir = os.environ.get(
-        "PIP5114_TERRAIN_OUT",
-        os.path.join(os.path.expanduser("~"), "pip5114_cops_hf_terrain"),
+        "COPS_TERRAIN_OUT",
+        os.path.join(os.path.expanduser("~"), "cops_hf_terrain"),
     )
     print("TERRAIN_GTEST=" + json.dumps(run_terrain_gtest(out_dir)))
 

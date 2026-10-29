@@ -31,78 +31,78 @@
   "monotoheightfield"
  ],
  "cop_node_type_count": 383,
- "geo": "/obj/pip5114_cops_hf_terrain",
- "copnet": "/obj/pip5114_cops_hf_terrain/copnet_terrain",
+ "geo": "/obj/cops_hf_terrain",
+ "copnet": "/obj/cops_hf_terrain/copnet_terrain",
  "created_nodes": [
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/noise_src",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/to_mono",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/to_heightfield",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_erode",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_terrace",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_to_height",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/rop_height",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_to_normal",
-  "/obj/pip5114_cops_hf_terrain/copnet_terrain/rop_normal"
+  "/obj/cops_hf_terrain/copnet_terrain/noise_src",
+  "/obj/cops_hf_terrain/copnet_terrain/to_mono",
+  "/obj/cops_hf_terrain/copnet_terrain/to_heightfield",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_erode",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_to_height",
+  "/obj/cops_hf_terrain/copnet_terrain/rop_height",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_to_normal",
+  "/obj/cops_hf_terrain/copnet_terrain/rop_normal"
  ],
  "cooks": [
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/noise_src",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/noise_src",
    "type": "fractalnoise",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/to_mono",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/to_mono",
    "type": "mono",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/to_heightfield",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/to_heightfield",
    "type": "monotoheightfield",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_erode",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_erode",
    "type": "heightfield_erode",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_terrace",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
    "type": "heightfield_terrace",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_to_height",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_to_height",
    "type": "heightfieldtomono",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/rop_height",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/rop_height",
    "type": "rop_image",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_to_normal",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_to_normal",
    "type": "heighttonormal",
    "cook_ok": true,
    "errors": [],
    "warnings": []
   },
   {
-   "path": "/obj/pip5114_cops_hf_terrain/copnet_terrain/rop_normal",
+   "path": "/obj/cops_hf_terrain/copnet_terrain/rop_normal",
    "type": "rop_image",
    "cook_ok": true,
    "errors": [],
@@ -150,7 +150,7 @@
    0.7912208437919617
   ]
  },
- "terrain_bbox_node": "/obj/pip5114_cops_hf_terrain/copnet_terrain/hf_terrace",
+ "terrain_bbox_node": "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
  "stage_signatures": {
   "to_heightfield": {
    "count": 200000,
