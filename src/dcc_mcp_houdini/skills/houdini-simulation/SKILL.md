@@ -140,3 +140,38 @@ check cannot establish a successful simulation.
 Parameters are checked before writing and read back after writing. Missing
 parameters fail explicitly. Failed edits restore parameter values, expressions
 and animation; failed creation removes only nodes owned by that request.
+
+## Modern Houdini node families (H21+)
+
+Four recent Houdini feature families are exposed through stable aliases so an
+agent does not have to guess version-sensitive node type names. The node types
+and recommended parameter names below were confirmed against a live Houdini
+22.0.368 host; availability still varies between builds, so the typed creator
+applies caller-supplied parameters through `parameter_edit` (an unknown name
+fails the call and rolls back). Recommended parameters are guidance, not
+auto-applied defaults — verify names on the target build before applying.
+
+| Family | Aliases (examples) | Node category | Real node types (examples) |
+|--------|--------------------|---------------|-----------------------------|
+| RBD material fracture | `rbd_material_fracture`, `rbd_concrete_fracture`, `rbd_glass_fracture`, `rbd_wood_fracture` | Sop | `rbdmaterialfracture`, `rbdconcretefracture`, `rbdglassfracture`, `rbdwoodfracture` |
+| COps pyro | `pyro_configure`, `pyro_source_volume`, `pyro_block_begin`, `pyro_advect`, `pyro_buoyancy`, `pyro_turbulence`, `pyro_block_end` | Cop | `pyro_configure`, `pyro_sourcefromvolume`, `pyro_block_begin`, `pyro_vortexconfinement` |
+| Sparse GPU pyro | `pyro_sparse_solver`, `smoke_sparse_object`, `smoke_sparse_solver`, `gas_opencl` | Dop | `pyrosolver_sparse`, `smokeobject_sparse`, `smokesolver_sparse`, `gasopencl` |
+| rasterize Volume | `rasterize_volume`, `rasterize_setup`, `volume_rasterize`, `volume_rasterize_attributes` | Cop + Sop | `rasterizevolume`, `rasterizesetup`, `volumerasterize`, `volumerasterizeattributes` |
+
+### Discover and author
+
+1. `plan_modern_simulation()` → list the four families and their aliases.
+2. `plan_modern_simulation(family="cops_pyro")` → deterministic, JSON-safe plan
+   (node chain, real node types, parent categories, recommended parameters,
+   required setup). Read-only; no `hou`, no cook, no scene mutation.
+3. `create_modern_sim_node(parent_path=..., node_type="pyro_configure")`
+   → resolve the alias, create the node in a parent network of the matching
+   child category (`Sop`/`Cop`/`Dop`), apply bounded parameter overrides, and
+   wire existing input nodes.
+
+`plan_modern_simulation` always reports `artifact_verified=false` and
+`simulation_verified=false`; `create_modern_sim_node` creates/wires only and
+never cooks. Use the existing render or automation skills for an explicitly
+requested cook, and verify any output artifact separately. Legacy COP2 networks
+are not targeted: the Copernicus (`copnet`) context is `Cop`, and the sparse
+GPU pyro chain is a DOP (`Dop`) network.
