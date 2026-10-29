@@ -15,6 +15,7 @@ MANTRA_SPECIFIC_RESOLUTION = "specific"
 PRIMARY_OUTPUT_PARMS = (
     "picture",
     "vm_picture",
+    "soho_diskfile",
     "outputimage",
     "copoutput",
     "lopoutput",
