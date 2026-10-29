@@ -7,7 +7,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
-| `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops` | no |
+| `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`, `houdini-copernicus-unreal` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-crowds`, `houdini-pdg` | no |
 
 ## Common chains
@@ -63,6 +63,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | Inspect a Solaris USD Stage | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_prim_info` / `houdini_usd_lops__get_prim_attributes` |
 | Build a COP/Copernicus graph | `load_skill("houdini-copernicus")` → `create_cop_network` → `create_cop_node` → `inspect_cop_network` → `validate_cop_network` |
+| Copernicus textures → Unreal | `load_skill("houdini-copernicus-unreal")` → `export_copernicus_for_unreal` (after `houdini_render__render_rop`) → `inspect_unreal_manifest` → Unreal `import_asset` / `create_texture_material` |
 | Composite and write an image | `load_skill("houdini-copernicus")` → `build_composite_chain` → `cook_cop_node` → `houdini_render__render_rop` → `inspect_cop_output` |
 | Relight Gaussian Splats | `load_skill("houdini-gsplat-relighting")` → `inspect_gsplat_relighting_input` → `prepare_gsplat_sop_chain` → `create_gsplat_relight_lop` → `create_gsplat_copernicus_raster` → existing parameter/render skills |
 | Manage export presets | `load_skill("houdini-export-preset")` → `houdini_export_preset__save_export_preset` → `houdini_export_preset__list_export_presets` → `houdini_export_preset__load_export_preset` |

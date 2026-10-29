@@ -1,0 +1,112 @@
+tools:
+  - name: export_copernicus_for_unreal
+    description: >-
+      Build a deterministic Copernicus -> Unreal PBR texture-set sidecar manifest
+      from COP output nodes or explicit source files. Applies fixed color
+      conventions (base_color/emissive sRGB; all other maps linear /
+      non_color_texture), Unreal /Game naming, channel packing and UDIM metadata,
+      and emits ready-to-call unreal_assets__import_asset and
+      unreal_assets__create_texture_material plans. Does not render or cook COP
+      nodes; render first with houdini_render__render_rop.
+    source_file: scripts/export_copernicus_for_unreal.py
+    execution: sync
+    affinity: main
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [maps, asset_name, output_path]
+      additionalProperties: false
+      properties:
+        maps:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: >-
+            Ordered PBR map declarations. Each item needs map_type plus either a
+            node_path (COP output node) or a source_path (existing file).
+          items:
+            type: object
+            required: [map_type]
+            additionalProperties: false
+            properties:
+              map_type:
+                type: string
+                enum:
+                  [base_color, normal, roughness, metallic, ambient_occlusion,
+                   emissive, opacity, height, displacement, specular]
+                description: Canonical PBR map slot; drives color space and material wiring.
+              node_path:
+                type: string
+                description: Absolute path of a Copernicus output (ROP image) node to probe for its file.
+              source_path:
+                type: string
+                description: Explicit texture file path; used instead of node_path when provided.
+              channel_packing:
+                type: string
+                enum: [rgb, rgba, r, orm, grayscale]
+                description: Descriptive channel packing recorded in the manifest.
+              udim:
+                description: >-
+                  UDIM descriptor (bool or object with enabled/tiles/pattern).
+                  Recorded as metadata only; virtual texturing is deferred.
+        asset_name:
+          type: string
+          description: Base asset name (identifier, e.g. Rock_Cliff) for texture and material naming.
+        output_path:
+          type: string
+          description: Filesystem path where the sidecar manifest JSON is written.
+        destination_path:
+          type: string
+          description: Unreal Content Browser folder for textures (default /Game/Textures/<asset_name>).
+        material_name:
+          type: string
+          description: Material asset name (default M_<asset_name>).
+        material_destination_path:
+          type: string
+          description: Content Browser folder for the material (default /Game/Materials).
+        overwrite:
+          type: boolean
+          default: true
+          description: Allow replacing an existing manifest at output_path.
+    next-tools:
+      on-success: [houdini_copernicus_unreal__inspect_unreal_manifest]
+    search_aliases:
+      - export PBR textures to Unreal
+      - Copernicus to Unreal texture manifest
+      - build Unreal texture set
+
+  - name: inspect_unreal_manifest
+    description: >-
+      Read back and validate a Copernicus -> Unreal texture-set sidecar manifest.
+      Confirms schema, re-derives the color convention for every texture, and
+      returns the ready-to-use import_asset / create_texture_material plans.
+      Pure-Python, no Houdini session required.
+    source_file: scripts/inspect_unreal_manifest.py
+    execution: sync
+    affinity: any
+    group: interchange-export
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [manifest_path]
+      additionalProperties: false
+      properties:
+        manifest_path:
+          type: string
+          description: Filesystem path of the sidecar manifest JSON to validate.
+    search_aliases:
+      - validate Unreal texture manifest
+      - read Copernicus texture set

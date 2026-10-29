@@ -48,6 +48,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
         "houdini-export-preset",
         "houdini-import-to-scene",
         "houdini-usd-lops",
+        "houdini-copernicus-unreal",
     ),
     "pipeline": (
         "houdini-render",
