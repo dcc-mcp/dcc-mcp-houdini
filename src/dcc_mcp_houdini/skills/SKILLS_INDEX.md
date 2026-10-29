@@ -62,6 +62,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Revisioned Houdini/Maya sync | `load_skill("houdini-asset-sync")` → `publish_usd_revision` / `read_asset_head` → receiver `sync_usd_revision` or `reference_usd_revision` |
 | Probe / import / export files | `load_skill("houdini-interchange")` → `houdini_interchange__probe_file` → `houdini_interchange__import_geometry` / `houdini_interchange__export_geometry` / `export_alembic` / `export_fbx` / `export_usd` |
 | Inspect a Solaris USD Stage | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_prim_info` / `houdini_usd_lops__get_prim_attributes` |
+| Inspect scattered assets (PointInstancer) | `load_skill("houdini-usd-lops")` → `houdini_usd_lops__list_stage_prims` → `houdini_usd_lops__get_instancer_info` (prototypes, protoIndices, validation) |
 | Build a COP/Copernicus graph | `load_skill("houdini-copernicus")` → `create_cop_network` → `create_cop_node` → `inspect_cop_network` → `validate_cop_network` |
 | Composite and write an image | `load_skill("houdini-copernicus")` → `build_composite_chain` → `cook_cop_node` → `houdini_render__render_rop` → `inspect_cop_output` |
 | Relight Gaussian Splats | `load_skill("houdini-gsplat-relighting")` → `inspect_gsplat_relighting_input` → `prepare_gsplat_sop_chain` → `create_gsplat_relight_lop` → `create_gsplat_copernicus_raster` → existing parameter/render skills |

@@ -3,8 +3,9 @@ name: houdini-usd-lops
 description: >-
   Solaris/USD skill — read-only inspection of a LOP node's composed Stage plus a
   narrow, typed attribute write path. Use it to list prims, inspect one prim,
-  read bounded attribute values, or set attributes on an existing prim. Not for
-  USD import, export, prim creation, or variant and layer editing.
+  inspect scattered assets (PointInstancer), read bounded attribute values, or
+  set attributes on an existing prim. Not for USD import, export, prim creation,
+  or variant and layer editing.
 license: MIT
 compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
 allowed-tools: Bash Read Write Edit
@@ -13,14 +14,15 @@ metadata:
     dcc: houdini
     layer: domain
     stage: interchange
-    version: "1.0.0"
-    tags: [houdini, solaris, usd, lops, stage, prims]
-    search-hint: "inspect Solaris stage, list USD prims, prim info, read and set USD attributes"
-    search-aliases: [inspect usd stage, list lops prims, usd prim info, usd attributes, material binding]
+    version: "1.1.0"
+    tags: [houdini, solaris, usd, lops, stage, prims, point instancer, scattered assets]
+    search-hint: "inspect Solaris stage, list USD prims, prim info, point instancer, read and set USD attributes"
+    search-aliases: [inspect usd stage, list lops prims, usd prim info, usd attributes, material binding, point instancer, scattered assets]
     example-prompts:
       - "List the prims composed by /stage/karma1"
       - "Inspect /World/geo on the Stage from /stage/OUT"
       - "Show bounded attributes containing primvars on /World/geo"
+      - "Inspect the scattered assets on /World/scatter from /stage/OUT"
     intent: "Inspect a composed Solaris USD Stage without authoring changes."
     recall-context:
       app_type: houdini
@@ -50,7 +52,9 @@ narrow, typed write path for stage attributes.
 1. `list_stage_prims` for a bounded Stage inventory.
 2. `get_prim_info` for type, state, visibility, transform, bounds, and material binding.
 3. `get_prim_attributes` for filtered, size-bounded attribute values at a time code.
-4. `set_prim_attributes` for writing a bounded set of attributes and reading them
+4. `get_instancer_info` for inspecting and validating a scattered-asset
+   `PointInstancer` — its prototypes, protoIndices, and per-instance arrays.
+5. `set_prim_attributes` for writing a bounded set of attributes and reading them
    back. This is the only tool here that mutates the stage.
 
 ```
@@ -60,6 +64,33 @@ houdini_usd_lops__set_prim_attributes(
     attributes={"density": 2.5, "center": [1.0, 2.0, 3.0]},
 )   # -> applied_attributes, attribute_readback, readback_matches
 ```
+
+## Inspecting scattered assets (PointInstancer)
+
+`get_instancer_info` reads a `UsdGeomPointInstancer` prim — the USD primitive
+that Houdini's Instancer / Copy-to-Points LOPs produce when assets are scattered
+onto points. It is read-only and never authors to the stage. It reports:
+
+- `prototypes` — the asset prim paths the scatter references (bounded).
+- `proto_indices` — a bounded sample of the instance-to-prototype mapping.
+- `instance_arrays` — bounded, JSON-safe samples of `protoIndices`, `positions`,
+  `orientations`, `scales`, and `invisibleIds` (each with truncation flags).
+- `array_counts` — the full authored length of each of those arrays, so the
+  verdict is computed from complete data even when samples are truncated.
+- `validation` — a decidable verdict: `instance_count`, `prototype_count`,
+  `proto_indices_in_range`, `out_of_range_count`, `per_instance_arrays_match`,
+  `consistent`, and `issue_codes`.
+
+```
+houdini_usd_lops__get_instancer_info(
+    lop_node_path="/stage/lopnet1",
+    prim_path="/World/scatter",
+)   # -> validation.consistent, instance_count, prototype_count, issue_codes
+```
+
+This lets a caller assert whether a scattered-asset setup is well formed without
+mutating the stage. It inspects one PointInstancer prim; it does not enumerate all
+instancers in a scene — use `list_stage_prims` to find candidate prim paths.
 
 ## Write scope
 
