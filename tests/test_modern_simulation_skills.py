@@ -238,6 +238,13 @@ def test_plan_tool_lists_families_without_hou():
     assert ctx["validation_scope"] == "catalog_only_no_host_access"
     assert ctx["artifact_verified"] is False
     assert ctx["simulation_verified"] is False
+    # No-arg listing must expose each family's aliases (docs promise this, so an
+    # agent can discover the vocabulary without four follow-up per-family calls).
+    aliases = ctx["aliases"]
+    assert set(aliases) == set(EXPECTED_FAMILIES)
+    for family in EXPECTED_FAMILIES:
+        assert aliases[family] == list(_load("_modern_sim.py").aliases_for_family(family))
+        assert aliases[family]
 
 
 @pytest.mark.parametrize("family", EXPECTED_FAMILIES)
