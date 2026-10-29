@@ -90,7 +90,9 @@ def export_copernicus_for_unreal(
             output node whose output file is probed) or ``source_path`` (an
             explicit file). Optional per-map ``channel_packing`` and ``udim``.
         asset_name: Base asset name, e.g. ``Rock_Cliff``.
-        output_path: Where the sidecar manifest JSON is written.
+        output_path: Where the sidecar manifest JSON is written. Houdini
+            variable tokens (e.g. ``$HIP``) are expanded when running inside a
+            Houdini session.
         destination_path: Unreal Content Browser folder for textures.
         material_name: Name of the material asset to create.
         material_destination_path: Content Browser folder for the material.
@@ -113,12 +115,22 @@ def export_copernicus_for_unreal(
     except (ValueError, TypeError) as exc:
         return skill_error("Invalid export configuration", str(exc))
 
-    # hou is required only when a map is declared by node_path; source_path-only
-    # requests stay pure-Python and need no Houdini session.
-    needs_hou = any(isinstance(item, dict) and item.get("node_path") and not item.get("source_path") for item in maps)
-    hou = _import_hou() if needs_hou else None
+    # hou is needed for node_path resolution AND for expanding Houdini variable
+    # tokens (e.g. $HIP) in output_path / source_path. A source_path-only request
+    # with a "$" token must still load hou so the token is expanded inside a
+    # Houdini session. Outside Houdini _import_hou() returns None and _expand()
+    # keeps the literal path, with an explicit warning recorded in the manifest.
+    needs_node_resolution = any(
+        isinstance(item, dict) and item.get("node_path") and not item.get("source_path") for item in maps
+    )
+    has_dollar_token = "$" in output_path or any(
+        isinstance(item, dict) and isinstance(item.get("source_path"), str) and "$" in item["source_path"]
+        for item in maps
+    )
+    hou = _import_hou() if (needs_node_resolution or has_dollar_token) else None
 
     try:
+        resolved_output = _expand(hou, output_path) if "$" in output_path else output_path
         textures: List[Dict[str, Any]] = []
         seen = set()
         for index, item in enumerate(maps):
@@ -175,10 +187,16 @@ def export_copernicus_for_unreal(
             )
 
         manifest = common.build_manifest(asset_name, dest, mat_name, mat_dest, textures)
-        common.write_manifest(output_path, manifest, overwrite=overwrite)
+        if "$" in resolved_output:
+            manifest["warnings"].append(
+                "output_path still contains an unexpanded '$' token (e.g. $HIP); Houdini "
+                "variable expansion was unavailable (no Houdini session), so the manifest "
+                "was written to the literal path: {}".format(resolved_output)
+            )
+        common.write_manifest(resolved_output, manifest, overwrite=overwrite)
         return skill_success(
             "Built Copernicus -> Unreal texture-set manifest",
-            manifest_path=output_path,
+            manifest_path=resolved_output,
             manifest=manifest,
             texture_count=len(textures),
             import_call_count=len(manifest["import_plan"]),

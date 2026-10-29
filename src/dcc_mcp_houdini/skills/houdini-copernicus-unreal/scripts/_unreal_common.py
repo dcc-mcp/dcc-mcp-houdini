@@ -316,6 +316,8 @@ def validate_manifest(data: Any) -> bool:
         for key in required:
             if key not in tex:
                 raise ValueError("textures[{}] missing key: {}".format(index, key))
+        if not isinstance(tex["source_path"], str) or not tex["source_path"]:
+            raise ValueError("textures[{}].source_path must be a non-empty string".format(index))
         fields = color_fields(map_type)
         if (
             tex.get("color_space") != fields["color_space"]

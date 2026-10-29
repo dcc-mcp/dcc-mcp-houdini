@@ -55,9 +55,12 @@ validation fails. Downgrading a data texture's `non_color_texture` /
 `source_color_space`, re-pointing a material slot, or reordering import calls
 therefore cannot pass as a "ready-to-use" manifest.
 
-Outside a Houdini session, Houdini variables such as `$HIP` in `source_path`
-cannot be expanded; the literal token is recorded, `artifact_exists` is
-`false`, and a warning explains the unexpanded token.
+Houdini variables such as `$HIP` in `output_path` and `source_path` are
+expanded via `hou.expandString` inside a Houdini session — `hou` is loaded
+lazily whenever a `$` token is present. Outside a Houdini session no `hou`
+exists, so the literal token is recorded, `artifact_exists` is `false`, and a
+warning explains the unexpanded token (the manifest is written to the literal
+path).
 
 ## `import_plan[]` entry
 

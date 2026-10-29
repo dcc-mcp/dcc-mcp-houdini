@@ -329,6 +329,66 @@ def test_node_path_with_no_output_parm_fails_closed(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Houdini variable expansion for $-tokens (F3)
+# ---------------------------------------------------------------------------
+
+
+def test_source_path_only_expands_dollar_paths_with_hou(tmp_path):
+    """A source_path-only request still loads hou and expands $-tokens (F3).
+
+    Both the output_path and the source_path carry ``$HIP``. With a fake
+    ``hou.expandString`` the manifest must be written under the expanded
+    ``$HIP`` directory (not a literal ``$HIP`` folder), and the recorded
+    texture source_path must also be expanded so artifact_exists is True.
+    """
+    mod = _export()
+    hip = tmp_path / "hip"
+    (hip / "render").mkdir(parents=True)
+    rendered = hip / "render" / "Rock_BaseColor.exr"
+    rendered.write_bytes(b"dummy")
+    target = hip / "unreal" / "Rock.manifest.json"
+
+    def expand(value):
+        return value.replace("$HIP", str(hip))
+
+    hou = _fake_hou({}, expand=expand)
+    with patch.dict(sys.modules, {"hou": hou}):
+        result = mod.export_copernicus_for_unreal(
+            maps=[{"map_type": "base_color", "source_path": "$HIP/render/Rock_BaseColor.exr"}],
+            asset_name="Rock",
+            output_path="$HIP/unreal/Rock.manifest.json",
+        )
+    assert result["success"] is True
+    # output_path was expanded before writing: no literal "$HIP" remains and
+    # the manifest actually landed under the expanded $HIP directory.
+    assert "$HIP" not in result["context"]["manifest_path"]
+    assert target.is_file()
+    assert Path(result["context"]["manifest_path"]) == target
+    # source_path was expanded too, so the artifact is found.
+    tex = result["context"]["manifest"]["textures"][0]
+    assert Path(tex["source_path"]) == rendered
+    assert tex["artifact_exists"] is True
+    # persisted manifest matches the in-memory result.
+    on_disk = json.loads(target.read_text(encoding="utf-8"))
+    assert Path(on_disk["textures"][0]["source_path"]) == rendered
+
+
+def test_source_path_only_without_hou_keeps_literal_warns(tmp_path):
+    """Outside Houdini a $-token stays literal and is called out in warnings."""
+    mod = _export()
+    out = tmp_path / "m.json"
+    with patch.dict(sys.modules, {"hou": None}):
+        result = mod.export_copernicus_for_unreal(
+            maps=[{"map_type": "base_color", "source_path": "$HIP/render/Rock_BaseColor.exr"}],
+            asset_name="Rock",
+            output_path=str(out),
+        )
+    assert result["success"] is True
+    assert result["context"]["manifest"]["textures"][0]["artifact_exists"] is False
+    assert any("$" in w for w in result["context"]["warnings"])
+
+
+# ---------------------------------------------------------------------------
 # inspect_unreal_manifest consumer-side round-trip
 # ---------------------------------------------------------------------------
 
@@ -421,6 +481,22 @@ def test_inspect_rejects_tampered_texture_source_color_space(tmp_path):
     assert result["success"] is False
 
 
+@pytest.mark.parametrize("bad_source_path", [None, "", 123, []])
+def test_inspect_rejects_non_string_source_path(tmp_path, bad_source_path):
+    """A null/empty/non-string source_path must not survive into the plans (P3)."""
+    export = _export()
+    inspect = _inspect()
+    common = _common()
+    out = tmp_path / "m.json"
+    export.export_copernicus_for_unreal(maps=_maps(tmp_path), asset_name="Rock", output_path=str(out))
+    data = common.load_manifest(str(out))
+    data["textures"][0]["source_path"] = bad_source_path
+    data["import_plan"][0]["arguments"]["source_path"] = bad_source_path
+    common.write_manifest(str(out), data)
+    result = inspect.inspect_unreal_manifest(str(out))
+    assert result["success"] is False
+
+
 def test_inspect_rejects_bad_schema(tmp_path):
     inspect = _inspect()
     out = tmp_path / "m.json"
@@ -475,4 +551,8 @@ def test_skill_md_references_exist():
     assert (_ROOT / "SKILL.md").is_file()
     assert (_ROOT / "references" / "MANIFEST_SCHEMA.md").is_file()
     text = (_ROOT / "SKILL.md").read_text(encoding="utf-8")
-    assert "dcc-mcp-core 0.20.14" in text
+    # Only assert the compatibility field declares a dcc-mcp-core floor. The
+    # exact floor is owned by tests/test_version_consistency.py and may rise;
+    # pinning the literal here would break on a core version bump.
+    assert "compatibility:" in text
+    assert "dcc-mcp-core" in text
