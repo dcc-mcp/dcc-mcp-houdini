@@ -18,6 +18,28 @@ def export_geometry(
     Uses ``hou.Geometry.saveToFile`` which supports native (.bgeo/.geo),
     .obj, .ply, and other formats recognised by the installed runtime.
     """
+    # ``Geometry.saveToFile`` cannot author USD. Detect a USD suffix up front so
+    # we never write silently-invalid bytes to a .usd path; point the caller at
+    # the typed SOP-to-USD bridge instead.
+    fmt = detect_format(output_path)
+    if fmt == "usd":
+        return skill_error(
+            "USD suffix not supported by saveToFile",
+            "export_geometry cannot author USD; use export_sop_to_usd",
+            prompt=(
+                "Author USD from this SOP with houdini_interchange__export_sop_to_usd, "
+                "or export a composed LOP stage with houdini_interchange__export_usd."
+            ),
+            possible_solutions=[
+                "Use houdini_interchange__export_sop_to_usd(node_path=...) for a SOP node.",
+                "Use houdini_interchange__export_usd(lop_node_path=...) for a LOP stage.",
+            ],
+            dcc={"next_tools": ["houdini_interchange__export_sop_to_usd"]},
+            format=fmt,
+            node_path=node_path,
+            output_path=output_path,
+        )
+
     try:
         import hou  # noqa: PLC0415
     except ImportError:

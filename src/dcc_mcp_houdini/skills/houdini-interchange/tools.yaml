@@ -193,3 +193,47 @@ tools:
         create_dirs:
           type: boolean
           default: true
+  - name: export_sop_to_usd
+    description: >-
+      Bridge SOP modeling to USD: build a transient SOP Import LOP for a SOP
+      node, compose its USD stage, and export it to disk. Reports source
+      point/primitive counts and a composed-stage prim-count readback so a
+      caller can confirm the geometry actually landed in the USD file. The
+      transient LOP nodes are removed before returning.
+    source_file: scripts/export_sop_to_usd.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: interchange-export
+    read_only: false
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [node_path, output_path]
+      properties:
+        node_path:
+          type: string
+          description: SOP node whose cooked geometry will be authored into USD.
+        output_path:
+          type: string
+          description: Output USD file (.usd/.usda/.usdc/.usdz).
+        prim_path:
+          type: string
+          default: /ASSET/geo
+          description: Destination prim path for the imported geometry.
+        lop_parent_path:
+          type: string
+          default: /stage
+          description: LOP network to host the transient SOP Import node.
+        create_dirs:
+          type: boolean
+          default: true
+    next-tools:
+      on-success:
+        - houdini_interchange__probe_file
+        - houdini_interchange__import_geometry
