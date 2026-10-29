@@ -11,7 +11,7 @@ The plan is guidance only. It never claims a cooked simulation or rendered
 artifact (``artifact_verified``/``simulation_verified`` are always false).
 """
 
-from _modern_sim import FAMILIES, build_modern_sim_plan
+from _modern_sim import FAMILIES, aliases_for_family, build_modern_sim_plan
 from dcc_mcp_core.skill import skill_entry, skill_exception, skill_success
 
 
@@ -24,6 +24,7 @@ def plan_modern_simulation(family=None) -> dict:
                 "Listed modern Houdini simulation feature families",
                 families=list(FAMILIES),
                 family_count=len(FAMILIES),
+                aliases={name: list(aliases_for_family(name)) for name in FAMILIES},
                 validation_scope="catalog_only_no_host_access",
                 artifact_verified=False,
                 simulation_verified=False,
