@@ -406,3 +406,77 @@ tools:
         connect_to:
           type: string
           description: Absolute path of the node to attach to; defaults to the first solver in the network.
+  - name: plan_modern_simulation
+    description: >-
+      Return a deterministic, host-independent authoring plan for one of four
+      modern Houdini node families (RBD material fracture, COps pyro, sparse
+      GPU pyro, rasterize Volume): real node types, parent categories,
+      recommended parameter names, and required setup. Does not touch the scene
+      or cook. Call with no argument to list the supported families.
+    source_file: scripts/plan_modern_simulation.py
+    execution: sync
+    affinity: any
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        family:
+          type: string
+          enum: [rbd_material_fracture, cops_pyro, sparse_gpu_pyro, rasterize_volume]
+          description: >-
+            Feature family to plan. Omit to list the supported families and
+            their aliases without picking one.
+  - name: create_modern_sim_node
+    description: >-
+      Create a typed node from one of four modern Houdini node families (RBD
+      material fracture, COps pyro, sparse GPU pyro, rasterize Volume): resolve
+      a readable alias or raw node type, create it in a parent network of the
+      matching category (Sop/Cop/Dop), apply bounded parameter overrides, and
+      wire existing input nodes. Creates/wires only; does not cook or verify an
+      artifact.
+    source_file: scripts/create_modern_sim_node.py
+    execution: sync
+    affinity: main
+    group: authoring
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [parent_path, node_type]
+      additionalProperties: false
+      properties:
+        parent_path:
+          type: string
+          description: >-
+            Absolute path of the parent network. Its child category must match
+            the node family: Sop for RBD material fracture / volumerasterize,
+            Cop for COps pyro / rasterizevolume, Dop for sparse GPU pyro.
+        node_type:
+          type: string
+          description: >-
+            Readable alias (e.g. rbd_material_fracture, pyro_configure,
+            pyro_sparse_solver, rasterize_volume) or a raw Houdini node type.
+            Use plan_modern_simulation to discover the supported aliases.
+        node_name:
+          type: string
+          description: Optional node name; defaults to the resolved node type plus 1.
+        input_nodes:
+          type: array
+          items: {type: string}
+          description: Existing nodes in the same parent network wired into sequential inputs.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides (unknown names fail and roll back).
