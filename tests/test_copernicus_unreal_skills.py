@@ -361,6 +361,66 @@ def test_inspect_rejects_tampered_color_convention(tmp_path):
     assert result["success"] is False
 
 
+def test_inspect_rejects_tampered_import_plan_color_flags(tmp_path):
+    """A data-map's import_asset color flags cannot be downgraded to color."""
+    export = _export()
+    inspect = _inspect()
+    common = _common()
+    out = tmp_path / "m.json"
+    export.export_copernicus_for_unreal(maps=_maps(tmp_path), asset_name="Rock", output_path=str(out))
+    data = common.load_manifest(str(out))
+    normal_import = next(c for c in data["import_plan"] if c["arguments"]["asset_name"].endswith("Normal"))
+    normal_import["arguments"]["non_color_texture"] = False
+    normal_import["arguments"]["source_color_space"] = "srgb"
+    common.write_manifest(str(out), data)
+    result = inspect.inspect_unreal_manifest(str(out))
+    assert result["success"] is False
+
+
+def test_inspect_rejects_tampered_import_plan_order(tmp_path):
+    """Reordering / duplicating import calls must not pass validation."""
+    export = _export()
+    inspect = _inspect()
+    common = _common()
+    out = tmp_path / "m.json"
+    export.export_copernicus_for_unreal(maps=_maps(tmp_path), asset_name="Rock", output_path=str(out))
+    data = common.load_manifest(str(out))
+    data["import_plan"].reverse()
+    common.write_manifest(str(out), data)
+    result = inspect.inspect_unreal_manifest(str(out))
+    assert result["success"] is False
+
+
+def test_inspect_rejects_tampered_material_plan(tmp_path):
+    """A re-pointed material slot must be caught by the rebuild/compare."""
+    export = _export()
+    inspect = _inspect()
+    common = _common()
+    out = tmp_path / "m.json"
+    export.export_copernicus_for_unreal(maps=_maps(tmp_path), asset_name="Rock", output_path=str(out))
+    data = common.load_manifest(str(out))
+    data["material_plan"]["arguments"]["normal_texture_path"] = "/Game/Textures/Rock/T_Rock_Roughness"
+    common.write_manifest(str(out), data)
+    result = inspect.inspect_unreal_manifest(str(out))
+    assert result["success"] is False
+
+
+def test_inspect_rejects_tampered_texture_source_color_space(tmp_path):
+    """source_color_space is part of the enforced color convention."""
+    export = _export()
+    inspect = _inspect()
+    common = _common()
+    out = tmp_path / "m.json"
+    export.export_copernicus_for_unreal(maps=_maps(tmp_path), asset_name="Rock", output_path=str(out))
+    data = common.load_manifest(str(out))
+    for tex in data["textures"]:
+        if tex["map_type"] == "base_color":
+            tex["source_color_space"] = ""
+    common.write_manifest(str(out), data)
+    result = inspect.inspect_unreal_manifest(str(out))
+    assert result["success"] is False
+
+
 def test_inspect_rejects_bad_schema(tmp_path):
     inspect = _inspect()
     out = tmp_path / "m.json"

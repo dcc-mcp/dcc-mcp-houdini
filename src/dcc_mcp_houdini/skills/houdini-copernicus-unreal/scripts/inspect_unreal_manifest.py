@@ -2,8 +2,9 @@
 
 Pure-Python (no ``hou``): this is the consumer-side contract check. It confirms
 the sidecar manifest written by ``export_copernicus_for_unreal`` is well-formed,
-re-derives the color convention for every texture, and returns the ready-to-use
-Unreal import/material plans.
+re-derives the color convention for every texture, and rebuilds the Unreal
+import/material plans from ``textures[]`` (failing closed on any tampering)
+before returning the ready-to-use plans.
 """
 
 import os

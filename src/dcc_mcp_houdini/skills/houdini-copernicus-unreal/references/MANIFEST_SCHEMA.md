@@ -40,8 +40,24 @@ so identical inputs produce byte-identical output.
 
 Color convention is derived from `map_type`: only `base_color` and `emissive`
 are sRGB; every other map is linear with `non_color_texture = true`.
-`inspect_unreal_manifest` re-derives these values and fails if a texture
-disagrees, so a tampered manifest cannot silently change color management.
+`inspect_unreal_manifest` re-derives these values (including
+`source_color_space`) and fails if a texture disagrees, so a tampered manifest
+cannot silently change color management.
+
+## Fail-closed plan verification
+
+`import_plan` and `material_plan` are not trusted as stored. On inspection the
+consumer rebuilds both plans from `textures[]` using the same derivation the
+writer used (asset names, `/Game` object paths, color flags and material slots
+all derived canonically from `map_type`, `asset_name` and the destination
+paths). If the rebuilt plans differ from the stored ones in any value or order,
+validation fails. Downgrading a data texture's `non_color_texture` /
+`source_color_space`, re-pointing a material slot, or reordering import calls
+therefore cannot pass as a "ready-to-use" manifest.
+
+Outside a Houdini session, Houdini variables such as `$HIP` in `source_path`
+cannot be expanded; the literal token is recorded, `artifact_exists` is
+`false`, and a warning explains the unexpanded token.
 
 ## `import_plan[]` entry
 

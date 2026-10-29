@@ -64,10 +64,14 @@ the manifest without re-deriving color management.
    - `warnings`, `deferred` capability notes, and a `note` describing the handoff.
    Artifact presence is reported in the tool result (`artifacts_present`); the
    manifest records `artifact_exists` per texture but never claims a render.
-3. `inspect_unreal_manifest(manifest_path)` — validates the schema (re-deriving
-   the color convention for every texture) and returns the `import_plan`,
-   `material_plan` and texture list, proving the manifest is consumable without
-   a live Unreal session.
+   Outside a Houdini session a `$HIP`/`$F` token in `source_path` is recorded
+   literally (it cannot be expanded), so `artifact_exists` is `false` and a
+   warning explains the unexpanded token.
+3. `inspect_unreal_manifest(manifest_path)` — validates the schema, re-derives
+   the color convention for every texture, and rebuilds `import_plan` and
+   `material_plan` from `textures[]`, failing closed if the stored plans were
+   tampered with. It then returns those ready-to-use plans and the texture list,
+   proving the manifest is consumable without a live Unreal session.
 
 See `references/MANIFEST_SCHEMA.md` for the exact JSON schema and a worked
 round-trip example.
@@ -85,5 +89,8 @@ round-trip example.
   Houdini-Engine/SessionSync links are **out of scope for v1** and recorded
   under `deferred` only — the skill never acts on them.
 - Python 3.7 compatible; no `hou` import at module load (lazy, inside the tool
-  when a `node_path` is used); filesystem writes are bounded to `output_path`.
+  when a `node_path` is used). The skill writes exactly one file — the manifest
+  at the caller-supplied `output_path` — and reads source artifacts only; it
+  does not scan or modify any other directory. `output_path` is caller-chosen
+  (any writable path), so it is not sandboxed and should be set deliberately.
   This keeps the py37 CI syntax gate green and needs no Unreal-side changes.
