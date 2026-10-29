@@ -10,7 +10,7 @@ from typing import List, Optional
 from _background_render import launch_background_render  # noqa: E402
 from _render_common import (  # noqa: E402
     PRIMARY_OUTPUT_PARMS,
-    eval_first_parm,
+    eval_first_parm_named,
     expanded_outputs,
     get_node,
     node_summary,
@@ -94,7 +94,7 @@ def render_rop(
                 "Node has no supported render action; expected a ROP/output driver",
                 node_path=rop.path(),
             )
-        output_pattern = eval_first_parm(rop, PRIMARY_OUTPUT_PARMS, preserve_string=True)
+        output_parm_name, output_pattern = eval_first_parm_named(rop, PRIMARY_OUTPUT_PARMS, preserve_string=True)
         use_background = True if background is None else background
         if artifact_transaction is not None and not use_background:
             return skill_error(
@@ -116,6 +116,7 @@ def render_rop(
                 "Started background ROP render",
                 rop=node_summary(rop),
                 background=True,
+                output_parm_name=output_parm_name,
                 **job,
             )
         errors: List[str] = []
