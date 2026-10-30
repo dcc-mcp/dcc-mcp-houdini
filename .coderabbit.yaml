@@ -1,0 +1,6 @@
+# PR descriptions in this repository are maintained as human-authored public
+# content. Disable only CodeRabbit's auto-generated "Summary by CodeRabbit" /
+# release-notes block that it otherwise injects into the PR body on each
+# review; code review findings and the walkthrough remain fully enabled.
+reviews:
+  high_level_summary: false

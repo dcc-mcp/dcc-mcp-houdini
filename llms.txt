@@ -68,6 +68,7 @@ server.list_skills()
 ### interchange (load on demand)
 - `houdini_interchange__probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd`
 - `houdini_import_to_scene__import_to_scene`
+- `houdini_copernicus_unreal__export_copernicus_for_unreal`, `inspect_unreal_manifest`
 
 ### pipeline (load on demand)
 - `houdini_render__capture_viewport`, `flipbook`, `get_render_settings`, `set_render_settings`, `validate_karma_stage`, `render_rop`, `get_render_job`, `finalize_render_outputs`, `denoise_image`, `cancel_render_job`, `create_render_layer`, `configure_aovs`, `manage_takes`, `get_render_stats`
@@ -87,7 +88,7 @@ server.list_skills()
 - `bootstrap`: `houdini-scripting` (default loaded)
 - `scene`: `houdini-scene`, `houdini-scene-edit` (partial default)
 - `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus`
-- `interchange`: `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`
+- `interchange`: `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`, `houdini-copernicus-unreal`
 - `pipeline`: `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-crowds`, `houdini-pdg`
 
 ## Dev (Windows)

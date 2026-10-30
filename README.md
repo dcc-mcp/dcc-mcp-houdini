@@ -449,6 +449,7 @@ Full authoritative index with ready-made task chains: `src/dcc_mcp_houdini/skill
 | `houdini-interchange` | `probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd` |
 | `houdini-asset-sync` | `publish_usd_revision`, `read_asset_head`, `reference_usd_revision` |
 | `houdini-import-to-scene` | `import_to_scene` |
+| `houdini-copernicus-unreal` | `export_copernicus_for_unreal`, `inspect_unreal_manifest` |
 
 ### pipeline (load on demand)
 | Skill | Tools |
