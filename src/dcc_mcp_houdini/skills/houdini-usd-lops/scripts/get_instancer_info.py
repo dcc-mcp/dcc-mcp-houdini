@@ -28,11 +28,44 @@ def _is_point_instancer(UsdGeom: Any, prim: Any) -> bool:
 
 
 def _authored_array(prim: Any, name: str, time: Any) -> Any:
-    """Return the authored value of array attribute *name*, else ``None``."""
+    """Return the value of array attribute *name* at *time*, else ``None``."""
     attribute = prim.GetAttribute(name)
     if not attribute:
         return None
     return attribute.Get(time)
+
+
+def _num_time_samples(attribute: Any) -> int:
+    """Return the authored time-sample count, or 0 when the API is absent."""
+    get_count = getattr(attribute, "GetNumTimeSamples", None)
+    if not callable(get_count):
+        return 0
+    try:
+        return int(get_count())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _earliest_numeric_time(prim: Any, names: Any) -> Any:
+    """Return the smallest numeric time sample across *names*, else ``"earliest"``."""
+    earliest = None
+    for name in names:
+        attribute = prim.GetAttribute(name)
+        get_samples = getattr(attribute, "GetTimeSamples", None)
+        if not callable(get_samples):
+            continue
+        try:
+            samples = list(get_samples())
+        except (TypeError, ValueError):
+            continue
+        for sample in samples:
+            try:
+                value = float(sample)
+            except (TypeError, ValueError):
+                continue
+            if earliest is None or value < earliest:
+                earliest = value
+    return earliest if earliest is not None else "earliest"
 
 
 def _array_count(value: Any) -> int:
@@ -44,11 +77,52 @@ def _array_count(value: Any) -> int:
         return 0
 
 
+def _normalize_element(element: Any) -> Any:
+    """Turn a non-iterable Gf quaternion into a numeric ``[real, i, j, k]`` list.
+
+    ``bounded_value`` falls back to ``str(value)`` for objects it cannot iterate,
+    which would turn an orientation into ``"(1, 0, 0, 0)"``. USD quats expose a
+    real part and a 3-vector imaginary part; decompose either API shape so the
+    sample stays a parseable numeric array.
+    """
+    get_real = getattr(element, "GetReal", None)
+    get_imag = getattr(element, "GetImaginary", None)
+    if callable(get_real) and callable(get_imag):
+        try:
+            imaginary = get_imag()
+            return [float(get_real()), float(imaginary[0]), float(imaginary[1]), float(imaginary[2])]
+        except (TypeError, ValueError, IndexError, KeyError):
+            return element
+    real = getattr(element, "real", None)
+    imaginary = getattr(element, "imaginary", None)
+    if real is not None and imaginary is not None and not isinstance(element, (int, float)):
+        try:
+            return [float(real), float(imaginary[0]), float(imaginary[1]), float(imaginary[2])]
+        except (TypeError, ValueError, IndexError, KeyError):
+            return element
+    return element
+
+
 def _bounded_sample(value: Any, max_values: int) -> Optional[dict]:
-    """Return a size-bounded, JSON-safe sample of an authored array."""
+    """Return a size-bounded, JSON-safe sample without materialising the array.
+
+    A lazy generator keeps a multi-million-instance scatter bounded on the main
+    thread; quaternion elements are normalised before ``bounded_value`` sees them.
+    """
     if value is None:
         return None
-    return bounded_value(list(value), max_values, 1024)
+    return bounded_value((_normalize_element(item) for item in value), max_values, 1024)
+
+
+def _read_arrays(prim: Any, time: Any, max_values: int) -> tuple:
+    """Read every instance array once: full count plus a bounded, safe sample."""
+    raw, arrays, counts = {}, {}, {}
+    for name in _INSTANCE_ARRAYS:
+        value = _authored_array(prim, name, time)
+        raw[name] = value
+        arrays[name] = _bounded_sample(value, max_values)
+        counts[name] = _array_count(value)
+    return raw, arrays, counts
 
 
 def get_instancer_info(
@@ -64,6 +138,14 @@ def get_instancer_info(
     transform arrays, and a decidable ``validation`` verdict so a caller can
     assert whether a scattered-asset setup is well formed without authoring any
     change to the stage.
+
+    A LOP scatter often writes its arrays only as per-frame time samples (no
+    default value). At ``Usd.TimeCode.Default()`` those arrays read empty, which
+    would otherwise look like "0 instances, all consistent" — a false pass for a
+    validation tool. When no explicit ``time_code`` is given and such arrays are
+    detected, the arrays are re-read at the earliest time sample (so the data is
+    real), the effective time is reported, and ``time_samples_require_time_code``
+    is flagged so ``consistent`` is never a silent green on frame-varying data.
     """
     try:
         import hou  # noqa: PLC0415
@@ -78,7 +160,6 @@ def get_instancer_info(
         prim = resolve_prim(stage, prim_path)
         if not _is_point_instancer(UsdGeom, prim):
             raise ValueError("USD prim is not a PointInstancer: {} (type {})".format(prim_path, prim.GetTypeName()))
-        usd_time = make_time_code(Usd, time_code)
 
         # Prototype relationship: which asset prims the scatter references.
         relationship = prim.GetRelationship("prototypes")
@@ -87,15 +168,25 @@ def get_instancer_info(
         prototypes_truncated = prototype_count > max_prototypes
         prototypes = [str(target) for target in targets[:max_prototypes]]
 
-        # One read per array: full count, plus a bounded JSON-safe sample.
-        arrays = {}
-        counts = {}
-        raw = {}
-        for name in _INSTANCE_ARRAYS:
-            value = _authored_array(prim, name, usd_time)
-            raw[name] = value
-            arrays[name] = _bounded_sample(value, max_values)
-            counts[name] = _array_count(value)
+        requested_time = make_time_code(Usd, time_code)
+        raw, arrays, counts = _read_arrays(prim, requested_time, max_values)
+
+        # Detect arrays authored only as time samples (empty at Default()). Re-read
+        # everything at the earliest sample so validation uses real, frame-varying
+        # data, and flag that a definitive verdict needs an explicit time_code.
+        time_sampled_arrays = []
+        time_code_source = "default" if time_code is None else "explicit"
+        effective_time_code = "default" if time_code is None else float(time_code)
+        if time_code is None:
+            for name in _INSTANCE_ARRAYS:
+                attribute = prim.GetAttribute(name)
+                if attribute and _num_time_samples(attribute) > 0 and counts[name] == 0:
+                    time_sampled_arrays.append(name)
+            if time_sampled_arrays:
+                earliest = Usd.TimeCode.EarliestTime()
+                raw, arrays, counts = _read_arrays(prim, earliest, max_values)
+                time_code_source = "earliest_sample"
+                effective_time_code = _earliest_numeric_time(prim, time_sampled_arrays)
 
         instance_count = counts["protoIndices"]
         indices = raw["protoIndices"]
@@ -115,6 +206,8 @@ def get_instancer_info(
                 mismatched.append(name)
 
         issue_codes = []
+        if time_sampled_arrays:
+            issue_codes.append("time_samples_require_time_code")
         if out_of_range:
             issue_codes.append("proto_indices_out_of_range")
         if instance_count and not prototype_count:
@@ -137,6 +230,9 @@ def get_instancer_info(
             lop_node_path=str(node.path()),
             prim_path=str(prim.GetPath()),
             time_code="default" if time_code is None else float(time_code),
+            time_code_source=time_code_source,
+            effective_time_code=effective_time_code,
+            time_sampled_arrays=time_sampled_arrays,
             type_name=str(prim.GetTypeName()),
             instance_count=instance_count,
             prototype_count=prototype_count,

@@ -77,9 +77,12 @@ onto points. It is read-only and never authors to the stage. It reports:
   `orientations`, `scales`, and `invisibleIds` (each with truncation flags).
 - `array_counts` — the full authored length of each of those arrays, so the
   verdict is computed from complete data even when samples are truncated.
+  Quaternion orientations are reported as numeric `[real, i, j, k]` lists.
 - `validation` — a decidable verdict: `instance_count`, `prototype_count`,
   `proto_indices_in_range`, `out_of_range_count`, `per_instance_arrays_match`,
   `consistent`, and `issue_codes`.
+- `time_code_source` / `effective_time_code` / `time_sampled_arrays` — which time
+  code was actually used and whether any array is frame-varying.
 
 ```
 houdini_usd_lops__get_instancer_info(
@@ -91,6 +94,16 @@ houdini_usd_lops__get_instancer_info(
 This lets a caller assert whether a scattered-asset setup is well formed without
 mutating the stage. It inspects one PointInstancer prim; it does not enumerate all
 instancers in a scene — use `list_stage_prims` to find candidate prim paths.
+
+**Time-varying scatters.** Houdini often writes a scatter's arrays only as
+per-frame time samples with no default value. At `Usd.TimeCode.Default()` those
+arrays read empty, which would look like "0 instances, all consistent" — a false
+pass for a validation tool. When no `time_code` is given and such arrays are
+detected, the arrays are re-read at the earliest time sample (so the data is
+real), `time_code_source` reports `earliest_sample`, and
+`time_samples_require_time_code` is added to `issue_codes` so `consistent` is
+never a silent green. Pin an explicit `time_code` to validate a specific frame
+definitively.
 
 ## Write scope
 

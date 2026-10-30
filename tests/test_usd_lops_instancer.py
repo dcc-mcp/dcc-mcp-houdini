@@ -50,6 +50,46 @@ class _Attribute:
         return self._value
 
 
+class _TimeSampledAttribute:
+    """Doubles an array authored only as time samples (no default value).
+
+    At ``Usd.TimeCode.Default()`` such an attribute reads empty; at
+    ``EarliestTime()`` or a numeric time it returns the real sample data.
+    """
+
+    def __init__(self, value, sample_time=1.0, default=None):
+        self._value = value
+        self._sample_time = sample_time
+        self._default = default
+        self.read_times = []
+
+    def GetNumTimeSamples(self):
+        return 1
+
+    def GetTimeSamples(self):
+        return [self._sample_time]
+
+    def Get(self, time):
+        self.read_times.append(time)
+        if getattr(time, "value", None) == "default":
+            return self._default
+        return self._value
+
+
+class _Quat:
+    """Doubles Gf.Quath: non-iterable, with GetReal/GetImaginary."""
+
+    def __init__(self, real, i, j, k):
+        self._real = real
+        self._imag = (i, j, k)
+
+    def GetReal(self):
+        return self._real
+
+    def GetImaginary(self):
+        return self._imag
+
+
 class _Relationship:
     def __init__(self, targets):
         self._targets = list(targets)
@@ -128,6 +168,10 @@ class _TimeCode:
     def Default(cls):
         return cls("default")
 
+    @classmethod
+    def EarliestTime(cls):
+        return cls("earliest")
+
 
 def _hou_module(stage):
     node = _Node(stage)
@@ -157,6 +201,24 @@ def _instancer_prim(
     attributes = {
         "protoIndices": _Attribute(list(proto_indices)),
         "positions": _Attribute([list(p) for p in positions]),
+    }
+    return _Prim(
+        "/World/scatter",
+        attributes=attributes,
+        prototype_targets=list(prototype_targets),
+    )
+
+
+def _time_sampled_instancer_prim(
+    proto_indices=(0, 0),
+    positions=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+    prototype_targets=("/World/scatter/Protos/rock", "/World/scatter/Protos/tree"),
+    sample_time=1.0,
+):
+    """A scatter whose arrays exist only as time samples (no default value)."""
+    attributes = {
+        "protoIndices": _TimeSampledAttribute(list(proto_indices), sample_time),
+        "positions": _TimeSampledAttribute([list(p) for p in positions], sample_time),
     }
     return _Prim(
         "/World/scatter",
@@ -267,6 +329,81 @@ def test_empty_instancer_is_consistent():
     assert validation["instance_count"] == 0
     assert validation["consistent"] is True
     assert validation["issue_codes"] == []
+
+
+# ---------------------------------------------------------------------------
+# F1 regression: time-sampled-only scatter must never be a silent green.
+# ---------------------------------------------------------------------------
+def test_timesampled_only_without_time_code_is_not_false_consistent():
+    """F1: arrays with only time samples read empty at Default(); the tool must
+    re-read at the earliest sample and refuse to report a silent ``consistent``."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _time_sampled_instancer_prim()
+    result = _run(mod, prim)
+
+    assert result["success"] is True
+    context = result["context"]
+    # Real data was read at the earliest sample, not an empty default.
+    assert context["instance_count"] == 2
+    assert context["array_counts"]["protoIndices"] == 2
+    assert context["proto_indices"]["value"] == [0, 0]
+    assert context["time_code_source"] == "earliest_sample"
+    assert context["effective_time_code"] == 1.0
+    assert "protoIndices" in context["time_sampled_arrays"]
+    validation = context["validation"]
+    assert "time_samples_require_time_code" in validation["issue_codes"]
+    assert validation["consistent"] is False
+
+
+def test_timesampled_only_out_of_range_indices_are_still_flagged():
+    """F1: re-reading at the earliest sample keeps range validation honest, so a
+    bad protoIndex in a time-varying scatter is reported, not a false green."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _time_sampled_instancer_prim(proto_indices=(0, 5))
+    validation = _run(mod, prim)["context"]["validation"]
+    assert validation["out_of_range_count"] == 1
+    assert "proto_indices_out_of_range" in validation["issue_codes"]
+    assert "time_samples_require_time_code" in validation["issue_codes"]
+    assert validation["consistent"] is False
+
+
+def test_explicit_time_code_skips_earliest_sample_reread():
+    """When the caller pins a time code, the tool validates at that time and does
+    not flag time_samples_require_time_code."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _time_sampled_instancer_prim()
+    result = _run(mod, prim, time_code=1.0)
+
+    assert result["success"] is True
+    context = result["context"]
+    assert context["time_code"] == 1.0
+    assert context["time_code_source"] == "explicit"
+    assert context["effective_time_code"] == 1.0
+    assert context["time_sampled_arrays"] == []
+    assert context["instance_count"] == 2
+    assert context["validation"]["consistent"] is True
+    assert context["validation"]["issue_codes"] == []
+
+
+def test_default_value_arrays_are_not_flagged_as_time_sampled():
+    """Arrays with a default value must follow the normal path (no flag)."""
+    mod = _load_script("get_instancer_info.py")
+    result = _run(mod, _instancer_prim())
+    assert result["context"]["time_code_source"] == "default"
+    assert result["context"]["time_sampled_arrays"] == []
+    assert "time_samples_require_time_code" not in result["context"]["validation"]["issue_codes"]
+
+
+def test_orientations_are_decomposed_to_numeric_arrays():
+    """P3: quaternion orientations become [real, i, j, k] numeric lists."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _instancer_prim()
+    prim._attributes["orientations"] = _Attribute([_Quat(1.0, 0.5, 0.25, 0.125)] * 3)
+    result = _run(mod, prim)
+
+    assert result["success"] is True
+    sample = result["context"]["instance_arrays"]["orientations"]["value"]
+    assert sample == [[1.0, 0.5, 0.25, 0.125]] * 3
 
 
 # ---------------------------------------------------------------------------
@@ -422,3 +559,86 @@ def test_real_pxr_non_instancer_prim_is_rejected():
 
     assert result["success"] is False
     assert "PointInstancer" in json.dumps(result)
+
+
+def test_real_pxr_timesampled_only_without_time_code_is_not_false_consistent():
+    """F1 (real usd-core): protoIndices/positions authored ONLY as time samples at
+    t=1 have no default value. At Default() they read empty (which previously gave
+    instance_count=0, consistent=True). The fix must re-read at the earliest
+    sample and refuse a silent green, while keeping range validation honest.
+    """
+    Usd, UsdGeom, Sdf, Gf, Vt = _real_pxr()
+    mod = _load_script("get_instancer_info.py")
+    stage = Usd.Stage.CreateInMemory()
+    pi = UsdGeom.PointInstancer.Define(stage, "/World/scatter")
+    rock = stage.DefinePrim("/World/scatter/Protos/rock", "Xform")
+    pi.GetPrototypesRel().SetTargets([rock.GetPath()])
+    sample_time = Usd.TimeCode(1.0)
+    pi.GetProtoIndicesAttr().Set(Vt.IntArray([0, 5]), sample_time)
+    pi.GetPositionsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0, 0, 0), Gf.Vec3f(1, 0, 0)]), sample_time)
+
+    # Sanity: the arrays really are time-sampled-only (empty at Default()).
+    assert pi.GetProtoIndicesAttr().GetNumTimeSamples() == 1
+    assert pi.GetProtoIndicesAttr().Get(Usd.TimeCode.Default()) is None
+
+    result = _real_run(mod, stage, "/World/scatter")  # no time_code
+
+    assert result["success"] is True
+    context = result["context"]
+    assert context["instance_count"] == 2
+    assert context["proto_indices"]["value"] == [0, 5]
+    assert context["time_code_source"] == "earliest_sample"
+    assert context["effective_time_code"] == 1.0
+    validation = context["validation"]
+    assert "time_samples_require_time_code" in validation["issue_codes"]
+    # 5 is out of range for the single prototype -> honest range check on re-read.
+    assert "proto_indices_out_of_range" in validation["issue_codes"]
+    assert validation["consistent"] is False
+
+
+def test_real_pxr_timesampled_only_with_explicit_time_code_validates_normally():
+    """F1 complement: pinning the frame validates real data with no false flag."""
+    Usd, UsdGeom, Sdf, Gf, Vt = _real_pxr()
+    mod = _load_script("get_instancer_info.py")
+    stage = Usd.Stage.CreateInMemory()
+    pi = UsdGeom.PointInstancer.Define(stage, "/World/scatter")
+    rock = stage.DefinePrim("/World/scatter/Protos/rock", "Xform")
+    tree = stage.DefinePrim("/World/scatter/Protos/tree", "Xform")
+    pi.GetPrototypesRel().SetTargets([rock.GetPath(), tree.GetPath()])
+    sample_time = Usd.TimeCode(1.0)
+    pi.GetProtoIndicesAttr().Set(Vt.IntArray([0, 1]), sample_time)
+    pi.GetPositionsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0, 0, 0), Gf.Vec3f(1, 0, 0)]), sample_time)
+
+    result = _real_run(mod, stage, "/World/scatter", time_code=1.0)
+
+    assert result["success"] is True
+    context = result["context"]
+    assert context["time_code_source"] == "explicit"
+    assert context["time_sampled_arrays"] == []
+    assert context["instance_count"] == 2
+    assert context["validation"]["consistent"] is True
+    assert context["validation"]["issue_codes"] == []
+
+
+def test_real_pxr_orientations_quat_is_numeric_array():
+    """P3 (real usd-core): Gf.Quath orientations must be [real, i, j, k] numeric
+    lists, not stringified tuples that a caller cannot parse.
+    """
+    Usd, UsdGeom, Sdf, Gf, Vt = _real_pxr()
+    mod = _load_script("get_instancer_info.py")
+    stage = Usd.Stage.CreateInMemory()
+    pi = UsdGeom.PointInstancer.Define(stage, "/World/scatter")
+    rock = stage.DefinePrim("/World/scatter/Protos/rock", "Xform")
+    pi.GetPrototypesRel().SetTargets([rock.GetPath()])
+    pi.GetProtoIndicesAttr().Set(Vt.IntArray([0, 0]))
+    pi.GetPositionsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0, 0, 0), Gf.Vec3f(1, 0, 0)]))
+    quats = Vt.QuathArray([Gf.Quath(1.0, 0.5, 0.25, 0.125), Gf.Quath(0.0, 1.0, 0.0, 0.0)])
+    pi.GetOrientationsAttr().Set(quats)
+
+    result = _real_run(mod, stage, "/World/scatter")
+
+    assert result["success"] is True
+    sample = result["context"]["instance_arrays"]["orientations"]["value"]
+    assert sample == [[1.0, 0.5, 0.25, 0.125], [0.0, 1.0, 0.0, 0.0]]
+    for entry in sample:
+        assert all(isinstance(component, float) for component in entry)

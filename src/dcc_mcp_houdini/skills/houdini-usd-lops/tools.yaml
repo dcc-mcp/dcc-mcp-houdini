@@ -173,7 +173,11 @@ tools:
           description: Absolute USD prim path of the PointInstancer to inspect.
         time_code:
           type: number
-          description: Optional USD time code. Omit to use the default time code.
+          description: >-
+            USD time code for the read. Omit for default time; if the scatter's
+            arrays exist only as time samples, the earliest sample is used and
+            time_samples_require_time_code is flagged (pin a time_code for a
+            definitive verdict).
         max_values:
           type: integer
           minimum: 1
