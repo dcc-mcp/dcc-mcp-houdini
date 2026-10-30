@@ -59,7 +59,7 @@ server.list_skills()
 - `houdini_chops__create_chop_network`, `create_motionclip`, `create_audio_driven`, `apply_filter`, `export_to_keyframes`, `get_channel_info`
 - `houdini_constraints__create_parent_constraint`, `create_blend_constraint`, `create_position_constraint`, `create_orient_constraint`, `list_constraints`, `delete_constraint`
 - `houdini_export_preset__list_export_presets`, `save_export_preset`, `load_export_preset`, `delete_export_preset`
-- `houdini_kinefx__create_rig`, `set_rig_pose`, `capture_joints`, `apply_mocap`
+- `houdini_kinefx__create_rig`, `set_rig_pose`, `capture_joints`, `apply_mocap`, `build_retarget_motion_mixer`, `plan_character_workflow`, `design_character`, `biped_joint_map`, `import_generated_character`, `create_biped_template`, `configure_biped_retarget`, `invert_rig`, `build_ragdoll`, `build_apex_fbx_biped`
 - `houdini_light_rig__create_three_point_light_rig`, `create_area_softbox`, `create_hdri_world`, `list_light_rigs`, `set_light_rig_intensity`, `aim_light_at_object`, `group_lights`, `set_render_view_transform`, `get_lighting_summary`, `configure_light_shadow`, `configure_light_bank`, `set_light_ies`
 - `houdini_material_library__save_material_preset`, `list_material_presets`, `load_material_preset`, `delete_material_preset`, `get_shader_assignment`, `get_material_connections`, `set_material_attribute`, `assign_texture`, `list_images`, `reload_image`, `list_color_spaces`, `set_color_management`
 - `houdini_texture_bake__list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps`, `configure_udim_bake`, `inspect_bake_output`

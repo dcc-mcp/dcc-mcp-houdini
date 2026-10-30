@@ -1,9 +1,11 @@
 ---
 name: houdini-kinefx
 description: >-
-  Pipeline skill — typed KineFX character animation tools. Create and
-  configure rig skeletons, set rig poses, capture joint skinning weights,
-  and apply motion capture data via SOP-level KineFX nodes.
+  Pipeline skill — typed KineFX character animation tools and the end-to-end
+  character-animation workflow. Create/configure rig skeletons, biped templates,
+  import generated characters, retarget motion, invert rigs, build ragdolls, pack
+  APEX FBX bipeds and plan the whole pipeline; also set rig poses, capture skin
+  weights, apply mocap and drive Motion Mixer / Full Body IK.
 license: MIT
 compatibility: "dcc-mcp-houdini 0.1+, Houdini 20.5+, dcc-mcp-core 0.20.14+"
 allowed-tools: Bash Read Write Edit
@@ -12,42 +14,71 @@ metadata:
     dcc: houdini
     layer: domain
     stage: pipeline
-    version: "1.3.0"
-    tags: [houdini, kinefx, rig, skeleton, capture, mocap, retarget, motionclip, motion-mixer, apex, character, animation, pipeline]
-    search-hint: "kinefx rig retarget motion mixer motionclip APEX skeleton pose joint capture mocap character skinning"
+    version: "1.4.0"
+    tags: [houdini, kinefx, rig, skeleton, capture, mocap, retarget, motionclip, motion-mixer, apex, character, animation, pipeline, biped, ragdoll, rig-inversion, fbx, workflow, character-design]
+    search-hint: "kinefx rig retarget motion mixer motionclip APEX skeleton pose joint capture mocap character skinning biped ragdoll rig inversion fbx template workflow design codex hyper3d"
     tools: tools.yaml
 ---
 
 # houdini-kinefx
 
-Typed KineFX character animation tools for agents. All tools are `affinity: main`.
+Typed KineFX character animation tools for agents. Scene tools are
+`affinity: main`; the pure planning tools (`plan_character_workflow`,
+`design_character`, `biped_joint_map`) are `affinity: any` — they need no Houdini
+and are fully unit-testable headless.
 
 KineFX operates at the SOP level — skeletons are geometry with joint point
 attributes, rigs are SOP networks, and mocap data is applied via SOP nodes.
 
+The eight-stage character-animation workflow (codex design → hyper3d generation
+→ Biped template → biped retarget → rig inversion → Motion Mixer full body IK →
+ragdoll → KineFx APEX FBX biped template) is designed in
+`docs/guide/houdini-character-animation-workflow.md` and returned as data by
+`plan_character_workflow`. External codex/hyper3d steps degrade to offline
+equivalents (`design_character`, `import_generated_character`).
+
 ## Tool groups
 
-- **`rig`:** `create_insect_rig` — build an anatomy-aware worker-honeybee rig
-  with six complete leg chains, four wings, flexible abdomen, eyes, antennae,
-  six grounded claw joints, and fourteen head/thorax/abdomen width controls.
-  Optional measured body length, head/thorax/abdomen width, standing height,
-  wing span, and leg span calibrate independent anatomical axes while
-  preserving the legacy uniform `scale`; `create_rig` remains the generic
-  joint-chain API and optional rig pose/attachments.
-- **`pose`:** `set_rig_pose` sets joint transforms;
-  `validate_ground_contacts` verifies named support joints against one ground
-  surface with numeric clearance and penetration evidence.
-- **`capture`:** `capture_joints` captures skinning weights; then
-  `deform_gsplat_with_rig` deforms GSplat centers and quaternion orientation
-  while preserving anisotropic scale.
-- **`mocap`:** `apply_mocap` — apply motion capture data (FBX, BVH, or
-  KineFX clip) onto a rig skeleton.
-- **`retarget/mixer`:** `build_retarget_motion_mixer` — build the Houdini 22
-  Rig Match Pose → Map Points → Full Body IK contract, sample multiple
-  MotionClips, pack an APEX character, add named clips, and create a real
-  Motion Mixer + Fetch pair with node-level cook validation.
+- **`workflow` (pure/headless):** `plan_character_workflow` returns the full
+  eight-stage design, gaps/enhancements, external-capability status and
+  acceptance criteria; `design_character` emits/validates a structured design
+  spec (the codex equivalent); `biped_joint_map` returns cross-convention joint
+  maps; `import_generated_character` ingests a generated mesh or builds a proxy
+  (the hyper3d equivalent).
+- **`rig`:** `create_insect_rig` (anatomy-aware honeybee), `create_rig`
+  (generic joint chain), `create_biped_template` (standard 22-joint humanoid
+  biped in 5 naming conventions), `invert_rig` (world→local rig inversion).
+- **`pose`:** `set_rig_pose` sets joint transforms; `validate_ground_contacts`
+  verifies named support joints against one ground surface.
+- **`capture`:** `capture_joints` captures skinning weights;
+  `deform_gsplat_with_rig` deforms GSplat centers and quaternion orientation.
+- **`mocap`:** `apply_mocap` applies FBX/BVH/clip mocap onto a rig skeleton.
+- **`retarget/mixer`:** `build_retarget_motion_mixer` builds the Houdini 22 Rig
+  Match Pose → Map Points → Full Body IK → MotionClip → APEX → Motion Mixer
+  chain (now with optional explicit cross-convention `joint_map`);
+  `configure_biped_retarget` builds a single-source retarget with an explicit
+  naming map.
+- **`simulation`:** `build_ragdoll` builds proxy colliders, a constraint network
+  and an RBD solver for a physics ragdoll.
+- **`apex`:** `build_apex_fbx_biped` packs an APEX biped character and reports
+  the engine-ready FBX export contract.
 
-## Tracer-bullet flow
+## Tracer-bullet flow (full character workflow)
+
+1. `plan_character_workflow()` → stages, tools, gaps, external fallbacks.
+2. `design_character(style="stylized_game", naming_convention="kinefx")` → spec.
+3. `import_generated_character(geo_path="/obj/char", mesh_file="/path/hero.fbx")`
+   (or proxy) → rig-ready mesh.
+4. `create_biped_template(geo_path="/obj/char", convention="kinefx")` → skeleton.
+5. `capture_joints(...)` → skin weights (existing capture skill).
+6. `biped_joint_map(source_convention="mixamo", target_convention="kinefx")`.
+7. `configure_biped_retarget(...)` and/or `build_retarget_motion_mixer(...)` →
+   retarget + Motion Mixer full body IK + APEX character.
+8. `invert_rig(...)` → local transforms (rig inversion).
+9. `build_ragdoll(...)` → physics ragdoll.
+10. `build_apex_fbx_biped(...)` → APEX FBX biped template + `export_fbx` contract.
+
+## Tracer-bullet flow (generic rig)
 
 1. `create_rig(geo_path="/obj/geo1/rig1", joint_chain=[...])` → creates a
    KineFX skeleton inside a Geometry SOP network.

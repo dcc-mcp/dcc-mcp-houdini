@@ -339,5 +339,369 @@ tools:
         mapping_attribute: {type: string, default: retarget_joint}
         node_prefix: {type: string, default: dcc_mcp_retarget}
         add_secondary_motion: {type: boolean, default: true}
+        joint_map:
+          type: object
+          additionalProperties: {type: string}
+          description: >-
+            Optional explicit {source_joint_name: target_joint_name} map. When
+            set, retargeting switches to explicit-attribute mapping so differently
+            named biped skeletons can be retargeted.
+        source_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          description: >-
+            Naming convention of the source skeletons; with target_convention
+            derives the standard biped joint map automatically.
+        target_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          description: Naming convention of the target biped skeleton.
     next-tools:
       on-failure: [houdini_scene__get_node_info, houdini_render__capture_viewport]
+  - name: plan_character_workflow
+    description: >-
+      Return the full eight-stage Houdini character-animation workflow design:
+      stages, per-stage tools, gaps/enhancements, external (codex/hyper3d)
+      capability status with offline equivalent alternatives, and acceptance
+      criteria. Pure, headless tool for discovery/planning. See
+      docs/guide/houdini-character-animation-workflow.md.
+    source_file: scripts/plan_character_workflow.py
+    execution: sync
+    affinity: any
+    group: workflow
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        codex_available:
+          type: boolean
+          description: Optional orchestrator probe result for the codex design capability.
+        hyper3d_available:
+          type: boolean
+          description: Optional orchestrator probe result for the hyper3d generation capability.
+  - name: design_character
+    description: >-
+      Emit or validate a structured character design spec (the offline
+      equivalent of the external codex design step). Produces a strict JSON
+      contract (style, proportions, naming convention, capture/retarget/ragdoll
+      options) consumed by the rest of the workflow; validates externally
+      authored specs. Pure, headless tool.
+    source_file: scripts/design_character.py
+    execution: sync
+    affinity: any
+    group: workflow
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, default: hero}
+        style:
+          type: string
+          enum: [realistic, stylized, cartoon, stylized_game]
+          default: stylized_game
+        engine: {type: string, default: unreal}
+        height: {type: number, minimum: 0.01, default: 1.7}
+        naming_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          default: kinefx
+        face_forward: {type: string, default: "+Z"}
+        up_axis: {type: string, enum: [Y, Z], default: Y}
+        spec:
+          type: object
+          description: >-
+            Optional externally authored design spec to validate instead of
+            generating one. Must include name, target_height, naming_convention.
+  - name: biped_joint_map
+    description: >-
+      Return an explicit biped joint-name map (source name -> target name)
+      between two naming conventions (kinefx/biped/mixamo/unreal/fbx). Used to
+      author the retarget_joint attribute for cross-convention KineFX retarget,
+      rig inversion and APEX FBX biped template. Pure, headless tool.
+    source_file: scripts/biped_joint_map.py
+    execution: sync
+    affinity: any
+    group: workflow
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        source_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          default: mixamo
+        target_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          default: kinefx
+  - name: import_generated_character
+    description: >-
+      Import an externally generated character mesh (hyper3d/Rodin output:
+      FBX/OBJ/ABC/bgeo/USD) into a SOP network, validate geometry, optionally
+      normalize height, and report a rig-ready contract. Builds a procedural
+      proxy when no file is present, so the workflow runs fully offline. This
+      is the in-adapter equivalent of the external hyper3d generation step.
+    source_file: scripts/import_generated_character.py
+    execution: sync
+    affinity: main
+    group: workflow
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        mesh_file:
+          type: string
+          description: Path to a generated character mesh (FBX/OBJ/ABC/bgeo/GLB/USD).
+        node_name: {type: string, default: generated_character}
+        target_height:
+          type: number
+          minimum: 0.01
+          description: Optional height normalization target.
+        proxy:
+          type: boolean
+          default: true
+          description: Build a procedural proxy when the file is missing/uncookable.
+        asset_descriptor:
+          type: object
+          description: >-
+            Optional hyper3d AssetDescriptor (local_path / format / variants);
+            its local mesh path is imported when mesh_file is unset.
+    next-tools:
+      on-failure: [houdini_scene__get_node_info, houdini_interchange__probe_file]
+  - name: create_biped_template
+    description: >-
+      Create a standard 22-joint humanoid Biped KineFX skeleton template with
+      stable joints across five naming conventions (kinefx/biped/mixamo/unreal/
+      fbx), configurable height and ground. Fills workflow stage 3 (Biped
+      template); the joint map feeds retarget, rig inversion and APEX FBX.
+    source_file: scripts/create_biped_template.py
+    execution: sync
+    affinity: main
+    group: rig
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [geo_path]
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        rig_name: {type: string, default: biped}
+        convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          default: kinefx
+        height: {type: number, minimum: 0.01, default: 1.7}
+        ground_z: {type: number, default: 0.0}
+    next-tools:
+      on-failure: [houdini_scene__get_node_info]
+  - name: configure_biped_retarget
+    description: >-
+      Build a single-source biped retarget chain (Rig Match Pose -> Map Points
+      -> Full Body IK) with an explicit cross-convention joint map. Fills
+      workflow stage 4 (biped motion retarget). Complements the multi-clip
+      build_retarget_motion_mixer by mapping differently named skeletons. The
+      source skeleton must already carry the mapping_attribute point values
+      (authored from joint_map); the tool returns mapping_attribute_missing
+      instead of a validated success when that attribute is absent.
+    source_file: scripts/configure_biped_retarget.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: retarget
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [geo_path, target_skeleton, source_skeleton]
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        target_skeleton: {type: string, description: Target biped skeleton SOP path.}
+        source_skeleton: {type: string, description: Source mocap skeleton SOP path.}
+        source_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          description: Source naming convention (with target_convention derives a map).
+        target_convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          description: Target naming convention.
+        joint_map:
+          type: object
+          additionalProperties: {type: string}
+          description: "Explicit {source_name: target_name} map (takes precedence)."
+        mapping_attribute:
+          type: string
+          default: retarget_joint
+          description: >-
+            Point attribute consumed by Map Points / Full Body IK in attribute
+            mode. Its values must already be authored on the source skeleton
+            points (mapping source joint name -> target joint name); the tool
+            errors with mapping_attribute_missing when it is not present.
+        node_prefix: {type: string, default: dcc_mcp_biped_retarget}
+    next-tools:
+      on-failure: [houdini_scene__get_node_info]
+  - name: invert_rig
+    description: >-
+      Rig inversion (workflow stage 5): recover parent-relative local joint
+      transforms from a world-posed skeleton. Headless mode takes world_matrices
+      + parent_indices (pure linear algebra); scene mode reads a KineFX
+      skeleton's transform/P attributes and writes the full 4x4 local transform
+      to the KineFX 'localtransform' Float-16 matrix4 point attribute on a new
+      skeleton SOP (world position kept in P, world rotation in transform).
+      Returns the computed local transforms.
+    source_file: scripts/invert_rig.py
+    execution: sync
+    affinity: main
+    group: rig
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        rig_node:
+          type: string
+          description: KineFX skeleton SOP path (scene mode).
+        world_matrices:
+          type: array
+          items:
+            type: array
+            items: {type: number}
+            minItems: 16
+            maxItems: 16
+          description: >-
+            4x4 world transforms in Houdini row-vector, row-major convention:
+            3x3 rotation in the upper-left block and translation in the bottom
+            row (flat slots 12/13/14). headless mode.
+        parent_indices:
+          type: array
+          items: {type: integer}
+          description: Parent index per joint (-1 for roots).
+        output_name: {type: string, default: inverted_rig}
+    next-tools:
+      on-failure: [houdini_scene__get_node_info]
+  - name: build_ragdoll
+    description: >-
+      Build a physics ragdoll setup from a biped skeleton (workflow stage 7):
+      per-joint proxy colliders, a constraint network (cone-twist/point/glue),
+      RBD solver, gravity, merge and output. Creates and cook-validates the
+      setup network; a full simulation needs cook/output wiring by the caller.
+    source_file: scripts/build_ragdoll.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: simulation
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [geo_path, skeleton]
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        skeleton: {type: string, description: Biped skeleton SOP path (proxy points).}
+        dopnet_path: {type: string, default: /obj/ragdoll_dopnet}
+        node_prefix: {type: string, default: dcc_mcp_ragdoll}
+        constraint_type:
+          type: string
+          enum: [conetwist, point, glue]
+          default: conetwist
+        add_ground: {type: boolean, default: true}
+    next-tools:
+      on-failure: [houdini_scene__get_node_info, houdini_simulation__inspect_simulation_network]
+  - name: build_apex_fbx_biped
+    description: >-
+      Pack a Houdini 22 APEX biped character and report the engine-ready FBX
+      export contract (workflow stage 8, KineFx APEX FBX biped template). Packs
+      a biped skeleton + optional skinned mesh with a base biped rig and returns
+      the exact export_fbx arguments (with unit conversion) and biped joint map.
+    source_file: scripts/build_apex_fbx_biped.py
+    execution: async
+    affinity: main
+    timeout_hint_secs: 600
+    group: apex
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [geo_path, skeleton]
+      properties:
+        geo_path: {type: string, minLength: 1, description: Geometry SOP container path.}
+        skeleton: {type: string, description: Biped skeleton SOP path.}
+        skinned_mesh: {type: string, description: Optional skinned/captured mesh SOP path.}
+        character_name: {type: string, default: biped_character}
+        convention:
+          type: string
+          enum: [kinefx, biped, mixamo, unreal, fbx]
+          default: kinefx
+        skel_path: {type: string, default: Base.skel}
+        rig_path:
+          type: string
+          default: Base.rig
+          description: APEX rig graph path; used for the addgraph graphname.
+        output_fbx:
+          type: string
+          description: >-
+            Desired FBX output path. When omitted, the export contract omits
+            output_path and sets output_fbx_required=true (no placeholder path
+            is emitted); supply a real path before invoking export_fbx.
+        node_prefix: {type: string, default: dcc_mcp_apex_biped}
+    next-tools:
+      on-failure: [houdini_scene__get_node_info, houdini_interchange__export_fbx]
