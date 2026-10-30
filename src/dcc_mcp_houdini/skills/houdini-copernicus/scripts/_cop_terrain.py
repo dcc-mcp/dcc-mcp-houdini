@@ -65,14 +65,22 @@ RECOMMENDED_PARAMETERS = {
 # The layer -> heightfield conversion chain proven by the COPS heightfield
 # ground tests: a fractal-noise mono layer becomes a heightfield Volume, strata
 # is applied, and the result is turned back into a mono layer for a ROP output.
+# The source step's node_type/alias are placeholders: build_terrain_plan fills
+# them from the selected generator so they can never disagree.
 TERRAIN_CHAIN_TEMPLATE = (
-    {"role": "source", "alias": "fractal_noise", "node_type": "fractalnoise"},
+    {"role": "source", "alias": None, "node_type": None},
     {"role": "to_mono", "alias": None, "node_type": "mono"},
     {"role": "to_heightfield", "alias": None, "node_type": "monotoheightfield"},
     {"role": "strata", "alias": "strata", "node_type": "heightfield_strata"},
     {"role": "from_heightfield", "alias": None, "node_type": "heightfieldtomono"},
     {"role": "output", "alias": None, "node_type": "rop_image"},
 )
+
+# node_type -> canonical readable alias for the fractal-sample source family.
+# This family maps aliases to node types 1:1, so the reverse is unambiguous;
+# it keeps the source step's alias stable even when a caller passes a raw
+# Houdini node type instead of an alias.
+_SOURCE_ALIAS_BY_NODE_TYPE = {node_type: alias for alias, node_type in FRACTAL_SAMPLE_GENERATORS.items()}
 
 
 def resolve_terrain_generator(value):
@@ -123,6 +131,11 @@ def build_terrain_plan(generator, with_strata=True, with_output=True):
             "Plan head must be a fractal-sample generator, got {!r} (family {!r}); "
             "strata is applied as a mid-chain layer".format(generator, family)
         )
+    # The head alias must name the same generator as the head node_type. Derive
+    # it from the resolved node type so an alias, a raw node type, and the plan
+    # step all stay consistent (strata has two aliases, but the fractal-sample
+    # family is 1:1). Other steps keep their template alias.
+    source_alias = _SOURCE_ALIAS_BY_NODE_TYPE[node_type]
     steps = []
     for template_step in TERRAIN_CHAIN_TEMPLATE:
         role = template_step["role"]
@@ -130,13 +143,13 @@ def build_terrain_plan(generator, with_strata=True, with_output=True):
             continue
         if role == "output" and not with_output:
             continue
-        step_node_type = node_type if role == "source" else template_step["node_type"]
+        is_source = role == "source"
         steps.append(
             {
                 "role": role,
-                "node_type": step_node_type,
-                "alias": template_step["alias"],
-                "parameters_hint": list(RECOMMENDED_PARAMETERS[family]) if role == "source" else [],
+                "node_type": node_type if is_source else template_step["node_type"],
+                "alias": source_alias if is_source else template_step["alias"],
+                "parameters_hint": list(RECOMMENDED_PARAMETERS[family]) if is_source else [],
             }
         )
     return {

@@ -140,15 +140,47 @@ def test_build_terrain_plan_roles_follow_proven_chain():
     assert any("inspect_cop_output" in step for step in plan["required_setup"])
 
 
-def test_build_terrain_plan_head_uses_selected_generator():
+@pytest.mark.parametrize(
+    "generator,node_type,alias",
+    [
+        ("fractal_sample", "fractalsample", "fractal_sample"),
+        ("fractal_noise", "fractalnoise", "fractal_noise"),
+        ("fractal_noise_3d", "fractalnoise3d", "fractal_noise_3d"),
+        # Raw node types are accepted too; the head alias is still canonical.
+        ("fractalsample", "fractalsample", "fractal_sample"),
+        ("fractalnoise3d", "fractalnoise3d", "fractal_noise_3d"),
+    ],
+)
+def test_build_terrain_plan_head_uses_selected_generator(generator, node_type, alias):
     mod = _load("_cop_terrain.py")
-    assert mod.build_terrain_plan("fractal_sample")["steps"][0]["node_type"] == "fractalsample"
-    assert mod.build_terrain_plan("fractal_noise_3d")["steps"][0]["node_type"] == "fractalnoise3d"
+    source = mod.build_terrain_plan(generator)["steps"][0]
+    assert source["node_type"] == node_type
+    # F1: the source alias must match the selected generator, not a hardcoded value.
+    assert source["alias"] == alias
+    assert mod.resolve_terrain_generator(source["alias"]) == source["node_type"]
+
+
+def test_build_terrain_plan_source_alias_tracks_generator_across_heads():
+    mod = _load("_cop_terrain.py")
+    aliases = [
+        mod.build_terrain_plan(g)["steps"][0]["alias"] for g in ("fractal_sample", "fractal_noise", "fractal_noise_3d")
+    ]
+    # Distinct generators must not collapse to one stale alias.
+    assert aliases == ["fractal_sample", "fractal_noise", "fractal_noise_3d"]
+
+
+def test_build_terrain_plan_non_source_steps_keep_template_alias():
+    mod = _load("_cop_terrain.py")
+    steps = mod.build_terrain_plan("fractal_sample")["steps"]
+    # Only the head is dynamic; the strata/output steps keep template aliases.
+    assert steps[3]["role"] == "strata"
+    assert steps[3]["alias"] == "strata"
+    assert steps[-1]["role"] == "output"
+    assert steps[-1]["alias"] is None
     # Only the source step carries the fractal-sample parameter hints.
-    source = mod.build_terrain_plan("fractal_noise")["steps"][0]
-    assert source["parameters_hint"]
-    assert any(item["name"] == "freq" for item in source["parameters_hint"])
-    assert all(step["parameters_hint"] == [] for step in mod.build_terrain_plan("fractal_noise")["steps"][1:])
+    assert steps[0]["parameters_hint"]
+    assert any(item["name"] == "freq" for item in steps[0]["parameters_hint"])
+    assert all(step["parameters_hint"] == [] for step in steps[1:])
 
 
 def test_build_terrain_plan_flags_toggle_optional_steps():
