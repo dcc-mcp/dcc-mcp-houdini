@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from _character_common import CONVENTIONS
+from _character_common import biped_joint_map as _biped_map
 from _kinefx_common import get_node
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
@@ -31,6 +33,9 @@ def build_retarget_motion_mixer(
     mapping_attribute: str = "retarget_joint",
     node_prefix: str = "dcc_mcp_retarget",
     add_secondary_motion: bool = True,
+    joint_map: dict | None = None,
+    source_convention: str | None = None,
+    target_convention: str | None = None,
 ) -> dict:
     """Create and cook a retarget, MotionClip, APEX, and Motion Mixer chain.
 
@@ -38,6 +43,14 @@ def build_retarget_motion_mixer(
     paths. Source skeletons should be time-dependent KineFX skeleton geometry.
     At least two sources are required so the generated Motion Mixer has clips to
     combine.
+
+    Enhancement (E1): pass ``joint_map`` (``{source_name: target_name}``) or both
+    ``source_convention``/``target_convention`` to retarget across differently
+    named biped skeletons. When a map is supplied, mapping switches from
+    auto-by-name to explicit-attribute mode; the caller authors the
+    ``mapping_attribute`` point values from the returned ``joint_map`` (see
+    ``biped_joint_map`` / ``configure_biped_retarget``). With no map the original
+    auto-mapping behavior is unchanged.
     """
     if len(source_skeletons) < 2:
         return skill_error(
@@ -46,6 +59,22 @@ def build_retarget_motion_mixer(
         )
     if end_frame < start_frame:
         return skill_error("Invalid frame range", "end_frame must be >= start_frame")
+
+    explicit_map = None
+    if joint_map:
+        if not isinstance(joint_map, dict) or not joint_map:
+            return skill_error("Invalid joint_map", "joint_map must be a non-empty object")
+        explicit_map = dict(joint_map)
+    elif source_convention and target_convention:
+        for label, value in (("source_convention", source_convention), ("target_convention", target_convention)):
+            if value not in CONVENTIONS:
+                return skill_error(
+                    "Unknown naming convention",
+                    "{} must be one of {}".format(label, ", ".join(CONVENTIONS)),
+                    label=label,
+                    value=value,
+                )
+        explicit_map = _biped_map(source_convention, target_convention)["pairs"]
 
     names = clip_names or ["clip_{:02d}".format(i + 1) for i in range(len(source_skeletons))]
     if len(names) != len(source_skeletons):
@@ -79,7 +108,11 @@ def build_retarget_motion_mixer(
             mapping.setInput(1, match, 1)
             _set_if_present(mapping, "mappingattrib", mapping_attribute)
             _set_if_present(mapping, "referenceattrib", "name")
-            _set_if_present(mapping, "automapinline", 1)
+            # E1: explicit cross-convention mapping uses attribute mode (0),
+            # otherwise keep the original auto-by-name behavior (1).
+            _set_if_present(mapping, "automapinline", 0 if explicit_map else 1)
+            if explicit_map:
+                _set_if_present(mapping, "mapusing", 1)
 
             solve = _create(container, "kinefx::fullbodyik", "{}_solve_{}".format(node_prefix, suffix))
             solve.setInput(0, mapping, 0)
@@ -166,6 +199,9 @@ def build_retarget_motion_mixer(
             source_skeletons=[node.path() for node in sources],
             clip_names=names,
             clip_nodes=[node.path() for node in clip_nodes],
+            mapping_mode="explicit" if explicit_map else "auto_by_name",
+            joint_map=explicit_map or {},
+            mapped_joint_count=len(explicit_map) if explicit_map else 0,
             sop_output=output.path(),
             apex_scene=scene.path(),
             motion_mixer=mixer.path(),
