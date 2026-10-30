@@ -270,7 +270,7 @@ def test_skill_validates_clean() -> None:
 
 def test_scripts_import_without_hou_or_pxr() -> None:
     with patch.dict(sys.modules, {"hou": None, "pxr": None}):
-        for script in ("list_stage_prims.py", "get_prim_info.py", "get_prim_attributes.py"):
+        for script in ("list_stage_prims.py", "get_prim_info.py", "get_prim_attributes.py", "get_instancer_info.py"):
             module = _load_script(script)
             assert "hou" not in module.__dict__
             assert "pxr" not in module.__dict__
@@ -419,6 +419,7 @@ def test_scan_load_tools_list_and_call_integration(monkeypatch, tmp_path: Path) 
         "houdini_usd_lops__list_stage_prims",
         "houdini_usd_lops__get_prim_info",
         "houdini_usd_lops__get_prim_attributes",
+        "houdini_usd_lops__get_instancer_info",
         "houdini_usd_lops__set_prim_attributes",
     }
 
@@ -427,8 +428,9 @@ def test_scan_load_tools_list_and_call_integration(monkeypatch, tmp_path: Path) 
     try:
         listed = _post_mcp(handle.mcp_url(), {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         tools = {tool["name"]: tool for tool in listed["result"]["tools"]}
-        assert {"list_stage_prims", "get_prim_info", "get_prim_attributes"} <= set(tools)
+        assert {"list_stage_prims", "get_prim_info", "get_prim_attributes", "get_instancer_info"} <= set(tools)
         assert tools["list_stage_prims"]["annotations"]["readOnlyHint"] is True
+        assert tools["get_instancer_info"]["annotations"]["readOnlyHint"] is True
 
         called = _post_mcp(
             handle.mcp_url(),

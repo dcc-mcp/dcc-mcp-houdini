@@ -140,6 +140,62 @@ tools:
     next-tools:
       on-failure:
         - houdini_usd_lops__get_prim_info
+  - name: get_instancer_info
+    description: >-
+      Inspect a USD PointInstancer (scattered assets) on a LOP Stage. Reports the
+      prototype prims and bounded protoIndices and per-instance transform arrays,
+      plus a validation verdict (protoIndices in range, required positions present
+      with a matching length, array lengths consistent). Read-only; never authors
+      to the stage.
+    source_file: scripts/get_instancer_info.py
+    execution: sync
+    affinity: main
+    group: usd-query
+    read_only: true
+    destructive: false
+    idempotent: true
+    tool_role: read_only
+    risk: low
+    search_aliases: [point instancer, scattered assets, instancing, scatter, copy to points lops, prototypes]
+    produces: [usd_stage_report]
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      required: [lop_node_path, prim_path]
+      properties:
+        lop_node_path:
+          type: string
+          description: Absolute Houdini path of the LOP node whose composed Stage is inspected.
+        prim_path:
+          type: string
+          description: Absolute USD prim path of the PointInstancer to inspect.
+        time_code:
+          type: number
+          description: >-
+            USD time code for the read. Omit for default time; if the scatter's
+            arrays exist only as time samples, the earliest sample is used and
+            time_samples_require_time_code is flagged (pin a time_code for a
+            definitive verdict).
+        max_values:
+          type: integer
+          minimum: 1
+          maximum: 256
+          default: 64
+          description: Maximum array items retained in each bounded array sample.
+        max_prototypes:
+          type: integer
+          minimum: 1
+          maximum: 256
+          default: 64
+          description: Maximum prototype paths returned.
+    next-tools:
+      on-success:
+        - houdini_usd_lops__get_prim_info
+      on-failure:
+        - houdini_usd_lops__list_stage_prims
   - name: set_prim_attributes
     description: Set USD attributes on a stage prim and read them back to confirm the write.
     source_file: scripts/set_prim_attributes.py
