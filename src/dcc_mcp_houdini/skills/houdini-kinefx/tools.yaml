@@ -534,7 +534,10 @@ tools:
       Build a single-source biped retarget chain (Rig Match Pose -> Map Points
       -> Full Body IK) with an explicit cross-convention joint map. Fills
       workflow stage 4 (biped motion retarget). Complements the multi-clip
-      build_retarget_motion_mixer by mapping differently named skeletons.
+      build_retarget_motion_mixer by mapping differently named skeletons. The
+      source skeleton must already carry the mapping_attribute point values
+      (authored from joint_map); the tool returns mapping_attribute_missing
+      instead of a validated success when that attribute is absent.
     source_file: scripts/configure_biped_retarget.py
     execution: async
     affinity: main
@@ -567,7 +570,14 @@ tools:
           type: object
           additionalProperties: {type: string}
           description: "Explicit {source_name: target_name} map (takes precedence)."
-        mapping_attribute: {type: string, default: retarget_joint}
+        mapping_attribute:
+          type: string
+          default: retarget_joint
+          description: >-
+            Point attribute consumed by Map Points / Full Body IK in attribute
+            mode. Its values must already be authored on the source skeleton
+            points (mapping source joint name -> target joint name); the tool
+            errors with mapping_attribute_missing when it is not present.
         node_prefix: {type: string, default: dcc_mcp_biped_retarget}
     next-tools:
       on-failure: [houdini_scene__get_node_info]
@@ -682,8 +692,16 @@ tools:
           enum: [kinefx, biped, mixamo, unreal, fbx]
           default: kinefx
         skel_path: {type: string, default: Base.skel}
-        rig_path: {type: string, default: Base.rig}
-        output_fbx: {type: string, description: Desired FBX output path.}
+        rig_path:
+          type: string
+          default: Base.rig
+          description: APEX rig graph path; used for the addgraph graphname.
+        output_fbx:
+          type: string
+          description: >-
+            Desired FBX output path. When omitted, the export contract omits
+            output_path and sets output_fbx_required=true (no placeholder path
+            is emitted); supply a real path before invoking export_fbx.
         node_prefix: {type: string, default: dcc_mcp_apex_biped}
     next-tools:
       on-failure: [houdini_scene__get_node_info, houdini_interchange__export_fbx]

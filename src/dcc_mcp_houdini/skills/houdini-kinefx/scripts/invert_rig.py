@@ -290,8 +290,11 @@ def _parent_indices(geometry: Any, point_count: int) -> list:
         except Exception:  # noqa: BLE001
             continue
     if derived:
+        # Any point that is not a child in an edge polygon is a root. Treat it
+        # as -1 rather than keeping the linear-chain fallback (previous point),
+        # which is wrong for multi-root skeletons or a root not at index 0.
         for index in range(point_count):
-            parents[index] = derived.get(index, -1 if index == 0 else parents[index])
+            parents[index] = derived.get(index, -1)
     return parents
 
 

@@ -97,7 +97,7 @@ def build_apex_fbx_biped(
         try:
             biped_graph = create("apex::addgraph", "biped_graph")
             biped_graph.setInput(0, pack)
-            _set_if_present(biped_graph, "graphname", "Base.rig")
+            _set_if_present(biped_graph, "graphname", rig_path)
             created.append(biped_graph)
             scene_output = biped_graph
         except Exception:  # noqa: BLE001
@@ -120,13 +120,13 @@ def build_apex_fbx_biped(
             pass
 
         names = convention_names(convention)
+        export_args = {"root_node": output_node.path(), "convert_units": True}
+        if output_fbx:
+            export_args["output_path"] = output_fbx
         export_contract = {
             "tool": "houdini_interchange__export_fbx",
-            "arguments": {
-                "output_path": output_fbx or "<set output_fbx>",
-                "root_node": output_node.path(),
-                "convert_units": True,
-            },
+            "arguments": export_args,
+            "output_fbx_required": not bool(output_fbx),
             "unit_note": (
                 "Keep convert_units=True so a meter-authored biped is not 100x "
                 "too small when the FBX declares centimeters; verify physical "

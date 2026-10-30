@@ -33,6 +33,26 @@ def _cook_failures(nodes) -> list:
     return failures
 
 
+def _has_point_attrib(node: Any, attribute: str) -> bool:
+    """Return True only when *node* geometry actually carries a point attribute.
+
+    Attribute-mode retargeting (``automapinline=0``/``mapusing=1``) reads
+    ``mapping_attribute`` values off the source skeleton points. If the caller
+    never authored them, Map Points has nothing to map and the build must not
+    be reported as validated.
+    """
+    try:
+        geometry = node.geometry()
+    except Exception:  # noqa: BLE001 - a non-cookable source is "missing"
+        return False
+    if geometry is None:
+        return False
+    try:
+        return geometry.findPointAttrib(attribute) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def configure_biped_retarget(
     geo_path: str,
     target_skeleton: str,
@@ -94,7 +114,7 @@ def configure_biped_retarget(
     try:
         container = hou.node(geo_path)
         if container is None:
-            return skill_error("Geometry container not found", geo_path=geo_path)
+            return skill_error("Geometry container not found", "container_not_found", geo_path=geo_path)
         target = hou.node(target_skeleton)
         source = hou.node(source_skeleton)
         if target is None or source is None:
@@ -105,6 +125,25 @@ def configure_biped_retarget(
                 source_skeleton=source_skeleton,
             )
 
+        # B1: this tool always builds an explicit (attribute-mode) retarget, so
+        # the source skeleton must already carry mapping_attribute point values
+        # (authored from joint_map: source joint name -> target joint name).
+        # Verify before building; error instead of reporting a "configured"
+        # success when the mapping cannot take effect. Consistent with the
+        # explicit-map path in build_retarget_motion_mixer (reviewed F2 fix).
+        if not _has_point_attrib(source, mapping_attribute):
+            return skill_error(
+                "Mapping attribute missing on source skeleton",
+                "mapping_attribute_missing",
+                mapping_attribute=mapping_attribute,
+                source_skeleton=source.path(),
+                next_tools=["biped_joint_map", "configure_biped_retarget"],
+                hint=(
+                    "Author the mapping_attribute point values on the source "
+                    "skeleton from joint_map before configuring the retarget."
+                ),
+            )
+
         def create(type_name, name):
             node = container.createNode(type_name, node_name="{}_{}".format(node_prefix, name))
             node.setComment("DCC-MCP typed biped retarget")
@@ -112,8 +151,10 @@ def configure_biped_retarget(
 
         created = []
 
-        # Author the retarget_joint attribute on both skeletons when the node
-        # exposes it; guarded so the tool works across Houdini builds.
+        # The source skeleton is expected to carry the mapping_attribute point
+        # values (verified above). These Map Points / Full Body IK nodes consume
+        # that attribute in attribute-mapping mode; this tool does not author
+        # the attribute itself (see biped_joint_map / hint above).
         target_map = create("kinefx::mappoints", "target_map")
         target_map.setInput(0, target)
         _set_if_present(target_map, "mappingattrib", mapping_attribute)
@@ -153,6 +194,7 @@ def configure_biped_retarget(
             target_skeleton=target.path(),
             source_skeleton=source.path(),
             mapping_attribute=mapping_attribute,
+            mapping_attribute_verified=True,
             joint_map=mapping,
             mapped_joint_count=len(mapping),
             sop_output=solve.path(),

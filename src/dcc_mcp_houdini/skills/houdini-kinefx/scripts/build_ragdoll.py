@@ -82,6 +82,26 @@ def build_ragdoll(
                 skeleton=skeleton,
             )
 
+        # N3: validate the DOP network path and its parent BEFORE creating any
+        # SOP nodes, so a bad path / missing parent cannot leave orphans. A path
+        # without "/" used to make str.rsplit raise ValueError directly.
+        if not isinstance(dopnet_path, str) or "/" not in dopnet_path:
+            return skill_error(
+                "Invalid DOP network path",
+                "dopnet_path must be an absolute path containing '/', e.g. /obj/ragdoll_dopnet",
+                dopnet_path=dopnet_path,
+            )
+        dop_parent_path, dop_name = dopnet_path.rsplit("/", 1)
+        if not dop_name:
+            return skill_error(
+                "Invalid DOP network path",
+                "dopnet_path must end with a network name",
+                dopnet_path=dopnet_path,
+            )
+        dop_parent = hou.node(dop_parent_path or "/obj")
+        if dop_parent is None:
+            return skill_error("DOP parent not found", "dop_parent_not_found", dop_parent_path=dop_parent_path)
+
         # SOP-level proxy volumes: copy a proxy sphere onto each joint point.
         proxy = geo.createNode("sphere", node_name="{}_proxy".format(node_prefix))
         _set_if_present(proxy, "rad", (0.12, 0.12, 0.12))
@@ -96,11 +116,7 @@ def build_ragdoll(
         null_out.setInput(0, assemble)
         created_sop = [proxy, copy, assemble, null_out]
 
-        # DOP-level RBD network.
-        dop_parent_path, dop_name = dopnet_path.rsplit("/", 1)
-        dop_parent = hou.node(dop_parent_path or "/obj")
-        if dop_parent is None:
-            return skill_error("DOP parent not found", dop_parent_path=dop_parent_path)
+        # DOP-level RBD network (parent/name already validated above).
         existing = hou.node(dopnet_path)
         dopnet = existing if existing is not None else dop_parent.createNode("dopnet", node_name=dop_name)
 

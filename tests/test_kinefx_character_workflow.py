@@ -291,6 +291,37 @@ class TestInvertRigHeadless:
         result = mod.invert_rig(world_matrices=[zero, _identity()], parent_indices=[-1, 0])
         assert result["success"] is False
 
+    def _vertex(self, point_number):
+        v = MagicMock()
+        v.point.return_value.number.return_value = point_number
+        return v
+
+    def test_parent_indices_no_incoming_edge_is_root(self) -> None:
+        """N1: points with no incoming edge must be roots (-1), not previous point.
+
+        Skeleton with 4 points and edges 2->0 and 2->1 (root at index 2, plus
+        an isolated point 3). Every point not a child in an edge polygon is a
+        root; the old linear-chain fallback wrongly kept index-1 as parent.
+        """
+        mod = _load_script("invert_rig.py")
+        geometry = MagicMock()
+
+        def prim(parent, child):
+            p = MagicMock()
+            p.vertices.return_value = [self._vertex(parent), self._vertex(child)]
+            return p
+
+        geometry.prims.return_value = [prim(2, 0), prim(2, 1)]
+        parents = mod._parent_indices(geometry, 4)
+        assert parents == [2, 2, -1, -1]
+
+    def test_parent_indices_no_edges_linear_chain(self) -> None:
+        """N1: with no edges the linear-chain fallback is unchanged."""
+        mod = _load_script("invert_rig.py")
+        geometry = MagicMock()
+        geometry.prims.return_value = []
+        assert mod._parent_indices(geometry, 3) == [-1, 0, 1]
+
 
 # ---------------------------------------------------------------------------
 # Mock-hou scene tools
@@ -509,6 +540,18 @@ class TestConfigureBipedRetarget:
         result = mod.configure_biped_retarget("/obj/char", "/obj/char/biped", "/obj/char/mocap")
         assert result["success"] is False
 
+    def test_missing_container_is_structured_error(self) -> None:
+        """A missing geo container must be a structured error, not a TypeError."""
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou()
+        hou.node.side_effect = lambda path: None if path == "/obj/char" else container
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char", "/obj/char/biped", "/obj/char/mocap", joint_map={"src_hip": "Hips"}
+            )
+        assert result["success"] is False, result
+        assert result["message"] == "Geometry container not found"
+
     def test_joint_map_takes_precedence(self) -> None:
         mod = _load_script("configure_biped_retarget.py")
         hou, container, created = self._mock_hou()
@@ -521,6 +564,65 @@ class TestConfigureBipedRetarget:
             )
         assert result["success"] is True
         assert result["context"]["joint_map"] == {"src_hip": "Hips"}
+
+    def test_explicit_map_missing_attribute_not_validated(self) -> None:
+        """B1: source skeleton without mapping_attribute must not report success.
+
+        Attribute-mode retargeting (automapinline=0/mapusing=1) is only real
+        when the source skeleton carries mapping_attribute point values. A
+        missing attribute must be a structured error, never validated=true.
+        """
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou()
+        source = hou.node("/obj/char/mocap")
+        source.geometry().findPointAttrib.return_value = None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char",
+                "/obj/char/biped",
+                "/obj/char/mocap",
+                joint_map={"src_hip": "Hips"},
+            )
+        assert result["success"] is False, result
+        assert result["error"] == "mapping_attribute_missing"
+        assert result["context"].get("validated") is not True
+        # No retarget nodes are built when the mapping cannot take effect.
+        assert created == {}
+
+    def test_explicit_map_missing_attribute_via_conventions_not_validated(self) -> None:
+        """B1: the convention-derived map path is verified the same way."""
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou()
+        source = hou.node("/obj/char/mocap")
+        source.geometry().findPointAttrib.return_value = None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char",
+                "/obj/char/biped",
+                "/obj/char/mocap",
+                source_convention="mixamo",
+                target_convention="kinefx",
+            )
+        assert result["success"] is False, result
+        assert result["error"] == "mapping_attribute_missing"
+        assert result["context"].get("validated") is not True
+
+    def test_explicit_map_with_attribute_is_verified(self) -> None:
+        """B1: when the attribute exists, success reports it as verified."""
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou()
+        source = hou.node("/obj/char/mocap")
+        source.geometry().findPointAttrib.return_value = MagicMock()  # present
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char",
+                "/obj/char/biped",
+                "/obj/char/mocap",
+                joint_map={"src_hip": "Hips"},
+            )
+        assert result["success"] is True, result
+        assert result["context"]["mapping_attribute_verified"] is True
+        assert result["context"]["validated"] is True
 
 
 class TestBuildRagdoll:
@@ -621,6 +723,41 @@ class TestBuildRagdoll:
         # No success result may claim validated=True on a wiring failure.
         assert result["context"].get("validated") is not True
 
+    def test_invalid_dopnet_path_is_structured_error(self) -> None:
+        """N3: a dopnet_path without '/' must not raise ValueError."""
+        mod = _load_script("build_ragdoll.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+
+        def node_lookup(path):
+            return {"/obj/char": container, "/obj/char/biped": skeleton}.get(path)
+
+        hou.node.side_effect = node_lookup
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="ragdoll_dopnet")
+        assert result["success"] is False, result
+        assert "Invalid DOP network path" in result["message"]
+        # Validation precedes any node creation, so no SOP orphans are left.
+        container.createNode.assert_not_called()
+
+    def test_missing_dop_parent_creates_no_orphans(self) -> None:
+        """N3: a missing DOP parent must error before creating SOP nodes."""
+        mod = _load_script("build_ragdoll.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+
+        def node_lookup(path):
+            return {"/obj/char": container, "/obj/char/biped": skeleton}.get(path)
+
+        hou.node.side_effect = node_lookup  # /obj is absent -> parent is None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="/obj/ragdoll_dopnet")
+        assert result["success"] is False, result
+        assert "DOP parent not found" in result["message"]
+        container.createNode.assert_not_called()
+
 
 class TestBuildApexFbxBiped:
     def test_packs_and_reports_export(self) -> None:
@@ -645,6 +782,43 @@ class TestBuildApexFbxBiped:
     def test_rejects_unknown_convention(self) -> None:
         mod = _load_script("build_apex_fbx_biped.py")
         assert mod.build_apex_fbx_biped("/obj/char", "/obj/char/biped", convention="nope")["success"] is False
+
+    def test_graphname_uses_rig_path(self) -> None:
+        """N2: graphname must follow rig_path, not a hardcoded Base.rig."""
+        mod = _load_script("build_apex_fbx_biped.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+
+        def node_lookup(path):
+            return {"/obj/char": container, "/obj/char/biped": skeleton}.get(path)
+
+        hou.node.side_effect = node_lookup
+        with patch.dict(sys.modules, {"hou": hou}):
+            mod.build_apex_fbx_biped("/obj/char", "/obj/char/biped", rig_path="Custom.rig", output_fbx="/out/biped.fbx")
+        biped_graph = created["dcc_mcp_apex_biped_biped_graph"]
+        graphname_calls = [c for c in biped_graph.parm.call_args_list if c[0] == ("graphname",)]
+        assert graphname_calls, "graphname parm was never set"
+        assert biped_graph.parm("graphname").set.call_args[0][0] == "Custom.rig"
+
+    def test_no_output_fbx_has_no_placeholder_path(self) -> None:
+        """N2: output_fbx absent must not emit a bogus '<set output_fbx>' path."""
+        mod = _load_script("build_apex_fbx_biped.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+
+        def node_lookup(path):
+            return {"/obj/char": container, "/obj/char/biped": skeleton}.get(path)
+
+        hou.node.side_effect = node_lookup
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_apex_fbx_biped("/obj/char", "/obj/char/biped")
+        assert result["success"] is True, result
+        contract = result["context"]["export_fbx"]
+        assert "output_path" not in contract["arguments"]
+        assert contract["output_fbx_required"] is True
+        assert "<set output_fbx>" not in str(contract)
 
 
 class TestBuildRetargetMotionMixerEnhancement:
@@ -792,9 +966,9 @@ class TestInvertRigScene:
         hou.Geometry.assert_called_once_with()
         editable.createPoints.assert_called_once()
         # P keeps the WORLD positions, not local translations.
-        world_positions = editable.createPoints.call_args.args[0]
+        world_positions = editable.createPoints.call_args[0][0]
         assert [tuple(p) for p in world_positions] == [(0.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
-        added_names = [call.args[1] for call in editable.addAttrib.call_args_list]
+        added_names = [call[0][1] for call in editable.addAttrib.call_args_list]
         assert "localtransform" in added_names
         assert "name" in added_names
         assert "transform" in added_names
@@ -804,7 +978,7 @@ class TestInvertRigScene:
         # Each point received the FULL 16-value local transform in localtransform.
         lt_handle = editable.attr_mocks["localtransform"]
         for pt in new_points:
-            lt_values = [c.args[1] for c in pt.setAttribValue.call_args_list if c.args[0] is lt_handle]
+            lt_values = [c[0][1] for c in pt.setAttribValue.call_args_list if c[0][0] is lt_handle]
             assert len(lt_values) == 1
             assert len(lt_values[0]) == 16
         out_node.parm.assert_called_with("stash")
@@ -846,7 +1020,7 @@ class TestInvertRigScene:
         # The FULL 16-value matrix4 written to localtransform carries the same
         # bottom-row translation (not a rotation-only matrix3 in last column).
         lt_handle = editable.attr_mocks["localtransform"]
-        written = [c.args[1] for c in new_points[1].setAttribValue.call_args_list if c.args[0] is lt_handle][0]
+        written = [c[0][1] for c in new_points[1].setAttribValue.call_args_list if c[0][0] is lt_handle][0]
         assert len(written) == 16
         assert written[13] == pytest.approx(1.0)
         assert (written[3], written[7], written[11]) == pytest.approx((0.0, 0.0, 0.0))
