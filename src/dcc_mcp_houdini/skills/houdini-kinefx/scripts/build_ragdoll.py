@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from _kinefx_common import guarded_cook_failures
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -169,14 +170,18 @@ def build_ragdoll(
                 created_dop_nodes=[node.path() for node in created_dop],
             )
 
-        all_nodes = created_sop + created_dop
-        failures = []
-        for node in all_nodes:
-            node.cook(force=True)
-            errors = list(node.errors())
-            warnings = list(node.warnings())
-            if errors or warnings:
-                failures.append({"path": node.path(), "errors": errors, "warnings": warnings})
+        # Cook the top-level networks, NOT individual DOP data nodes. DOP data
+        # nodes (constraintnetwork / merge in particular) are not standalone-
+        # cookable and raise hou.OperationFailed on 20.5/21/22 when force-cooked
+        # in isolation, even though the dopnet cooks cleanly (QA blocking 2).
+        # Cooking the dopnet recursively validates the whole DOP network, and
+        # the collider output validates the SOP proxy chain. Verified on
+        # licensed Houdini 22.0.368 / 20.5.550.
+        cook_targets = [null_out, dopnet]
+        # Cook validation is best-effort: any raised hou.OperationFailed is
+        # recorded as a cook_failure (validated=False), never an uncaught
+        # exception that turns the whole tool into success=False.
+        failures = guarded_cook_failures(cook_targets)
         try:
             geo.layoutChildren()
             dopnet.layoutChildren()

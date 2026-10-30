@@ -6,7 +6,7 @@ from typing import Any
 
 from _character_common import CONVENTIONS
 from _character_common import biped_joint_map as _biped_map
-from _kinefx_common import get_node
+from _kinefx_common import RequiresHoudini22, capability_create_node, get_node, guarded_cook_failures
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -17,7 +17,10 @@ def _set_if_present(node: Any, name: str, value: Any) -> None:
 
 
 def _create(container: Any, type_name: str, name: str) -> Any:
-    node = container.createNode(type_name, node_name=name)
+    # capability_create_node converts a missing H22 node type (Houdini 20.5/21)
+    # into RequiresHoudini22 so the tool can degrade gracefully instead of
+    # raising an uncaught "Invalid node type name" / hou.OperationFailed.
+    node = capability_create_node(container, type_name, name)
     node.setComment("DCC-MCP typed Houdini 22 animation workflow")
     return node
 
@@ -107,6 +110,7 @@ def build_retarget_motion_mixer(
     except ImportError:
         return skill_error("Houdini not available", "hou could not be imported")
 
+    created = []  # Tracks nodes for best-effort cleanup on capability failure.
     try:
         container = get_node(hou, geo_path)
         target = get_node(hou, target_skeleton)
@@ -129,7 +133,6 @@ def build_retarget_motion_mixer(
 
         clip_nodes = []
         solve_nodes = []
-        created = []
 
         for index, source in enumerate(sources, start=1):
             suffix = "{:02d}".format(index)
@@ -218,13 +221,11 @@ def build_retarget_motion_mixer(
         _set_if_present(fetch, "mixer", mixer.path())
         created.extend((pack, mixer, fetch))
 
-        failures = []
-        for node in created:
-            node.cook(force=True)
-            errors = list(node.errors())
-            warnings = list(node.warnings())
-            if errors or warnings:
-                failures.append({"path": node.path(), "errors": errors, "warnings": warnings})
+        # Best-effort cook validation: a raised hou.OperationFailed is recorded
+        # as a cook_failure (validated=False), never an uncaught exception that
+        # turns the whole tool into success=False. Same discipline as the other
+        # scene tools (QA blocking 1/2).
+        failures = guarded_cook_failures(created)
         container.layoutChildren()
 
         return skill_success(
@@ -246,6 +247,36 @@ def build_retarget_motion_mixer(
             created_nodes=[node.path() for node in created],
             cook_failures=failures,
             validated=not failures,
+        )
+    except RequiresHoudini22 as exc:
+        # Stage 6 (Motion Mixer / APEX) needs Houdini 22-only node types. On
+        # 20.5/21 those createNode calls fail with "Invalid node type name";
+        # degrade to a structured capability error rather than an uncaught
+        # hou.OperationFailed. Best-effort cleanup of the partial network so we
+        # do not leave half-built nodes on the older host.
+        created_paths = [node.path() for node in created]
+        for node in created:
+            try:
+                node.destroy()
+            except Exception:  # noqa: BLE001 - cleanup is best-effort
+                pass
+        try:
+            host_version = hou.applicationVersionString()
+        except Exception:  # noqa: BLE001
+            host_version = "unknown"
+        return skill_error(
+            "Motion Mixer workflow requires Houdini 22",
+            "capability_unavailable",
+            requires_houdini_22=True,
+            missing_node_type=exc.node_type,
+            host_version=host_version,
+            created_nodes_before_failure=created_paths,
+            hint=(
+                "Stage 6 (Motion Mixer / full body IK) depends on Houdini 22-only "
+                "KineFX/APEX node types. Use licensed Houdini 22 for the full "
+                "workflow, or the single-source configure_biped_retarget path on "
+                "older hosts."
+            ),
         )
     except Exception as exc:
         return skill_exception(exc, message="Failed to build retarget Motion Mixer workflow")

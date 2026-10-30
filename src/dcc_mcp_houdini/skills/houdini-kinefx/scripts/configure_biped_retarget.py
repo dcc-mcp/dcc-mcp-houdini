@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from _character_common import CONVENTIONS
 from _character_common import biped_joint_map as _map
+from _kinefx_common import guarded_cook_failures
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
 
@@ -20,17 +21,6 @@ def _set_if_present(node: Any, name: str, value: Any) -> None:
     parm = node.parm(name)
     if parm is not None:
         parm.set(value)
-
-
-def _cook_failures(nodes) -> list:
-    failures = []
-    for node in nodes:
-        node.cook(force=True)
-        errors = list(node.errors())
-        warnings = list(node.warnings())
-        if errors or warnings:
-            failures.append({"path": node.path(), "errors": errors, "warnings": warnings})
-    return failures
 
 
 def _has_point_attrib(node: Any, attribute: str) -> bool:
@@ -157,6 +147,11 @@ def configure_biped_retarget(
         # the attribute itself (see biped_joint_map / hint above).
         target_map = create("kinefx::mappoints", "target_map")
         target_map.setInput(0, target)
+        # kinefx::mappoints defines two inputs. Leaving input 1 unconnected
+        # makes the node raise hou.OperationFailed on cook() on 20.5/21/22
+        # (QA blocking 1). Wire the source skeleton as the second input so the
+        # whole retarget chain cooks. Verified on licensed Houdini 22.0.368.
+        target_map.setInput(1, source)
         _set_if_present(target_map, "mappingattrib", mapping_attribute)
         _set_if_present(target_map, "invert", 0)
 
@@ -182,7 +177,11 @@ def configure_biped_retarget(
         _set_if_present(solve, "computelocaltransform", 1)
 
         created.extend((target_map, match, mapping_node, solve))
-        failures = _cook_failures(created)
+        # Cook validation is best-effort: a raised hou.OperationFailed is
+        # recorded as a cook_failure (validated=False), never an uncaught
+        # exception that turns the whole tool into success=False (QA blocking 1,
+        # aligned with the F1 setInput discipline).
+        failures = guarded_cook_failures(created)
         try:
             container.layoutChildren()
         except Exception:  # noqa: BLE001

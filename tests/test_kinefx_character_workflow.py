@@ -1024,3 +1024,220 @@ class TestInvertRigScene:
         assert len(written) == 16
         assert written[13] == pytest.approx(1.0)
         assert (written[3], written[7], written[11]) == pytest.approx((0.0, 0.0, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# QA real-machine blocking regressions (head 348317d -> cook guard fixes).
+#
+# The previous mock-hou tests were "false green": _mock_node.cook() never
+# raises, so an unguarded node.cook(force=True) that throws hou.OperationFailed
+# on licensed Houdini was invisible. These tests make the mock cook RAISE and
+# assert the tools degrade gracefully (validated=False + cook_failures) instead
+# of returning success=False / OperationFailed. The non-mock real-host proof is
+# .github/scripts/run_houdini_kinefx_cook_acceptance.py (run under hython).
+# ---------------------------------------------------------------------------
+
+
+class _ThrowingCook(Exception):
+    """Stand-in for hou.OperationFailed raised by a standalone cook."""
+
+
+def _mock_raising_node(path):
+    node = _mock_node(path)
+    node.errors.return_value = ()
+    node.warnings.return_value = ()
+    node.cook.side_effect = _ThrowingCook("The attempted operation failed. Error while cooking.")
+    return node
+
+
+class TestGuardedCookFailures:
+    def test_cook_exception_becomes_failure_not_raise(self) -> None:
+        """guarded_cook_failures never raises; it records the cook exception."""
+        common = _load_script("_kinefx_common.py")
+        nodes = [_mock_raising_node("/obj/a"), _mock_node("/obj/b")]
+        failures = common.guarded_cook_failures(nodes)
+        assert len(failures) == 1
+        assert failures[0]["path"] == "/obj/a"
+        assert "Error while cooking" in failures[0]["errors"][0]
+        assert failures[0]["warnings"] == []
+
+    def test_clean_cook_yields_no_failures(self) -> None:
+        common = _load_script("_kinefx_common.py")
+        assert common.guarded_cook_failures([_mock_node("/obj/a")]) == []
+
+    def test_errors_and_warnings_are_recorded(self) -> None:
+        common = _load_script("_kinefx_common.py")
+        node = _mock_node("/obj/a")
+        node.errors.return_value = ("bad",)
+        node.warnings.return_value = ("warn",)
+        failures = common.guarded_cook_failures([node])
+        assert failures[0]["errors"] == ["bad"]
+        assert failures[0]["warnings"] == ["warn"]
+
+    def test_errors_probe_exception_is_recorded_not_raised(self) -> None:
+        common = _load_script("_kinefx_common.py")
+        node = _mock_node("/obj/a")
+        node.errors.side_effect = RuntimeError("diagnostic probe failed")
+        failures = common.guarded_cook_failures([node])
+        assert len(failures) == 1
+        assert "diagnostic probe failed" in failures[0]["errors"][0]
+
+    def test_capability_create_node_translates_missing_type(self) -> None:
+        common = _load_script("_kinefx_common.py")
+        container = MagicMock()
+        container.createNode.side_effect = RuntimeError("The attempted operation failed.\nInvalid node type name")
+        with pytest.raises(common.RequiresHoudini22) as info:
+            common.capability_create_node(container, "kinefx::motionmixer", "mixer")
+        assert info.value.node_type == "kinefx::motionmixer"
+
+    def test_capability_create_node_reraises_other_errors(self) -> None:
+        common = _load_script("_kinefx_common.py")
+        container = MagicMock()
+        container.createNode.side_effect = RuntimeError("some unrelated failure")
+        with pytest.raises(RuntimeError):
+            common.capability_create_node(container, "kinefx::mappoints", "mp")
+
+
+class TestConfigureBipedRetargetCookGuard:
+    def _mock_hou_with_cook_failure(self, fail_name):
+        """hou whose created node named *fail_name* raises on cook(force=True)."""
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        target = _mock_node("/obj/char/biped")
+        source = _mock_node("/obj/char/mocap")
+
+        def create_node(type_name, node_name=None, **kwargs):
+            name = node_name or type_name.split("::")[-1]
+            if name == fail_name:
+                node = _mock_raising_node("/obj/char/{}".format(name))
+            else:
+                node = _mock_node("/obj/char/{}".format(name))
+            node.type_name = type_name
+            created[name] = node
+            return node
+
+        container.createNode.side_effect = create_node
+
+        def node_lookup(path):
+            return {"/obj/char": container, "/obj/char/biped": target, "/obj/char/mocap": source}.get(path)
+
+        hou.node.side_effect = node_lookup
+        return hou, container, created
+
+    def test_cook_exception_does_not_fail_tool(self) -> None:
+        """QA blocking 1: a raised cook must be a cook_failure, not success=False."""
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou_with_cook_failure(fail_name="dcc_mcp_biped_retarget_map")
+        source = hou.node("/obj/char/mocap")
+        source.geometry().findPointAttrib.return_value = MagicMock()
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char", "/obj/char/biped", "/obj/char/mocap", joint_map={"src_hip": "Hips"}
+            )
+        assert result["success"] is True, result
+        assert result["context"]["validated"] is False
+        assert result["context"]["cook_failures"]
+        assert "Error while cooking" in result["context"]["cook_failures"][0]["errors"][0]
+
+    def test_target_map_wires_second_input(self) -> None:
+        """QA blocking 1: kinefx::mappoints needs 2 inputs; verify input 1 is set."""
+        mod = _load_script("configure_biped_retarget.py")
+        hou, container, created = self._mock_hou_with_cook_failure(fail_name="__none__")
+        source = hou.node("/obj/char/mocap")
+        source.geometry().findPointAttrib.return_value = MagicMock()
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.configure_biped_retarget(
+                "/obj/char", "/obj/char/biped", "/obj/char/mocap", joint_map={"src_hip": "Hips"}
+            )
+        assert result["success"] is True
+        target_map = created["dcc_mcp_biped_retarget_target_map"]
+        # setInput(1, source) must be called (input 0 alone crashes on real Houdini).
+        inputs = [c[0][0] for c in target_map.setInput.call_args_list]
+        assert 1 in inputs
+        second = [c for c in target_map.setInput.call_args_list if c[0][0] == 1]
+        assert second and second[0][0][1] is source
+
+
+class TestBuildRagdollCookGuard:
+    def _mock_hou(self, dopnet_cook_raises=False):
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+        dop_parent = _mock_node("/obj")
+        dop_parent.createNode.side_effect = None
+        dopnet = _mock_node("/obj/ragdoll_dopnet")
+        if dopnet_cook_raises:
+            dopnet.cook.side_effect = _ThrowingCook("The attempted operation failed. Error while cooking.")
+        dopnet.createNode.side_effect = container.createNode.side_effect
+
+        def node_lookup(path):
+            return {
+                "/obj/char": container,
+                "/obj/char/biped": skeleton,
+                "/obj": dop_parent,
+                "/obj/ragdoll_dopnet": dopnet,
+            }.get(path)
+
+        hou.node.side_effect = node_lookup
+        return hou, container, created, dopnet
+
+    def test_dop_data_nodes_not_standalone_cooked(self) -> None:
+        """QA blocking 2: DOP data nodes are not standalone-cookable; cook dopnet."""
+        mod = _load_script("build_ragdoll.py")
+        hou, container, created, dopnet = self._mock_hou()
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="/obj/ragdoll_dopnet")
+        assert result["success"] is True, result
+        # The dopnet is cooked as a whole (recursively validates the DOP network).
+        dopnet.cook.assert_called()
+        # constraintnetwork / merge DOP data nodes are NOT force-cooked alone.
+        for name in ("dcc_mcp_ragdoll_constraintnetwork", "dcc_mcp_ragdoll_merge"):
+            node = created[name]
+            assert node.cook.call_count == 0, "{} must not be standalone-cooked".format(name)
+
+    def test_dopnet_cook_exception_does_not_fail_tool(self) -> None:
+        """QA blocking 2: a dopnet cook exception is a cook_failure, not success=False."""
+        mod = _load_script("build_ragdoll.py")
+        hou, container, created, dopnet = self._mock_hou(dopnet_cook_raises=True)
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="/obj/ragdoll_dopnet")
+        assert result["success"] is True, result
+        assert result["context"]["validated"] is False
+        assert any("Error while cooking" in f["errors"][0] for f in result["context"]["cook_failures"])
+
+
+class TestMotionMixerCapabilityDegradation:
+    def _mock_hou_missing_type(self, missing_type):
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        target = _mock_node("/obj/char/biped")
+        sources = [_mock_node("/obj/char/s1"), _mock_node("/obj/char/s2")]
+        real_create = container.createNode.side_effect
+
+        def create_node(type_name, node_name=None, **kwargs):
+            if type_name == missing_type:
+                raise RuntimeError("The attempted operation failed.\nInvalid node type name")
+            return real_create(type_name, node_name=node_name, **kwargs)
+
+        container.createNode.side_effect = create_node
+
+        def node_lookup(path):
+            lookup = {"/obj/char": container, "/obj/char/biped": target}
+            for i, s in enumerate(sources, start=1):
+                lookup["/obj/char/s{}".format(i)] = s
+            return lookup.get(path)
+
+        hou.node.side_effect = node_lookup
+        return hou, container
+
+    def test_missing_h22_node_type_is_structured_capability_error(self) -> None:
+        """20.5/21: a missing H22 node type must degrade, not raise uncaught."""
+        mod = _load_script("build_retarget_motion_mixer.py")
+        hou, container = self._mock_hou_missing_type(missing_type="apex::packcharacter")
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_retarget_motion_mixer("/obj/char", "/obj/char/biped", ["/obj/char/s1", "/obj/char/s2"])
+        assert result["success"] is False, result
+        assert result["error"] == "capability_unavailable"
+        assert result["context"]["requires_houdini_22"] is True
+        assert result["context"]["missing_node_type"] == "apex::packcharacter"
+        assert result["error"] not in ("OperationFailed", "TypeError", "RuntimeError")

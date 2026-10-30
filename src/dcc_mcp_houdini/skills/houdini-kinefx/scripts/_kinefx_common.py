@@ -1,8 +1,74 @@
-"""Shared helpers for Houdini KineFX skills."""
+"""Shared helpers for Houdini KineFX skills.
+
+Cook validation and capability gating live here so every scene tool uses the
+same discipline. This module imports no ``hou`` at module scope: all host
+access is through the ``hou``/``container`` arguments, so it stays importable
+(and unit-testable) without a licensed Houdini.
+"""
 
 from __future__ import annotations
 
 from typing import Any
+
+
+class RequiresHoudini22(Exception):
+    """A Houdini-22-only node type is unavailable on the running host.
+
+    Raised by :func:`capability_create_node` when ``createNode`` fails with
+    "Invalid node type name" for a stage-6 / APEX node type. Scene tools catch
+    it and return a structured ``capability_unavailable`` error instead of an
+    uncaught ``hou.OperationFailed``.
+    """
+
+    def __init__(self, node_type: str, detail: str = "") -> None:
+        self.node_type = node_type
+        self.detail = detail
+        super().__init__("Houdini 22 node type unavailable: {}".format(node_type))
+
+
+def capability_create_node(container: Any, type_name: str, name: str) -> Any:
+    """Create *type_name*, translating a missing H22 node type to a capability error.
+
+    On Houdini 20.5/21 the Motion Mixer / APEX node types do not exist; a bare
+    ``createNode`` raises ``hou.OperationFailed: Invalid node type name``. We
+    convert that into :class:`RequiresHoudini22` so the caller can degrade
+    gracefully. All other create failures propagate unchanged.
+    """
+    try:
+        return container.createNode(type_name, node_name=name)
+    except Exception as exc:  # noqa: BLE001 - only translate missing node types
+        if "Invalid node type name" in str(exc):
+            raise RequiresHoudini22(type_name, str(exc)) from exc
+        raise
+
+
+def guarded_cook_failures(nodes: Any, force: bool = True) -> list:
+    """Cook each node, recording errors as cook_failures; never raises.
+
+    DOP data nodes and multi-input KineFX nodes are not standalone-cookable on
+    20.5/21/22: ``node.cook(force=True)`` raises ``hou.OperationFailed``. A cook
+    failure is a validation result, not a tool failure, so exceptions are caught
+    and returned as ``cook_failures`` entries (the tool stays ``success=True``
+    with ``validated=False``). ``errors()``/``warnings()`` calls are guarded too.
+    """
+    failures = []
+    for node in nodes:
+        try:
+            if force:
+                node.cook(force=True)
+            else:
+                node.cook()
+        except Exception as exc:  # noqa: BLE001 - a cook error is a validation result
+            failures.append({"path": node.path(), "errors": [str(exc)], "warnings": []})
+            continue
+        try:
+            errors = [str(err) for err in node.errors()]
+            warnings = [str(warn) for warn in node.warnings()]
+        except Exception as exc:  # noqa: BLE001 - diagnostics must not crash the tool
+            errors, warnings = [str(exc)], []
+        if errors or warnings:
+            failures.append({"path": node.path(), "errors": errors, "warnings": warnings})
+    return failures
 
 
 def get_node(hou: Any, node_path: str) -> Any:
