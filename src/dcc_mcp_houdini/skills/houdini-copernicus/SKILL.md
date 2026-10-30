@@ -13,9 +13,9 @@ metadata:
     dcc: houdini
     layer: domain
     stage: authoring
-    version: "1.0.0"
-    tags: [houdini, cop, copernicus, compositing, image, filter, raster, cook, output, validation]
-    search-hint: "cop copernicus image compositing raster blur colorcorrect file filter network cook output artifact"
+    version: "1.1.0"
+    tags: [houdini, cop, copernicus, compositing, image, filter, raster, cook, output, validation, terrain, heightfield, fractal, strata]
+    search-hint: "cop copernicus image compositing raster blur colorcorrect file filter network cook output artifact terrain heightfield fractal sample strata noise monotoheightfield"
     tools: tools.yaml
 ---
 
@@ -26,9 +26,42 @@ and parameter readback instead of embedding a large Python recipe, so agents
 can compose the same image-processing graph with the existing node and render
 skills.
 
+## Copernicus terrain generators (fractal sample + heightfield strata)
+
+Copernicus exposes native heightfield terrain nodes. Two generator families are
+first-class aliases so agents do not have to guess raw Houdini node type names:
+
+| Alias | COP node type | Family |
+|---|---|---|
+| `fractal_sample` | `fractalsample` | fractal sample |
+| `fractal_noise` | `fractalnoise` | fractal sample |
+| `fractal_noise_3d` | `fractalnoise3d` | fractal sample |
+| `strata` / `heightfield_strata` | `heightfield_strata` | heightfield strata |
+
+These node types were confirmed on a live Houdini 22.0.368 Copernicus host. A
+procedural terrain chain converts a fractal-noise mono layer into a heightfield
+Volume, applies strata, and converts back before a ROP output:
+`fractalnoise → mono → monotoheightfield → heightfield_strata → heightfieldtomono → rop_image`.
+
+- `plan_fractal_terrain` returns a deterministic, host-independent plan (node
+  types, recommended parameter names, required setup). It does not touch the
+  scene, cook, or claim an artifact.
+- `create_terrain_generator` creates and wires a single generator node from a
+  readable alias. The aliases also work in `create_cop_node` and
+  `build_composite_chain` through `resolve_filter_type`.
+
+**Parameter policy:** fractal/strata parameter names vary between Houdini
+builds. `RECOMMENDED_PARAMETERS` in the plan are guidance, not auto-applied
+defaults. Parameter overrides go through `parameter_edit`: a name the node does
+not expose fails the call and rolls back. `plan_fractal_terrain` and
+`create_terrain_generator` never cook and never claim a rendered artifact; cook
+with `cook_cop_node` and verify with `inspect_cop_output`.
+
 ## Supported filter aliases
 
 `file`, `blur`, `colorcorrect`, `ramp`, and `null` use their Copernicus names.
+`fractal_sample`, `fractal_noise`, `fractal_noise_3d`, `strata`, and
+`heightfield_strata` resolve to the terrain-generator node types above.
 `composite` maps to `blend`, and `output` maps to `rop_image`. A raw Houdini node type may also be used when
 it matches the namespaced node-type contract. Unsupported or unavailable node types
 return a structured error.

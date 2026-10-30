@@ -179,3 +179,74 @@ tools:
         output_path:
           type: string
           description: Explicit path to verify; when omitted the node's output parameter is probed.
+  - name: plan_fractal_terrain
+    description: >-
+      Return a deterministic, host-independent authoring plan for a Copernicus
+      fractal-sample + heightfield-strata terrain chain: node types, recommended
+      parameter names, and required setup. Does not touch the scene or cook.
+    source_file: scripts/plan_fractal_terrain.py
+    execution: sync
+    affinity: any
+    group: inspect
+    read_only: true
+    destructive: false
+    idempotent: true
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        generator:
+          type: string
+          default: fractal_noise
+          enum: [fractal_sample, fractal_noise, fractal_noise_3d]
+          description: Fractal-sample generator alias used at the head of the chain.
+        with_strata:
+          type: boolean
+          default: true
+          description: Include the heightfield_strata layer step.
+        with_output:
+          type: boolean
+          default: true
+          description: Include the rop_image output step.
+  - name: create_terrain_generator
+    description: >-
+      Create a typed Copernicus COP terrain-generator node (fractal sample or
+      heightfield strata) from a readable alias, apply bounded parameter overrides,
+      and wire existing input nodes. Creates/wires only; does not cook or verify an artifact.
+    source_file: scripts/create_terrain_generator.py
+    execution: sync
+    affinity: main
+    group: authoring
+    read_only: false
+    destructive: false
+    idempotent: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: false
+    input_schema:
+      type: object
+      required: [network_path, generator_type]
+      additionalProperties: false
+      properties:
+        network_path:
+          type: string
+          description: Absolute path of a Copernicus (copnet) network.
+        generator_type:
+          type: string
+          enum: [fractal_sample, fractal_noise, fractal_noise_3d, strata, heightfield_strata]
+          description: Terrain generator alias resolved to the real H22 Copernicus COP node type.
+        node_name:
+          type: string
+          description: Optional node name; defaults to the resolved node type plus 1.
+        input_nodes:
+          type: array
+          items: {type: string}
+          description: Existing nodes in the same network wired into sequential inputs.
+        parameters:
+          type: object
+          description: Bounded Houdini parameter name to value overrides (unknown names fail and roll back).
