@@ -3366,6 +3366,28 @@ class TestRenderExecution:
         launch.assert_called_once_with(mock_hou, "/out/mantra1", [1, 720, 1], str(tmp_path / "beauty.$F4.exr"))
         rop.render.assert_not_called()
 
+    def test_render_rop_background_uses_soho_diskfile_when_picture_is_absent(self, tmp_path: Path) -> None:
+        mod = _load_script("houdini-render", "render_rop.py")
+        pattern = str(tmp_path / "mantra.$F4.exr")
+        diskfile = _scalar_parm(pattern)
+        rop = _node("/out/mantra1", "mantra1", "ifd")
+        rop.parmTuple.return_value = None
+        rop.parm.side_effect = lambda n: diskfile if n == "soho_diskfile" else None
+        mock_hou = MagicMock()
+        mock_hou.node.return_value = rop
+        mock_hou.isUIAvailable.return_value = False
+        job = {"job_id": "c" * 32, "state": "queued", "pid": 4321}
+
+        with patch.dict(sys.modules, {"hou": mock_hou}), patch.object(
+            mod, "launch_background_render", return_value=job
+        ) as launch:
+            result = mod.render_rop("/out/mantra1", frame_range=[24, 24], background=True)
+
+        assert result["success"] is True
+        assert result["context"]["output_parm_name"] == "soho_diskfile"
+        launch.assert_called_once_with(mock_hou, "/out/mantra1", [24, 24], pattern)
+        rop.render.assert_not_called()
+
     def test_render_rop_rejects_headless_opengl_before_background_launch(self, tmp_path: Path) -> None:
         mod = _load_script("houdini-render", "render_rop.py")
         picture = _scalar_parm(str(tmp_path / "viewport.$F4.png"))
