@@ -144,8 +144,9 @@ tools:
     description: >-
       Inspect a USD PointInstancer (scattered assets) on a LOP Stage. Reports the
       prototype prims and bounded protoIndices and per-instance transform arrays,
-      plus a validation verdict (protoIndices in range, array lengths consistent).
-      Read-only; never authors to the stage.
+      plus a validation verdict (protoIndices in range, required positions present
+      with a matching length, array lengths consistent). Read-only; never authors
+      to the stage.
     source_file: scripts/get_instancer_info.py
     execution: sync
     affinity: main

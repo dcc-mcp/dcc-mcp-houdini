@@ -209,6 +209,22 @@ def _instancer_prim(
     )
 
 
+def _instancer_prim_with_positions(proto_indices, positions, prototype_targets=None):
+    """Build a scatter double with an explicit (possibly missing/empty) positions.
+
+    ``positions=None`` leaves the attribute unauthored; ``[]`` authors an empty
+    array. Both are USD-invalid when instances exist (F2 regression).
+    """
+    attributes = {"protoIndices": _Attribute(list(proto_indices))}
+    if positions is not None:
+        attributes["positions"] = _Attribute(list(positions))
+    return _Prim(
+        "/World/scatter",
+        attributes=attributes,
+        prototype_targets=list(prototype_targets or ("/World/scatter/Protos/rock",)),
+    )
+
+
 def _time_sampled_instancer_prim(
     proto_indices=(0, 0),
     positions=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
@@ -320,6 +336,40 @@ def test_per_instance_array_length_mismatch_is_flagged():
     assert validation["per_instance_arrays_match"] is False
     assert "positions_length_mismatch" in validation["issue_codes"]
     assert validation["consistent"] is False
+
+
+# ---------------------------------------------------------------------------
+# F2 regression: USD requires positions to be authored and match instance count.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("positions", [None, []])
+def test_missing_or_empty_positions_is_flagged(positions):
+    """F2: a scatter with instances but no (or empty) positions produces no
+    instance transforms, so it must never be reported as consistent."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _instancer_prim_with_positions([0, 0], positions)
+    result = _run(mod, prim)
+
+    assert result["success"] is True
+    context = result["context"]
+    assert context["instance_count"] == 2
+    assert context["array_counts"]["positions"] == 0
+    validation = context["validation"]
+    assert validation["per_instance_arrays_match"] is False
+    assert "positions_length_mismatch" in validation["issue_codes"]
+    assert validation["consistent"] is False
+
+
+def test_optional_arrays_may_stay_empty_when_positions_match():
+    """orientations/scales are optional: empty them without a false mismatch."""
+    mod = _load_script("get_instancer_info.py")
+    prim = _instancer_prim(proto_indices=(0, 0), positions=((0, 0, 0), (1, 0, 0)))
+    prim._attributes["orientations"] = _Attribute([])
+    prim._attributes["scales"] = _Attribute([])
+    validation = _run(mod, prim)["context"]["validation"]
+    assert validation["per_instance_arrays_match"] is True
+    assert "positions_length_mismatch" not in validation["issue_codes"]
+    assert validation["consistent"] is True
+    assert validation["issue_codes"] == []
 
 
 def test_empty_instancer_is_consistent():
@@ -642,3 +692,72 @@ def test_real_pxr_orientations_quat_is_numeric_array():
     assert sample == [[1.0, 0.5, 0.25, 0.125], [0.0, 1.0, 0.0, 0.0]]
     for entry in sample:
         assert all(isinstance(component, float) for component in entry)
+
+
+@pytest.mark.parametrize("positions_mode", ["unauthored", "empty"])
+def test_real_pxr_missing_or_empty_positions_is_flagged(positions_mode):
+    """F2 (real usd-core): USD requires ``positions`` to be authored and to
+    match ``protoIndices`` length. With instances but no/empty positions,
+    ComputeInstanceTransformsAtTime yields zero transforms and warns "no
+    positions"/"expected [2]"; the tool must flag it, not report consistent.
+    """
+    Usd, UsdGeom, Sdf, Gf, Vt = _real_pxr()
+    mod = _load_script("get_instancer_info.py")
+    stage = Usd.Stage.CreateInMemory()
+    pi = UsdGeom.PointInstancer.Define(stage, "/World/scatter")
+    rock = stage.DefinePrim("/World/scatter/Protos/rock", "Xform")
+    pi.GetPrototypesRel().SetTargets([rock.GetPath()])
+    pi.GetProtoIndicesAttr().Set(Vt.IntArray([0, 0]))
+
+    positions_attr = pi.GetPositionsAttr()
+    if positions_mode == "unauthored":
+        assert positions_attr.Get(Usd.TimeCode.Default()) is None
+    else:
+        positions_attr.Set(Vt.Vec3fArray([]))
+        assert len(positions_attr.Get(Usd.TimeCode.Default())) == 0
+    assert pi.GetProtoIndicesAttr().GetNumTimeSamples() == 0
+
+    # Ground truth from USD itself: no instance transforms without positions.
+    default = Usd.TimeCode.Default()
+    transforms = pi.ComputeInstanceTransformsAtTime(default, default)
+    assert len(list(transforms)) == 0
+
+    result = _real_run(mod, stage, "/World/scatter")
+
+    assert result["success"] is True
+    context = result["context"]
+    assert context["instance_count"] == 2
+    assert context["array_counts"]["positions"] == 0
+    validation = context["validation"]
+    assert validation["per_instance_arrays_match"] is False
+    assert "positions_length_mismatch" in validation["issue_codes"]
+    # No time samples were authored, so F1's flag stays off (isolates F2).
+    assert "time_samples_require_time_code" not in validation["issue_codes"]
+    assert validation["consistent"] is False
+
+
+def test_real_pxr_matching_positions_is_consistent():
+    """F2 complement (real usd-core): positions length == instance count, and
+    empty optional orientations/scales, stays a clean consistent verdict."""
+    Usd, UsdGeom, Sdf, Gf, Vt = _real_pxr()
+    mod = _load_script("get_instancer_info.py")
+    stage = Usd.Stage.CreateInMemory()
+    pi = UsdGeom.PointInstancer.Define(stage, "/World/scatter")
+    rock = stage.DefinePrim("/World/scatter/Protos/rock", "Xform")
+    pi.GetPrototypesRel().SetTargets([rock.GetPath()])
+    pi.GetProtoIndicesAttr().Set(Vt.IntArray([0, 0]))
+    pi.GetPositionsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0, 0, 0), Gf.Vec3f(1, 0, 0)]))
+    pi.GetOrientationsAttr().Set(Vt.QuathArray([]))
+    pi.GetScalesAttr().Set(Vt.Vec3fArray([]))
+
+    default = Usd.TimeCode.Default()
+    assert len(list(pi.ComputeInstanceTransformsAtTime(default, default))) == 2
+
+    result = _real_run(mod, stage, "/World/scatter")
+
+    assert result["success"] is True
+    validation = result["context"]["validation"]
+    assert validation["per_instance_arrays_match"] is True
+    assert "positions_length_mismatch" not in validation["issue_codes"]
+    assert validation["consistent"] is True
+    assert validation["issue_codes"] == []

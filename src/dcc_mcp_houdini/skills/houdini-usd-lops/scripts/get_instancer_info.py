@@ -19,6 +19,10 @@ from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_
 # expected to match the instance count.
 _INSTANCE_ARRAYS = ("protoIndices", "positions", "orientations", "scales", "invisibleIds")
 _PER_INSTANCE_ARRAYS = ("positions", "orientations", "scales")
+# USD requires ``positions`` to be authored and to match ``protoIndices`` length;
+# an empty/missing positions array makes the scatter produce no instance
+# transforms. ``orientations`` and ``scales`` are optional and may stay empty.
+_REQUIRED_PER_INSTANCE_ARRAYS = ("positions",)
 
 
 def _is_point_instancer(UsdGeom: Any, prim: Any) -> bool:
@@ -146,6 +150,11 @@ def get_instancer_info(
     detected, the arrays are re-read at the earliest time sample (so the data is
     real), the effective time is reported, and ``time_samples_require_time_code``
     is flagged so ``consistent`` is never a silent green on frame-varying data.
+
+    USD also requires ``positions`` to be authored and to match the number of
+    instances; a scatter whose ``positions`` is empty or missing is flagged with
+    ``positions_length_mismatch`` instead of being reported as consistent. The
+    optional ``orientations``/``scales`` arrays may remain empty.
     """
     try:
         import hou  # noqa: PLC0415
@@ -200,9 +209,17 @@ def get_instancer_info(
                 elif index < 0 or index >= prototype_count:
                     out_of_range += 1
 
+        # ``positions`` is required by USD: an empty/missing array must be flagged
+        # (it yields no instance transforms), so compare its full count against
+        # the instance count without skipping zero. Optional arrays
+        # (``orientations``/``scales``) may legitimately stay empty, so only a
+        # non-empty authored array is checked for them.
         mismatched = []
         for name in _PER_INSTANCE_ARRAYS:
-            if counts[name] and counts[name] != instance_count:
+            if name in _REQUIRED_PER_INSTANCE_ARRAYS:
+                if counts[name] != instance_count:
+                    mismatched.append(name)
+            elif counts[name] and counts[name] != instance_count:
                 mismatched.append(name)
 
         issue_codes = []

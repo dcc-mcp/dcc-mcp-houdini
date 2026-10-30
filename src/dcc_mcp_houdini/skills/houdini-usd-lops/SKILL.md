@@ -80,7 +80,10 @@ onto points. It is read-only and never authors to the stage. It reports:
   Quaternion orientations are reported as numeric `[real, i, j, k]` lists.
 - `validation` — a decidable verdict: `instance_count`, `prototype_count`,
   `proto_indices_in_range`, `out_of_range_count`, `per_instance_arrays_match`,
-  `consistent`, and `issue_codes`.
+  `consistent`, and `issue_codes`. USD requires `positions` to be authored and
+  to match the instance count, so an empty or missing `positions` array adds
+  `positions_length_mismatch` and makes `consistent` false; the optional
+  `orientations`/`scales` arrays may stay empty.
 - `time_code_source` / `effective_time_code` / `time_sampled_arrays` — which time
   code was actually used and whether any array is frame-varying.
 
