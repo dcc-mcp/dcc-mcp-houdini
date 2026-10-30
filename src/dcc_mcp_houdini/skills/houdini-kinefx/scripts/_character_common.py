@@ -213,7 +213,15 @@ def biped_chain(height: float, convention: str, ground_z: float = 0.0) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Rig-inversion linear algebra (pure, 4x4 row-major matrices as 16-tuples).
+# Rig-inversion linear algebra (pure).
+#
+# Matrices are 16-value 4x4 tuples in Houdini's row-major, row-vector
+# convention: vectors are rows (``v' = v * M``), the 3x3 rotation/scale block
+# is the upper-left (indices 0,1,2,4,5,6,8,9,10) and the translation lives in
+# the bottom row (indices 12,13,14). Forward kinematics composes as
+# ``world[i] = local[i] * world[parent]``, so rig inversion is
+# ``local[i] = world[i] * inverse(world[parent])``. Keeping one explicit
+# convention here (and in the scene/headless tools) avoids mirrored rotations.
 # ---------------------------------------------------------------------------
 
 
@@ -247,10 +255,11 @@ def _mat4_inverse(m):
 def compute_local_transforms(world_matrices, parent_indices):
     """Return parent-relative (local) transforms from world transforms.
 
-    This is the mathematical inverse of forward kinematics: the local transform
-    of joint *i* is ``inverse(world[parent]) * world[i]`` (world for roots).
-    KineFX rig inversion needs these local transforms to re-drive a control rig
-    from a world-posed skeleton. Raises ``ValueError`` on bad input or a
+    Matrices follow Houdini's row-vector convention (see the module header):
+    ``world[i] = local[i] * world[parent]``. Rig inversion is therefore
+    ``local[i] = world[i] * inverse(world[parent])`` (world for roots). Using
+    the inverse on the *right* keeps the rotation direction correct; applying
+    it on the left mirrors rotations. Raises ``ValueError`` on bad input or a
     singular parent transform.
     """
     if len(world_matrices) != len(parent_indices):
@@ -268,5 +277,5 @@ def compute_local_transforms(world_matrices, parent_indices):
             raise ValueError("parent_index must reference another valid joint")
         parent_world = tuple(float(v) for v in world_matrices[parent])
         parent_inverse = _mat4_inverse(parent_world)
-        locals_out.append(_mat4_mul(parent_inverse, world))
+        locals_out.append(_mat4_mul(world, parent_inverse))
     return [tuple(round(value, 6) for value in matrix) for matrix in locals_out]

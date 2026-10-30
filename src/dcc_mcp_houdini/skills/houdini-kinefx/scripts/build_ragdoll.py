@@ -21,6 +21,24 @@ def _set_if_present(node: Any, name: str, value: Any) -> None:
         parm.set(value)
 
 
+def _connect(node: Any, input_index: int, source: Any, label: str, failures: list) -> bool:
+    """Wire a single DOP input, recording (never swallowing) any failure."""
+    try:
+        node.setInput(input_index, source)
+    except Exception as exc:  # noqa: BLE001 - surface every wiring failure
+        failures.append(
+            {
+                "path": node.path(),
+                "input": input_index,
+                "source": source.path(),
+                "label": label,
+                "error": str(exc),
+            }
+        )
+        return False
+    return True
+
+
 def build_ragdoll(
     geo_path: str,
     skeleton: str,
@@ -112,17 +130,28 @@ def build_ragdoll(
             ground = dop("staticobject", "ground")
             _set_if_present(ground, "batch", 1)
             created_dop.append(ground)
-        # Wire the solver inputs; guarded to avoid failures on atypical layouts.
-        try:
-            merge.setInput(0, solver)
-            merge.setInput(1, rbd)
-            merge.setInput(2, constraint_net)
-            merge.setInput(3, gravity)
-            if ground is not None:
-                merge.setInput(4, ground)
-            output.setInput(0, merge)
-        except Exception:  # noqa: BLE001 - wiring is best-effort across builds
-            pass
+        # Wire the solver inputs. Failures are recorded, not swallowed: a
+        # disconnected RBD network must never be reported as validated.
+        wiring = [
+            (merge, 0, solver, "solver"),
+            (merge, 1, rbd, "rbd_object"),
+            (merge, 2, constraint_net, "constraint_network"),
+            (merge, 3, gravity, "gravity"),
+            (output, 0, merge, "output"),
+        ]
+        if ground is not None:
+            wiring.append((merge, 4, ground, "ground"))
+        wiring_failures = []
+        for target, input_index, source, label in wiring:
+            _connect(target, input_index, source, label, wiring_failures)
+        if wiring_failures:
+            return skill_error(
+                "Ragdoll DOP wiring failed",
+                "ragdoll_wiring_failed",
+                wiring_failures=wiring_failures,
+                created_sop_nodes=[node.path() for node in created_sop],
+                created_dop_nodes=[node.path() for node in created_dop],
+            )
 
         all_nodes = created_sop + created_dop
         failures = []
@@ -152,8 +181,9 @@ def build_ragdoll(
             ground_node=ground.path() if ground is not None else None,
             created_sop_nodes=[node.path() for node in created_sop],
             created_dop_nodes=[node.path() for node in created_dop],
+            wiring_failures=wiring_failures,
             cook_failures=failures,
-            validated=not failures,
+            validated=not failures and not wiring_failures,
             next_tools=["houdini_simulation__validate_simulation_setup"],
             note=(
                 "Setup network only; supply proxy tuning and an explicit cook/output "

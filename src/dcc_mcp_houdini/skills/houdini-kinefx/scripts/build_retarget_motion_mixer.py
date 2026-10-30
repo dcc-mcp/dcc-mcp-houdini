@@ -22,6 +22,25 @@ def _create(container: Any, type_name: str, name: str) -> Any:
     return node
 
 
+def _has_point_attrib(node: Any, attribute: str) -> bool:
+    """Return True only when *node* geometry actually carries a point attribute.
+
+    Explicit-attribute retargeting reads ``mapping_attribute`` values off the
+    source skeleton points. If the caller never authored them, Map Points has
+    nothing to map, so the tool must not report a validated build.
+    """
+    try:
+        geometry = node.geometry()
+    except Exception:  # noqa: BLE001 - a non-cookable source is "missing"
+        return False
+    if geometry is None:
+        return False
+    try:
+        return geometry.findPointAttrib(attribute) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def build_retarget_motion_mixer(
     geo_path: str,
     target_skeleton: str,
@@ -92,6 +111,22 @@ def build_retarget_motion_mixer(
         container = get_node(hou, geo_path)
         target = get_node(hou, target_skeleton)
         sources = [get_node(hou, path) for path in source_skeletons]
+
+        # F2: explicit/cross-convention mapping is only real when the source
+        # skeletons carry the mapping attribute. Verify before building; error
+        # (rather than report validated) when it is missing.
+        if explicit_map:
+            missing = [source.path() for source in sources if not _has_point_attrib(source, mapping_attribute)]
+            if missing:
+                return skill_error(
+                    "Mapping attribute missing on source skeletons",
+                    "mapping_attribute_missing",
+                    mapping_attribute=mapping_attribute,
+                    missing_sources=missing,
+                    next_tools=["biped_joint_map", "configure_biped_retarget"],
+                    hint="Author the mapping_attribute point values from joint_map before retargeting.",
+                )
+
         clip_nodes = []
         solve_nodes = []
         created = []
@@ -200,6 +235,8 @@ def build_retarget_motion_mixer(
             clip_names=names,
             clip_nodes=[node.path() for node in clip_nodes],
             mapping_mode="explicit" if explicit_map else "auto_by_name",
+            mapping_attribute=mapping_attribute,
+            mapping_attribute_verified=bool(explicit_map),
             joint_map=explicit_map or {},
             mapped_joint_count=len(explicit_map) if explicit_map else 0,
             sop_output=output.path(),

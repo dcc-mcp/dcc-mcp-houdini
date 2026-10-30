@@ -576,8 +576,10 @@ tools:
       Rig inversion (workflow stage 5): recover parent-relative local joint
       transforms from a world-posed skeleton. Headless mode takes world_matrices
       + parent_indices (pure linear algebra); scene mode reads a KineFX
-      skeleton's transform/P attributes and writes local transforms to a new
-      skeleton SOP. Returns the computed local transforms.
+      skeleton's transform/P attributes and writes the full 4x4 local transform
+      to the KineFX 'localtransform' Float-16 matrix4 point attribute on a new
+      skeleton SOP (world position kept in P, world rotation in transform).
+      Returns the computed local transforms.
     source_file: scripts/invert_rig.py
     execution: sync
     affinity: main
@@ -603,7 +605,10 @@ tools:
             items: {type: number}
             minItems: 16
             maxItems: 16
-          description: 4x4 row-major world transforms (headless mode).
+          description: >-
+            4x4 world transforms in Houdini row-vector, row-major convention:
+            3x3 rotation in the upper-left block and translation in the bottom
+            row (flat slots 12/13/14). headless mode.
         parent_indices:
           type: array
           items: {type: integer}

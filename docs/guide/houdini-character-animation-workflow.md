@@ -96,10 +96,23 @@ author the `retarget_joint` point attribute consumed by `kinefx::mappoints` and
 
 ### Rig inversion (`invert_rig`)
 
-Pure FK inverse: `local[i] = inverse(world[parent[i]]) · world[i]` (world for
-roots). Verifiable with 4×4 matrix unit tests with no Houdini. Scene mode reads
-a KineFX skeleton's `transform`/`P` point attributes and writes local
-transforms to a fresh skeleton SOP's stash.
+Pure FK inverse in Houdini's row-vector convention (`v' = v · M`):
+`world[i] = local[i] · world[parent[i]]`, so
+`local[i] = world[i] · inverse(world[parent[i]])` (world for roots). Matrices
+are row-major 4×4 with the 3×3 rotation in the upper-left block and translation
+in the bottom row (flat slots 12/13/14). Applying the inverse on the left would
+mirror rotations — a rotated-parent known-answer unit test guards this.
+
+Scene mode reads a KineFX skeleton's `transform` (Float-9 world matrix3) and
+`P` (world position) and authors each full 4×4 local transform to the
+`localtransform` point attribute of a fresh skeleton SOP's stash, failing
+loudly if the `stash` parameter is unavailable. Verified on licensed Houdini
+22.0.368: `kinefx::computetransform` outputs `localtransform` as a **Float-16
+matrix4** (not a rotation-only matrix3), with translation in the bottom row;
+`P` keeps the world position and `transform` the world matrix3. The computed
+values match `kinefx::computetransform`'s own `outputlocaltransform` on a
+rotated-parent known-answer case. The pure math and writeback are unit-tested
+headlessly; final whole-scene visual/cook acceptance remains QA.
 
 ## 5. Tracer-bullet flow
 

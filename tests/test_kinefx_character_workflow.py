@@ -36,11 +36,17 @@ def _load_common() -> ModuleType:
 
 
 def _identity():
+    """4x4 identity (Houdini row-vector, row-major)."""
     return (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
 
 
 def _translated(x, y=0.0, z=0.0):
-    return (1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1)
+    """Translation in the BOTTOM ROW (slots 12/13/14), Houdini row-vector."""
+    return (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1)
+
+
+# 90-degree CCW rotation about Z in Houdini row-vector form. (1,0,0) -> (0,1,0).
+_ROT_Z90 = (0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +108,10 @@ class TestCharacterCommon:
         worlds = [_identity(), _translated(5.0), _translated(2.0)]
         parents = [-1, 0, 0]
         local = mod.compute_local_transforms(worlds, parents)
-        assert local[0][3] == pytest.approx(0.0)  # root at origin
-        assert local[1][3] == pytest.approx(5.0)  # child world tx
-        assert local[2][3] == pytest.approx(2.0)
+        # Houdini row-vector convention: translation is in slot 12 (bottom row).
+        assert local[0][12] == pytest.approx(0.0)  # root at origin
+        assert local[1][12] == pytest.approx(5.0)  # child world tx
+        assert local[2][12] == pytest.approx(2.0)
 
     def test_compute_local_transforms_grandchild(self) -> None:
         mod = _load_common()
@@ -112,8 +119,30 @@ class TestCharacterCommon:
         worlds = [_translated(10.0), _translated(12.0), _translated(17.0)]
         parents = [-1, 0, 1]
         local = mod.compute_local_transforms(worlds, parents)
-        assert local[1][3] == pytest.approx(2.0)
-        assert local[2][3] == pytest.approx(5.0)
+        assert local[1][12] == pytest.approx(2.0)
+        assert local[2][12] == pytest.approx(5.0)
+
+    def test_rotated_parent_known_answer(self) -> None:
+        """A rotated parent must not mirror the child rotation on inversion.
+
+        parent world = 90-degree CCW rotation about Z (no translation).
+        child local  = pure translation (2, 0, 0).
+        FK (row-vector): world[child] = local[child] * world[parent], which
+        yields a child world matrix with translation (0, 2, 0). Inverting must
+        recover the original local transform exactly -- a wrong multiplication
+        order (inverse on the left) mirrors the rotation and fails this test.
+        """
+        mod = _load_common()
+        parent_world = _ROT_Z90
+        child_local = _translated(2.0)
+        child_world = mod._mat4_mul(child_local, parent_world)
+        # Known-answer child world matrix (computed once, asserted explicitly).
+        assert child_world == pytest.approx((0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1))
+        local = mod.compute_local_transforms([parent_world, child_world], [-1, 0])
+        assert local[0] == pytest.approx(parent_world)  # root unchanged
+        assert local[1] == pytest.approx(child_local)  # rotation NOT mirrored
+        assert local[1][12] == pytest.approx(2.0)  # bottom-row translation
+        assert local[1][3] == pytest.approx(0.0)  # nothing in last column
 
     def test_compute_local_transforms_rejects_bad_input(self) -> None:
         mod = _load_common()
@@ -216,7 +245,37 @@ class TestInvertRigHeadless:
         assert result["success"] is True
         assert result["context"]["mode"] == "headless"
         assert result["context"]["joint_count"] == 2
-        assert result["context"]["local_transforms"][1][3] == pytest.approx(3.0)
+        assert result["context"]["local_transforms"][1][12] == pytest.approx(3.0)
+
+    def test_headless_rotated_parent_known_answer(self) -> None:
+        """Headless path must not mirror a rotated parent's rotation (review F3)."""
+        mod = _load_script("invert_rig.py")
+        parent_world = _ROT_Z90
+        child_local = _translated(2.0)
+        common = _load_common()
+        child_world_matrix = common._mat4_mul(child_local, parent_world)
+        result = mod.invert_rig(world_matrices=[parent_world, child_world_matrix], parent_indices=[-1, 0])
+        assert result["success"] is True, result
+        local = result["context"]["local_transforms"]
+        assert local[0] == pytest.approx(parent_world)
+        assert local[1] == pytest.approx(child_local)
+        assert result["context"]["convention"] == "houdini_row_vector"
+
+    def test_point_world_from_bottom_row_translation(self) -> None:
+        """_point_world_from must place P in slots 12/13/14, not 3/7/11 (F3)."""
+        mod = _load_script("invert_rig.py")
+        identity3 = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+        world = mod._point_world_from(identity3, (4.0, 5.0, 6.0))
+        assert (world[12], world[13], world[14]) == pytest.approx((4.0, 5.0, 6.0))
+        assert (world[3], world[7], world[11]) == pytest.approx((0.0, 0.0, 0.0))
+        assert (world[0], world[1], world[2], world[4], world[5], world[6]) == pytest.approx((1, 0, 0, 0, 1, 0))
+        # A 16-value transform keeps its 3x3 rotation but P stays authoritative
+        # for translation (KineFX stores the joint position in P).
+        full = (0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1)
+        world16 = mod._point_world_from(full, (9.0, 9.0, 9.0))
+        assert (world16[0], world16[1], world16[2]) == pytest.approx((0, 1, 0))
+        assert (world16[4], world16[5], world16[6]) == pytest.approx((-1, 0, 0))
+        assert (world16[12], world16[13], world16[14]) == pytest.approx((9.0, 9.0, 9.0))
 
     def test_headless_requires_both_inputs(self) -> None:
         mod = _load_script("invert_rig.py")
@@ -265,6 +324,73 @@ def _mock_container(hou, geo_path="/obj/char", create_paths=None):
     container.parent.return_value = container
     container.layoutChildren.return_value = None
     return container, created
+
+
+def _mock_point(position, name, transform=None):
+    pt = MagicMock()
+    pt.position.return_value = position
+    if transform is None:
+        transform = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+    values = {"name": name, "transform": transform, "localtransform": transform}
+
+    def attrib_value(key, _values=values):
+        if isinstance(key, str):
+            return _values.get(key, "")
+        return _values.get("transform")
+
+    pt.attribValue.side_effect = attrib_value
+    return pt
+
+
+def _mock_invert_scene_hou(stash=True, cook_errors=()):
+    """Mock hou for invert_rig scene mode using the fresh-geometry pattern."""
+    hou = MagicMock()
+    source_points = [
+        _mock_point((0.0, 0.0, 0.0), "Hips"),
+        _mock_point((0.0, 1.0, 0.0), "Spine"),
+    ]
+    geometry = MagicMock()
+    geometry.points.return_value = source_points
+    geometry.findPointAttrib.return_value = MagicMock()  # transform + name present
+    geometry.prims.return_value = []  # linear-chain fallback
+
+    rig = _mock_node("/obj/char/rig")
+    rig.geometry.return_value = geometry
+
+    container, created = _mock_container(hou)
+    out_node = created.setdefault("inverted_rig", _mock_node("/obj/char/inverted_rig"))
+    # Force createNode to return our out_node regardless of name.
+    container.createNode.side_effect = None
+    container.createNode.return_value = out_node
+    out_node.parm.return_value = MagicMock() if stash else None
+    out_node.errors.return_value = cook_errors
+    rig.parent.return_value = container
+
+    editable = MagicMock()
+    new_points = [_mock_point((0.0, 0.0, 0.0), ""), _mock_point((0.0, 0.0, 0.0), "")]
+    editable.createPoints.return_value = new_points
+    # Distinct sentinels per attribute so tests can assert which value was
+    # written where (localtransform must receive the full 16-value matrix4).
+    attr_mocks = {}
+
+    def add_attrib(kind, name, default, _am=attr_mocks):
+        handle = MagicMock()
+        handle.name = name
+        handle.default = default
+        _am[name] = handle
+        return handle
+
+    editable.addAttrib.side_effect = add_attrib
+    editable.attr_mocks = attr_mocks
+    editable.createPolygon.return_value = MagicMock()
+    hou.Geometry.return_value = editable
+    hou.attribType.Point = MagicMock()
+
+    def node_lookup(path):
+        return {"/obj/char": container, "/obj/char/rig": rig}.get(path)
+
+    hou.node.side_effect = node_lookup
+    return hou, editable, out_node, new_points
 
 
 class TestCreateBipedTemplate:
@@ -424,6 +550,77 @@ class TestBuildRagdoll:
         mod = _load_script("build_ragdoll.py")
         assert mod.build_ragdoll("/obj/char", "/obj/char/biped", constraint_type="nope")["success"] is False
 
+    def test_wiring_failure_returns_error(self) -> None:
+        """F1: a setInput failure must be surfaced, not swallowed as validated."""
+        mod = _load_script("build_ragdoll.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+        dop_parent = _mock_node("/obj")
+        dopnet = _mock_node("/obj/ragdoll_dopnet")
+
+        def create_dop(type_name, node_name=None, **kwargs):
+            name = node_name or type_name.split("::")[-1]
+            node = _mock_node("/obj/ragdoll_dopnet/{}".format(name))
+            node.type_name = type_name
+            if name.endswith("_merge"):
+                node.setInput.side_effect = RuntimeError("simulated wiring failure")
+            created[name] = node
+            return node
+
+        dopnet.createNode.side_effect = create_dop
+
+        def node_lookup(path):
+            return {
+                "/obj/char": container,
+                "/obj/char/biped": skeleton,
+                "/obj": dop_parent,
+                "/obj/ragdoll_dopnet": dopnet,
+            }.get(path)
+
+        hou.node.side_effect = node_lookup
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="/obj/ragdoll_dopnet")
+        assert result["success"] is False, result
+        assert result["context"]["wiring_failures"]
+        assert all("simulated wiring failure" in f["error"] for f in result["context"]["wiring_failures"])
+
+    def test_wiring_failure_never_validated(self) -> None:
+        """F1: validated must be False whenever any wiring connection fails."""
+        mod = _load_script("build_ragdoll.py")
+        hou = MagicMock()
+        container, created = _mock_container(hou)
+        skeleton = _mock_node("/obj/char/biped")
+        dop_parent = _mock_node("/obj")
+        dopnet = _mock_node("/obj/ragdoll_dopnet")
+
+        def create_dop(type_name, node_name=None, **kwargs):
+            name = node_name or type_name.split("::")[-1]
+            node = _mock_node("/obj/ragdoll_dopnet/{}".format(name))
+            node.type_name = type_name
+            if name.endswith("_output"):
+                node.setInput.side_effect = RuntimeError("output wiring failure")
+            created[name] = node
+            return node
+
+        dopnet.createNode.side_effect = create_dop
+
+        def node_lookup(path):
+            return {
+                "/obj/char": container,
+                "/obj/char/biped": skeleton,
+                "/obj": dop_parent,
+                "/obj/ragdoll_dopnet": dopnet,
+            }.get(path)
+
+        hou.node.side_effect = node_lookup
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_ragdoll("/obj/char", "/obj/char/biped", dopnet_path="/obj/ragdoll_dopnet")
+        assert result["success"] is False
+        assert result["context"]["wiring_failures"]
+        # No success result may claim validated=True on a wiring failure.
+        assert result["context"].get("validated") is not True
+
 
 class TestBuildApexFbxBiped:
     def test_packs_and_reports_export(self) -> None:
@@ -492,6 +689,8 @@ class TestBuildRetargetMotionMixerEnhancement:
         assert result["success"] is True, result
         assert result["context"]["mapping_mode"] == "explicit"
         assert result["context"]["mapped_joint_count"] == 22
+        assert result["context"]["mapping_attribute"] == "retarget_joint"
+        assert result["context"]["mapping_attribute_verified"] is True
 
     def test_explicit_mapping_via_joint_map(self) -> None:
         mod = _load_script("build_retarget_motion_mixer.py")
@@ -506,6 +705,56 @@ class TestBuildRetargetMotionMixerEnhancement:
         assert result["success"] is True
         assert result["context"]["joint_map"] == {"a": "b"}
 
+    def test_explicit_mapping_missing_attribute_errors(self) -> None:
+        """F2: explicit mapping must error when sources lack the mapping attribute."""
+        mod = _load_script("build_retarget_motion_mixer.py")
+        hou, container, created = self._mock_hou()
+        for source in (hou.node("/obj/char/src_a"), hou.node("/obj/char/src_b")):
+            source.geometry.return_value.findPointAttrib.return_value = None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_retarget_motion_mixer(
+                "/obj/char",
+                "/obj/char/target",
+                ["/obj/char/src_a", "/obj/char/src_b"],
+                source_convention="mixamo",
+                target_convention="kinefx",
+            )
+        assert result["success"] is False, result
+        assert result["error"] == "mapping_attribute_missing"
+        assert result["context"]["mapping_attribute"] == "retarget_joint"
+        assert len(result["context"]["missing_sources"]) == 2
+
+    def test_explicit_mapping_missing_attribute_via_joint_map_errors(self) -> None:
+        """F2: same guard applies to an explicit joint_map (not only conventions)."""
+        mod = _load_script("build_retarget_motion_mixer.py")
+        hou, container, created = self._mock_hou()
+        hou.node("/obj/char/src_a").geometry.return_value.findPointAttrib.return_value = None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_retarget_motion_mixer(
+                "/obj/char",
+                "/obj/char/target",
+                ["/obj/char/src_a", "/obj/char/src_b"],
+                joint_map={"a": "b"},
+            )
+        assert result["success"] is False
+        assert result["error"] == "mapping_attribute_missing"
+
+    def test_auto_mapping_does_not_require_attribute(self) -> None:
+        """F2: default auto-by-name mapping stays backward compatible."""
+        mod = _load_script("build_retarget_motion_mixer.py")
+        hou, container, created = self._mock_hou()
+        for source in (hou.node("/obj/char/src_a"), hou.node("/obj/char/src_b")):
+            source.geometry.return_value.findPointAttrib.return_value = None
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.build_retarget_motion_mixer(
+                "/obj/char",
+                "/obj/char/target",
+                ["/obj/char/src_a", "/obj/char/src_b"],
+            )
+        assert result["success"] is True, result
+        assert result["context"]["mapping_mode"] == "auto_by_name"
+        assert result["context"]["mapping_attribute_verified"] is False
+
     def test_rejects_bad_convention(self) -> None:
         mod = _load_script("build_retarget_motion_mixer.py")
         result = mod.build_retarget_motion_mixer(
@@ -516,3 +765,88 @@ class TestBuildRetargetMotionMixerEnhancement:
             target_convention="kinefx",
         )
         assert result["success"] is False
+
+
+class TestInvertRigScene:
+    def test_scene_writes_localtransform_attribute(self) -> None:
+        """F3: parent-relative transforms go to a Float-16 localtransform matrix4.
+
+        Verified on licensed Houdini 22.0.368: localtransform is a Float-16
+        matrix4 (not a Float-9 matrix3); P keeps world positions and transform
+        stays the world matrix3.
+        """
+        mod = _load_script("invert_rig.py")
+        hou, editable, out_node, new_points = _mock_invert_scene_hou()
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.invert_rig(rig_node="/obj/char/rig")
+        assert result["success"] is True, result
+        ctx = result["context"]
+        assert ctx["mode"] == "scene"
+        assert ctx["local_attribute"] == "localtransform"
+        assert ctx["local_attribute_type"] == "matrix4"
+        assert ctx["convention"] == "houdini_row_vector"
+        assert ctx["writeback"] is True
+        assert ctx["validated"] is True
+        assert ctx["joint_count"] == 2
+        # Fresh geometry (not the unverified copy constructor) is used.
+        hou.Geometry.assert_called_once_with()
+        editable.createPoints.assert_called_once()
+        # P keeps the WORLD positions, not local translations.
+        world_positions = editable.createPoints.call_args.args[0]
+        assert [tuple(p) for p in world_positions] == [(0.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+        added_names = [call.args[1] for call in editable.addAttrib.call_args_list]
+        assert "localtransform" in added_names
+        assert "name" in added_names
+        assert "transform" in added_names
+        # localtransform defaults to a 16-value identity matrix4; transform is matrix3.
+        assert len(editable.attr_mocks["localtransform"].default) == 16
+        assert len(editable.attr_mocks["transform"].default) == 9
+        # Each point received the FULL 16-value local transform in localtransform.
+        lt_handle = editable.attr_mocks["localtransform"]
+        for pt in new_points:
+            lt_values = [c.args[1] for c in pt.setAttribValue.call_args_list if c.args[0] is lt_handle]
+            assert len(lt_values) == 1
+            assert len(lt_values[0]) == 16
+        out_node.parm.assert_called_with("stash")
+        assert out_node.parm.return_value.set.called
+
+    def test_scene_missing_stash_is_hard_error(self) -> None:
+        """F3: a missing stash parameter must never be a silent success."""
+        mod = _load_script("invert_rig.py")
+        hou, editable, out_node, new_points = _mock_invert_scene_hou(stash=False)
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.invert_rig(rig_node="/obj/char/rig")
+        assert result["success"] is False, result
+        assert result["error"] == "writeback_failed"
+        assert "stash" in result["context"]["detail"].lower()
+        assert result["context"].get("validated") is not True
+
+    def test_scene_cook_failure_is_hard_error(self) -> None:
+        """F3: a cook error on the inverted skeleton must be surfaced."""
+        mod = _load_script("invert_rig.py")
+        hou, editable, out_node, new_points = _mock_invert_scene_hou(cook_errors=("bad cook",))
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.invert_rig(rig_node="/obj/char/rig")
+        assert result["success"] is False, result
+        assert result["error"] == "cook_failed"
+        assert result["context"]["errors"] == ["bad cook"]
+
+    def test_scene_local_transforms_use_bottom_row_translation(self) -> None:
+        """F3: scene-computed locals carry translation in slots 12/13/14."""
+        mod = _load_script("invert_rig.py")
+        hou, editable, out_node, new_points = _mock_invert_scene_hou()
+        with patch.dict(sys.modules, {"hou": hou}):
+            result = mod.invert_rig(rig_node="/obj/char/rig")
+        assert result["success"] is True
+        locals_out = result["context"]["local_transforms"]
+        # Root at origin; child is 1 unit up in Y (bottom-row translation).
+        assert locals_out[0][12] == pytest.approx(0.0)
+        assert locals_out[1][13] == pytest.approx(1.0)
+        assert all(local[3] == pytest.approx(0.0) for local in locals_out)
+        # The FULL 16-value matrix4 written to localtransform carries the same
+        # bottom-row translation (not a rotation-only matrix3 in last column).
+        lt_handle = editable.attr_mocks["localtransform"]
+        written = [c.args[1] for c in new_points[1].setAttribValue.call_args_list if c.args[0] is lt_handle][0]
+        assert len(written) == 16
+        assert written[13] == pytest.approx(1.0)
+        assert (written[3], written[7], written[11]) == pytest.approx((0.0, 0.0, 0.0))
