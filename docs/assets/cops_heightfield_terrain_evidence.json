@@ -1,0 +1,253 @@
+{
+ "host": {
+  "houdini": "22.0.368",
+  "python": "3.13.10"
+ },
+ "chain": [
+  "fractalnoise",
+  "mono",
+  "monotoheightfield",
+  "heightfield_erode",
+  "heightfield_terrace"
+ ],
+ "required_stages": [
+  "to_heightfield",
+  "hf_erode",
+  "hf_terrace"
+ ],
+ "output_dir": "<output_dir>",
+ "cop_heightfield_types": [
+  "heightfield_clip",
+  "heightfield_erode",
+  "heightfield_maskbyfeature",
+  "heightfield_project",
+  "heightfield_slump",
+  "heightfield_strata",
+  "heightfield_terrace",
+  "heightfield_visualize",
+  "heightfield_xform",
+  "heightfield_xform2d",
+  "heightfieldtomono",
+  "monotoheightfield"
+ ],
+ "cop_node_type_count": 383,
+ "geo": "/obj/cops_hf_terrain",
+ "copnet": "/obj/cops_hf_terrain/copnet_terrain",
+ "created_nodes": [
+  "/obj/cops_hf_terrain/copnet_terrain/noise_src",
+  "/obj/cops_hf_terrain/copnet_terrain/to_mono",
+  "/obj/cops_hf_terrain/copnet_terrain/to_heightfield",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_erode",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_to_height",
+  "/obj/cops_hf_terrain/copnet_terrain/rop_height",
+  "/obj/cops_hf_terrain/copnet_terrain/hf_to_normal",
+  "/obj/cops_hf_terrain/copnet_terrain/rop_normal"
+ ],
+ "cooks": [
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/noise_src",
+   "type": "fractalnoise",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/to_mono",
+   "type": "mono",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/to_heightfield",
+   "type": "monotoheightfield",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_erode",
+   "type": "heightfield_erode",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
+   "type": "heightfield_terrace",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_to_height",
+   "type": "heightfieldtomono",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/rop_height",
+   "type": "rop_image",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/hf_to_normal",
+   "type": "heighttonormal",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  },
+  {
+   "path": "/obj/cops_hf_terrain/copnet_terrain/rop_normal",
+   "type": "rop_image",
+   "cook_ok": true,
+   "errors": [],
+   "warnings": []
+  }
+ ],
+ "heightfield_voxels": {
+  "to_heightfield": [
+   {
+    "type": "Volume",
+    "count": 1048576,
+    "min": 0.29048797488212585,
+    "max": 0.7925262451171875,
+    "distinct": 4839
+   }
+  ],
+  "hf_erode": [
+   {
+    "type": "Volume",
+    "count": 1048576,
+    "min": 0.30659934878349304,
+    "max": 0.7912208437919617,
+    "distinct": 4589
+   }
+  ],
+  "hf_terrace": [
+   {
+    "type": "Volume",
+    "count": 1048576,
+    "min": 0.30659934878349304,
+    "max": 0.7912208437919617,
+    "distinct": 4589
+   }
+  ]
+ },
+ "terrain_bbox": {
+  "min": [
+   -0.9990234375,
+   -0.9990234375,
+   0.20076735317707062
+  ],
+  "max": [
+   0.9990234375,
+   0.9990234375,
+   0.7912208437919617
+  ]
+ },
+ "terrain_bbox_node": "/obj/cops_hf_terrain/copnet_terrain/hf_terrace",
+ "stage_signatures": {
+  "to_heightfield": {
+   "count": 200000,
+   "distinct": 4839,
+   "rounded_sum": 99473.8,
+   "min": 0.2905,
+   "max": 0.7925
+  },
+  "hf_erode": {
+   "count": 200000,
+   "distinct": 4589,
+   "rounded_sum": 99550.37,
+   "min": 0.3066,
+   "max": 0.7912
+  },
+  "hf_terrace": {
+   "count": 200000,
+   "distinct": 4589,
+   "rounded_sum": 99550.37,
+   "min": 0.3066,
+   "max": 0.7912
+  }
+ },
+ "stage_deltas": {
+  "to_heightfield__to__hf_erode": {
+   "changed": true,
+   "before": {
+    "count": 200000,
+    "distinct": 4839,
+    "rounded_sum": 99473.8,
+    "min": 0.2905,
+    "max": 0.7925
+   },
+   "after": {
+    "count": 200000,
+    "distinct": 4589,
+    "rounded_sum": 99550.37,
+    "min": 0.3066,
+    "max": 0.7912
+   }
+  },
+  "hf_erode__to__hf_terrace": {
+   "changed": false,
+   "before": {
+    "count": 200000,
+    "distinct": 4589,
+    "rounded_sum": 99550.37,
+    "min": 0.3066,
+    "max": 0.7912
+   },
+   "after": {
+    "count": 200000,
+    "distinct": 4589,
+    "rounded_sum": 99550.37,
+    "min": 0.3066,
+    "max": 0.7912
+   }
+  }
+ },
+ "terrain_stages": {
+  "to_heightfield": {
+   "cooked_clean": true,
+   "non_flat": true
+  },
+  "hf_erode": {
+   "cooked_clean": true,
+   "non_flat": true
+  },
+  "hf_terrace": {
+   "cooked_clean": true,
+   "non_flat": true
+  }
+ },
+ "terrain_cook_pass": true,
+ "renders": {
+  "cops_heightfield_terrain_height.png": {
+   "path": "<output_dir>/cops_heightfield_terrain_height.png",
+   "output_param": "copoutput",
+   "render_called": true,
+   "png_exists": true,
+   "png_bytes": 265369,
+   "fresh": true
+  },
+  "cops_heightfield_terrain_normal.png": {
+   "path": "<output_dir>/cops_heightfield_terrain_normal.png",
+   "output_param": "copoutput",
+   "render_called": true,
+   "png_exists": true,
+   "png_bytes": 2335325,
+   "fresh": true
+  }
+ },
+ "render_pass": true,
+ "hip": {
+  "path": "<output_dir>/cops_heightfield_terrain.hip",
+  "bytes": 8687663,
+  "saved": true
+ },
+ "_note": "Real-host COPS heightfield terrain ground test evidence (v2). Local output paths replaced with <output_dir>. stage_deltas compares consecutive operator signatures; render requires fresh PNGs from this run."
+}
