@@ -1,8 +1,9 @@
 """Mock-hou tests for the SOP -> USD modeling bridge (PIP-5116).
 
-Covers the new ``export_sop_to_usd`` tool and the USD-suffix guard added to
-``export_geometry``. No live Houdini / pyUSD is required; ``hou`` and the USD
-stage are replaced with MagicMocks following the repo's skill-test pattern.
+Covers the ``export_sop_to_usd`` tool and the USD-suffix guard added to
+``export_geometry``. No live Houdini / pyUSD is required; ``hou``, ``pxr`` and
+the USD stage are replaced with MagicMocks following the repo's skill-test
+pattern.
 """
 
 from __future__ import annotations
@@ -46,8 +47,22 @@ def _sop_with_geometry(points: int = 8, prims: int = 6) -> MagicMock:
     return node
 
 
+def _pxr_stub(disk_prim_count: int = 2, open_raises: bool = False) -> dict:
+    """Register USD the way Houdini exposes it: as ``pxr.*`` (F3 readback)."""
+    pxr = ModuleType("pxr")
+    usd = MagicMock()
+    if open_raises:
+        usd.Stage.Open.side_effect = RuntimeError("bad usd")
+    else:
+        disk_stage = MagicMock()
+        disk_stage.Traverse.return_value = [MagicMock() for _ in range(disk_prim_count)]
+        usd.Stage.Open.return_value = disk_stage
+    pxr.Usd = usd
+    return {"pxr": pxr, "pxr.Usd": usd}
+
+
 class TestExportSopToUsd:
-    def _success_setup(self, tmp_path: Path, stage_prims: int = 2):
+    def _success_setup(self, tmp_path: Path, stage_prims: int = 2, disk_prims: int = 2):
         """Build a mock Houdini where /stage exists and export writes a file."""
         mod = _load_script("export_sop_to_usd.py")
         out = tmp_path / "box.usd"
@@ -56,6 +71,9 @@ class TestExportSopToUsd:
         sopimport = _node("/stage/sop_to_usd_import", "sop_to_usd_import", "sopimport")
         stage = MagicMock()
         stage.Traverse.return_value = [MagicMock() for _ in range(stage_prims)]
+        prim = MagicMock()
+        prim.IsValid.return_value = True
+        stage.GetPrimAtPath.return_value = prim
         stage.Export.side_effect = lambda p: Path(p).write_text("#usda 1.0", encoding="utf-8")
         sopimport.stage.return_value = stage
         lopnet.createNode.return_value = sopimport
@@ -65,11 +83,13 @@ class TestExportSopToUsd:
             "/obj/geo1/box1": sop,
             "/stage": lopnet,
         }.get(p)
-        return mod, out, mock_hou, sop, lopnet, sopimport, stage
+        modules = _pxr_stub(disk_prims)
+        modules["hou"] = mock_hou
+        return mod, out, modules, sop, lopnet, sopimport, stage
 
     def test_export_bridges_sop_to_usd_with_readback(self, tmp_path: Path) -> None:
-        mod, out, mock_hou, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        with patch.dict(sys.modules, modules):
             result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
 
         assert result["success"] is True
@@ -78,14 +98,114 @@ class TestExportSopToUsd:
         assert ctx["skipped"] == []
         assert ctx["source_point_count"] == 8
         assert ctx["source_primitive_count"] == 6
-        assert ctx["stage_prim_count"] == 2
-        assert ctx["prim_path"] == "/ASSET/geo"
-        # The SOP Import LOP is wired to the source SOP and cooked.
+        assert ctx["composed_stage_prim_count"] == 2
+        assert ctx["composed_stage_prim_count_scope"] == "in_memory_composed_stage"
+        assert ctx["disk_prim_count"] == 2
+        assert ctx["disk_readback_status"] == "ok"
+        assert ctx["prim_path_applied"] is True
+        assert ctx["prim_path_parm"] == "primpath"
+        assert ctx["prim_path_valid"] is True
         lopnet.createNode.assert_called_once()
         sopimport.cook.assert_called_once_with(force=True)
         stage.Export.assert_called_once_with(str(out))
-        # Transient node is always removed so the user's /stage stays clean.
         sopimport.destroy.assert_called_once()
+
+    # --- F1: only a fresh write may be reported as success -------------------
+
+    def test_export_exception_returns_error(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        stage.Export.side_effect = RuntimeError("disk full")
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is False
+        assert not out.exists()
+        sopimport.destroy.assert_called_once()
+
+    def test_stale_file_not_reported_as_written_on_export_failure(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        out.write_text("STALE", encoding="utf-8")
+        stage.Export.side_effect = RuntimeError("disk full")
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is False
+        assert result["context"].get("written_files") != [str(out)]
+        assert out.read_text(encoding="utf-8") == "STALE"
+        sopimport.destroy.assert_called_once()
+
+    def test_export_writes_nothing_returns_error(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        stage.Export.side_effect = lambda p: None
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is False
+        assert not out.exists()
+
+    def test_unchanged_stale_file_returns_error(self, tmp_path: Path) -> None:
+        """Export returns without throwing but rewrites nothing -> not a fresh write."""
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        out.write_text("STALE", encoding="utf-8")
+        stage.Export.side_effect = lambda p: None
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is False
+
+    def test_fresh_overwrite_of_existing_file_is_reported(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        out.write_text("STALE", encoding="utf-8")
+        stage.Export.side_effect = lambda p: Path(p).write_text("#usda 1.0 FRESH", encoding="utf-8")
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is True
+        assert result["context"]["written_files"] == [str(out)]
+
+    # --- F2: prim_path is reported as applied or not, never asserted blindly --
+
+    def test_prim_path_not_applied_when_no_parm(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        sop_parm = MagicMock()
+        sopimport.parm.side_effect = lambda name: sop_parm if name == "soppath" else None
+        # With no destination parm applied, the requested prim is absent in the
+        # composed stage -> GetPrimAtPath(...).IsValid() is False.
+        absent = MagicMock()
+        absent.IsValid.return_value = False
+        stage.GetPrimAtPath.return_value = absent
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out), prim_path="/custom/geo")
+        assert result["success"] is True
+        ctx = result["context"]
+        assert ctx["prim_path_applied"] is False
+        assert ctx["prim_path_parm"] is None
+        assert ctx["prim_path_valid"] is False
+        assert any("prim_path was not applied" in w for w in ctx["warnings"])
+
+    # --- F3: disk readback is best-effort and degrades cleanly ---------------
+
+    def test_disk_readback_failure_degrades_with_warning(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        modules.update(_pxr_stub(open_raises=True))
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is True
+        ctx = result["context"]
+        assert ctx["disk_prim_count"] is None
+        assert ctx["disk_readback_status"] == "open_failed"
+        assert any("Disk readback unavailable" in w for w in ctx["warnings"])
+
+    def test_pxr_unavailable_degrades_with_warning(self, tmp_path: Path) -> None:
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        pxr = ModuleType("pxr")
+        pxr.Usd = MagicMock()
+        pxr.Usd.Stage = None  # Stage.Open is not callable -> readback unavailable
+        modules["pxr"] = pxr
+        modules["pxr.Usd"] = pxr.Usd
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
+        assert result["success"] is True
+        ctx = result["context"]
+        assert ctx["disk_prim_count"] is None
+        assert ctx["disk_readback_status"] == "pxr_unavailable"
+
+    # --- pre-existing behaviour / error paths ---------------------------------
 
     def test_creates_transient_lopnet_when_no_stage_parent(self, tmp_path: Path) -> None:
         mod = _load_script("export_sop_to_usd.py")
@@ -101,19 +221,19 @@ class TestExportSopToUsd:
         root.createNode.return_value = lopnet
 
         mock_hou = MagicMock()
-        # lop_parent_path defaults to /stage and is absent -> build a lopnet at /.
         mock_hou.node.side_effect = lambda p: {
             "/obj/geo1/box1": sop,
             "/stage": None,
             "/": root,
         }.get(p)
+        modules = _pxr_stub(0)
+        modules["hou"] = mock_hou
         custom = tmp_path / "custom.usd"
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        with patch.dict(sys.modules, modules):
             result = mod.export_sop_to_usd("/obj/geo1/box1", str(custom))
 
         assert result["success"] is True
         root.createNode.assert_called_once()
-        # Both the created lopnet and the sopimport are destroyed on the way out.
         lopnet.destroy.assert_called_once()
         sopimport.destroy.assert_called_once()
 
@@ -142,31 +262,19 @@ class TestExportSopToUsd:
         assert result["success"] is False
 
     def test_no_stage_errors_and_cleans_up(self, tmp_path: Path) -> None:
-        mod, out, mock_hou, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
         sopimport.stage.return_value = None
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        with patch.dict(sys.modules, modules):
             result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
         assert result["success"] is False
         sopimport.destroy.assert_called_once()
 
     def test_missing_soppath_parm_errors_and_cleans_up(self, tmp_path: Path) -> None:
-        mod, out, mock_hou, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
+        mod, out, modules, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
         sopimport.parm.return_value = None
-        with patch.dict(sys.modules, {"hou": mock_hou}):
+        with patch.dict(sys.modules, modules):
             result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
         assert result["success"] is False
-        sopimport.destroy.assert_called_once()
-
-    def test_export_failure_reports_warning_and_skipped(self, tmp_path: Path) -> None:
-        mod, out, mock_hou, sop, lopnet, sopimport, stage = self._success_setup(tmp_path)
-        stage.Export.side_effect = RuntimeError("disk full")
-        with patch.dict(sys.modules, {"hou": mock_hou}):
-            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out))
-        assert result["success"] is True
-        ctx = result["context"]
-        assert ctx["written_files"] == []
-        assert ctx["skipped"] == [str(out)]
-        assert any("Stage export failed: disk full" in w for w in ctx["warnings"])
         sopimport.destroy.assert_called_once()
 
 
@@ -182,9 +290,10 @@ class TestExportGeometryUsdGuard:
         with patch.dict(sys.modules, {"hou": mock_hou}):
             result = mod.export_geometry("/obj/geo1/box1", str(out))
         assert result["success"] is False
-        # saveToFile must never be called (it cannot author USD).
+        # F4: guard fails closed but must not assert the runtime cannot author USD.
         geo.saveToFile.assert_not_called()
         assert not out.exists()
+        assert "cannot author" not in result["message"]
         ctx = result["context"]
         assert ctx["format"] == "usd"
         assert ctx["dcc"]["next_tools"] == ["houdini_interchange__export_sop_to_usd"]

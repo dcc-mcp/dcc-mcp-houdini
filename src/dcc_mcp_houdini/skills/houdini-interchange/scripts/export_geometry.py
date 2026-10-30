@@ -18,14 +18,16 @@ def export_geometry(
     Uses ``hou.Geometry.saveToFile`` which supports native (.bgeo/.geo),
     .obj, .ply, and other formats recognised by the installed runtime.
     """
-    # ``Geometry.saveToFile`` cannot author USD. Detect a USD suffix up front so
-    # we never write silently-invalid bytes to a .usd path; point the caller at
-    # the typed SOP-to-USD bridge instead.
+    # USD outputs should go through the typed USD export tools rather than this
+    # native-geometry writer. We fail closed on a USD suffix and redirect; this
+    # keeps export_geometry focused on its native/OBJ path. We do not claim the
+    # runtime cannot author USD via saveToFile -- only that typed USD tools are
+    # the supported route here.
     fmt = detect_format(output_path)
     if fmt == "usd":
         return skill_error(
-            "USD suffix not supported by saveToFile",
-            "export_geometry cannot author USD; use export_sop_to_usd",
+            "USD output requires a typed USD export tool",
+            "export_geometry handles native/OBJ geometry; use a typed USD tool for .usd outputs",
             prompt=(
                 "Author USD from this SOP with houdini_interchange__export_sop_to_usd, "
                 "or export a composed LOP stage with houdini_interchange__export_usd."

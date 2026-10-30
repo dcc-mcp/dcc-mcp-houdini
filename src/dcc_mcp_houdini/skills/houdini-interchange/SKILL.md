@@ -41,13 +41,14 @@ not produce.
 | Hand geometry to another DCC | `export_geometry` → `.obj`, or `export_alembic` | OBJ for static meshes; Alembic for animated/large caches. |
 | Animated caches | `export_alembic` with `frame_range` | `render: true` to actually write frames. |
 | Rigged/scene to game engine | `export_fbx` | `root_node` selects the `/obj` subtree. |
-| USD from a SOP (USD modeling) | `export_sop_to_usd` | Builds a transient SOP Import LOP; reports geometry + stage-prim readback. |
+| USD from a SOP (USD modeling) | `export_sop_to_usd` | Builds a transient SOP Import LOP; reports geometry counts, in-memory composed-stage prim count, and a best-effort disk readback. |
 | USD from an existing LOP stage | `export_usd` | Exports a LOP node's composed `stage()`; reports `root_layer`. |
 
-`export_geometry` cannot author USD: `Geometry.saveToFile` has no USD writer.
-Passing a `.usd/.usda/.usdc/.usdz` path fails closed with a `next_tools` hint
-pointing at `export_sop_to_usd`. To move SOP modeling into USD, use
-`export_sop_to_usd` (SOP → USD) rather than trying to give `export_usd` a SOP.
+`export_geometry` is the native/OBJ geometry writer. Passing a
+`.usd/.usda/.usdc/.usdz` path fails closed with a `next_tools` hint pointing at
+`export_sop_to_usd`, so USD outputs go through the typed USD tools. To move SOP
+modeling into USD, use `export_sop_to_usd` (SOP → USD) rather than trying to
+give `export_usd` a SOP.
 
 `export_fbx` defaults to `convert_units=true`: it enables the native Filmbox
 unit-conversion toggle and reports its readback as `unit_conversion_enabled`.
@@ -73,11 +74,18 @@ rendering. Always verify physical world bounds and pivot in the target engine.
 1. `houdini_geometry__create_primitive(parent_path="/obj/geo1", primitive="box")`
 2. (optional) edit with `houdini-mesh-ops` modeling verbs
 3. `export_sop_to_usd(node_path="/obj/geo1/box1", output_path="/tmp/box.usd")`
-   → `source_point_count` / `source_primitive_count` /
-   `stage_prim_count` readback confirms the geometry landed in USD
+   → `written_files` confirms a fresh file; `source_point_count` /
+   `source_primitive_count` and `composed_stage_prim_count` (in-memory) plus
+   `disk_prim_count` (best-effort via `Usd.Stage.Open`) report prim counts
 4. `probe_file(file_path="/tmp/box.usd")` → `exists: true`, `format: usd`
-5. `import_geometry(parent_path="/obj/geo2", file_path="/tmp/box.usd")`
-   → SOP → USD → SOP round-trip
+5. (optional) verify by re-opening the USD; a SOP → USD → SOP File SOP
+   round-trip (`import_geometry`) needs native hython validation and is a
+   separate acceptance gate.
+
+`Usd.Stage.Export` flattens the composed stage into a single layer; it is not
+equivalent to a full USD ROP save. `composed_stage_prim_count` describes the
+in-memory stage, not guaranteed on-disk content; `disk_prim_count` is a
+best-effort disk readback and is `None` when pxr is unavailable.
 
 Export tools that drive a ROP are `async` with generous `timeout_hint_secs`
 because caches and FBX writes can be long-running.

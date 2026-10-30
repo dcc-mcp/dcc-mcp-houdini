@@ -197,9 +197,12 @@ tools:
     description: >-
       Bridge SOP modeling to USD: build a transient SOP Import LOP for a SOP
       node, compose its USD stage, and export it to disk. Reports source
-      point/primitive counts and a composed-stage prim-count readback so a
-      caller can confirm the geometry actually landed in the USD file. The
-      transient LOP nodes are removed before returning.
+      point/primitive counts, the in-memory composed-stage prim count, and a
+      best-effort disk readback count via Usd.Stage.Open when pxr is available.
+      stage.Export flattens to a single layer and is not a full USD ROP save;
+      native hython validation remains a separate acceptance gate. Only a fresh
+      write is reported as success. The transient LOP nodes are removed before
+      returning.
     source_file: scripts/export_sop_to_usd.py
     execution: async
     affinity: main
@@ -225,7 +228,10 @@ tools:
         prim_path:
           type: string
           default: /ASSET/geo
-          description: Destination prim path for the imported geometry.
+          description: >-
+            Requested destination prim path. Applied only if the SOP Import LOP
+            exposes a matching parm; see prim_path_applied / prim_path_parm in
+            the result. Verify the destination prim in the composed stage.
         lop_parent_path:
           type: string
           default: /stage
