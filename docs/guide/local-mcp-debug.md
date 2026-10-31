@@ -33,7 +33,19 @@ Every Houdini instance binds an OS-assigned port and registers its exact URL.
 The gateway remains on stable port **9765**, so agents and the CLI can discover
 multiple simultaneous Houdini instances without hard-coded instance ports.
 
-For auto-start on every session, copy [`examples/houdini_123.py`](../../examples/houdini_123.py) into your Houdini scripts path (see file header).
+For auto-start in **GUI** sessions, prefer the installer-managed hook from
+`dcc-mcp-houdini-setup`, which deploys `scripts/123.py` / `456.py` /
+`pythonX.Ylibs/uiready.py` through `scripts/dcc_mcp_houdini_bootstrap.py`. If you
+install by hand instead, copy [`examples/houdini_123.py`](../../examples/houdini_123.py)
+into your Houdini scripts path (see file header).
+
+The hook is GUI-only. Houdini also runs `123.py` for headless `hython` and
+background ROP workers, so the example skips autostart when
+`hou.isUIAvailable()` is false or `DCC_MCP_BACKGROUND_RENDER=1`; it never emits
+an `autostart failed` line in those sessions. Set `DCC_MCP_HOUDINI_AUTOSTART=0`
+to disable GUI autostart entirely. For an MCP server in a headless session use
+[section 5](#5-headless-smoke-hython-no-ui) (`hython -m dcc_mcp_houdini`), not
+this GUI hook.
 
 ## 3. Connect Cursor (Streamable HTTP MCP)
 
@@ -85,6 +97,12 @@ hython examples/houdini_bootstrap.py
 Prints `MCP_URL=...` and then drives the bounded MCP queue on Hython's owning
 thread. Do not replace this foreground bootstrap with `start_server()` plus a
 sleep loop: that loop cannot satisfy main-thread affinity for HOM tools.
+
+A fresh headless instance starts in progressive minimal mode (`DCC_MCP_MINIMAL=1`,
+only `houdini-scripting` + `houdini-scene` loaded). Until `load_skill("houdini-automation")`
+(or another tool's skill) is called, a heavier tool returns `ACTION_NOT_FOUND`.
+That means "load the skill first", not a broken adapter — use `search_skills` /
+`load_skill` to bring up the tools a job needs before its first useful call.
 
 ## 6. Quick checklist
 
