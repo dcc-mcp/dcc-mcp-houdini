@@ -113,3 +113,46 @@ class TestRunPythonFileStatusSemantics:
         assert ok["success"] is True and failed["success"] is True
         assert ok["context"]["script_result_success"] is True
         assert failed["context"]["script_result_success"] is False
+
+    def test_post_processing_failure_is_not_labeled_completed(self, rpf, tmp_path: Path) -> None:
+        # Review NACK Finding 1 (exact counterexample): a result object whose
+        # __str__ raises makes _capture_result throw under output_mode="full".
+        # The outer except must NOT stamp a completed state or attach the
+        # completed-run guidance prompt onto the resulting error envelope.
+        source = (
+            "class _Exploding:\n"
+            "    def __str__(self):\n"
+            "        raise RuntimeError('serialize failed')\n"
+            "\n"
+            "result = _Exploding()\n"
+        )
+        result = _run(rpf, tmp_path, source, output_mode="full")
+        assert result["success"] is False
+        state = result["context"]["execution_state"]
+        assert state != "completed"
+        assert state == "post_processing_failed"
+        prompt = result.get("prompt") or ""
+        assert "Do not blindly retry" not in prompt
+        assert "Top-level success reports" not in prompt
+        # A non-mapping result still carries an explicit, consistent verdict field.
+        assert result["context"]["script_result_success"] is None
+
+    def test_post_processing_failure_preserves_script_verdict(self, rpf, tmp_path: Path, monkeypatch) -> None:
+        # A post-processing failure after the script reported its own verdict must
+        # not silently drop that verdict. Force _output_summary to fail while the
+        # raw result is a mapping with success=False.
+        def _boom(*args, **kwargs):
+            raise OSError("artifact persist failed")
+
+        monkeypatch.setattr(rpf, "_output_summary", _boom)
+        result = _run(
+            rpf,
+            tmp_path,
+            "result = {'success': False, 'error': 'native cook diverged'}\n",
+        )
+        assert result["success"] is False
+        assert result["context"]["execution_state"] == "post_processing_failed"
+        assert result["context"]["script_result_success"] is False
+        prompt = result.get("prompt") or ""
+        assert "Do not blindly retry" not in prompt
+        assert "Top-level success reports" not in prompt

@@ -25,6 +25,14 @@ _SPOOL_MEMORY_BYTES = 64 * 1024
 _STATE_NOT_STARTED = "not_started"
 _STATE_EXCEPTION = "exception"
 _STATE_COMPLETED = "completed"
+# The script body finished, but capturing/serializing its result or persisting
+# an overflow artifact failed. The script may already have mutated the scene, so
+# this is never reported as a completed success.
+_STATE_POST_PROCESSING_FAILED = "post_processing_failed"
+
+# States where the script ran far enough to produce a ``result`` verdict, so
+# ``script_result_success`` is meaningful and must be preserved on the envelope.
+_VERDICT_STATES = frozenset({_STATE_COMPLETED, _STATE_POST_PROCESSING_FAILED})
 
 # Consumer guidance attached to a completed run. Finding 1 (issue #364): an
 # unattended agent that receives a client-side timeout must not assume the job
@@ -34,7 +42,7 @@ _STATUS_PROMPT = (
     "host (see execution_state); it does NOT certify the script's own work. "
     "When the script sets `result` to a mapping with a boolean 'success' key, "
     "that verdict is surfaced separately as script_result_success "
-    "(true/false/null). Distinguish a completed job from a nested "
+    "(true/false, or null when no valid verdict). Distinguish a completed job from a nested "
     "result.success=false before deciding to retry. This tool is synchronous "
     "and main-thread bound with no async job handle or cancel path: a "
     "client-side timeout is NOT a cancellation and the host may still be "
@@ -55,19 +63,31 @@ def _script_result_success(value: Any) -> Optional[bool]:
     own outcome so a nested ``result.success=false`` is never mistaken for a
     completed-and-successful job.
     """
-    if isinstance(value, Mapping) and isinstance(value.get("success"), bool):
-        return value["success"]
+    try:
+        if isinstance(value, Mapping) and isinstance(value.get("success"), bool):
+            return value["success"]
+    except Exception:
+        # A pathological result object must never break envelope construction,
+        # especially while reporting a post-processing failure.
+        return None
     return None
 
 
 def _with_status(result: dict, execution_state: str, raw_result: Any = None) -> dict:
-    """Attach explicit execution/result status semantics to a result envelope."""
+    """Attach explicit execution/result status semantics to a result envelope.
+
+    The script's own verdict is surfaced for any state where the body ran far
+    enough to set ``result`` (including a post-processing failure), so it is
+    never silently dropped by a later serialization error. The completed-run
+    guidance is attached only to a genuinely completed, successfully captured
+    run — a mislabeled ``success=False`` envelope must never carry it.
+    """
     context = result.setdefault("context", {})
     context["execution_state"] = execution_state
     context["script_result_success"] = (
-        _script_result_success(raw_result) if execution_state == _STATE_COMPLETED else None
+        _script_result_success(raw_result) if execution_state in _VERDICT_STATES else None
     )
-    if execution_state == _STATE_COMPLETED:
+    if execution_state == _STATE_COMPLETED and result.get("success") is True:
         result["prompt"] = _STATUS_PROMPT
     return result
 
@@ -265,6 +285,7 @@ def run_python_file(
     stdout_capture: Optional[_BoundedTextCapture] = None
     stderr_capture: Optional[_BoundedTextCapture] = None
     result_capture: Optional[_BoundedTextCapture] = None
+    raw_result: Any = None
     # Tracks how far host-side execution got, so an unexpected internal error
     # is still reported with a meaningful terminal state instead of a bare
     # generic INTERNAL_ERROR-style failure.
@@ -343,8 +364,12 @@ def run_python_file(
                 _STATE_EXCEPTION,
             )
 
-        execution_state = _STATE_COMPLETED
         raw_result = namespace.get("result")
+        # The script body has finished, but capturing/serializing its result and
+        # persisting artifacts can still fail. Until the final success envelope is
+        # built, any exception is a post-processing failure, not a completed job.
+        # This blocks a success=False error envelope from being labeled completed.
+        execution_state = _STATE_POST_PROCESSING_FAILED
         result_capture, inline_result, result_is_json = _capture_result(
             raw_result,
             max_result_chars,
@@ -379,6 +404,7 @@ def run_python_file(
         return _with_status(
             skill_exception(exc, message="Failed to run Houdini Python file"),
             execution_state,
+            raw_result,
         )
     finally:
         if stdout_capture is not None:

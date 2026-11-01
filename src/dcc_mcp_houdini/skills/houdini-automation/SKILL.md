@@ -62,12 +62,17 @@ retry a destructive or long-running script after a timeout: a retry can queue a
 second run behind the first. Prefer scripts that write their own side-effect
 status/result file and poll that file for the terminal state. To keep the
 result unambiguous, the envelope separates the host execution state
-(`context.execution_state`: `completed`, `exception`, or `not_started`) from
-the script's own verdict: when `result` is a mapping with a boolean `success`
-key, `context.script_result_success` carries that `true`/`false`/`null`. The
-top-level `success` flag reports that the Python file finished executing, **not**
-that the requested scene work succeeded — distinguish a completed job from a
-nested `result.success=false` before deciding to retry.
+(`context.execution_state`: `completed`, `exception`, `not_started`, or
+`post_processing_failed`) from the script's own verdict: when `result` is a
+mapping with a boolean `success` key, `context.script_result_success` carries
+that `true`/`false`, and is `null` when the script reports no valid verdict.
+The top-level `success` flag reports that the Python file finished executing,
+**not** that the requested scene work succeeded — distinguish a completed job
+from a nested `result.success=false` before deciding to retry. The timeout /
+no-blind-retry prompt is attached only to a completed success envelope; a
+`post_processing_failed` result (result capture or artifact persistence error)
+is an error envelope that preserves the script verdict but is never labeled
+`completed` and never carries that prompt.
 
 `build_node_chain` is a structured atomic mutation surface, not an arbitrary
 code executor. It validates the parent, every node type/name/reference, and all
