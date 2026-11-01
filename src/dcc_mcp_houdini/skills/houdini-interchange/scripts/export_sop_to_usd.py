@@ -22,6 +22,10 @@ from typing import Any, List, Optional, Tuple
 from _io_common import ensure_parent_dir, set_first_parm  # noqa: E402
 from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_success
 
+# The only LOP parent that may be created transiently when absent. Any other
+# requested parent path must already exist; see the fail-closed check below.
+_DEFAULT_LOP_PARENT_PATH = "/stage"
+
 
 def _source_counts(node: Any) -> dict:
     """Return point and primitive counts from a SOP node's cooked geometry."""
@@ -94,7 +98,7 @@ def export_sop_to_usd(
     node_path: str,
     output_path: str,
     prim_path: str = "/ASSET/geo",
-    lop_parent_path: str = "/stage",
+    lop_parent_path: str = _DEFAULT_LOP_PARENT_PATH,
     create_dirs: bool = True,
 ) -> dict:
     """Author the cooked geometry of *node_path* (a SOP) into a USD file."""
@@ -122,6 +126,17 @@ def export_sop_to_usd(
 
         lop_parent = hou.node(lop_parent_path)
         if lop_parent is None:
+            # Only the implicit default (/stage) may fall back to a transient
+            # LOP network. A custom parent path the caller explicitly requested
+            # must already exist: falling back to root would silently author the
+            # stage in an unexpected location, ignoring the requested path.
+            if lop_parent_path != _DEFAULT_LOP_PARENT_PATH:
+                return skill_error(
+                    "LOP parent path not found",
+                    "No LOP network at the requested lop_parent_path '{}'".format(lop_parent_path),
+                    node_path=node_path,
+                    lop_parent_path=lop_parent_path,
+                )
             root = hou.node("/")
             lop_parent = root.createNode("lopnet", node_name="sop_to_usd_lopnet")
             transient.append(lop_parent)

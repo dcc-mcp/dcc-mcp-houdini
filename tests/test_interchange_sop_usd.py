@@ -237,6 +237,69 @@ class TestExportSopToUsd:
         lopnet.destroy.assert_called_once()
         sopimport.destroy.assert_called_once()
 
+    # --- custom lop_parent_path must fail closed (PR376 r4419845305) --------
+
+    def test_custom_lop_parent_missing_errors_without_fallback(self, tmp_path: Path) -> None:
+        """A custom parent path that does not exist must fail closed with the
+        missing path in the error context, and must not silently create a
+        fallback LOP network at an unexpected root location nor write a file."""
+        mod = _load_script("export_sop_to_usd.py")
+        sop = _sop_with_geometry()
+        root = _node("/", "")
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda p: {
+            "/obj/geo1/box1": sop,
+            "/custom/missing": None,
+            "/": root,
+        }.get(p)
+        modules = _pxr_stub(0)
+        modules["hou"] = mock_hou
+        out = tmp_path / "box.usd"
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out), lop_parent_path="/custom/missing")
+
+        assert result["success"] is False
+        assert result["context"]["lop_parent_path"] == "/custom/missing"
+        # No fallback network created at root -> no unexpected scene change.
+        root.createNode.assert_not_called()
+        root.destroy.assert_not_called()
+        # No stray file or directory authored from the rejected request.
+        assert not out.exists()
+
+    def test_existing_custom_lop_parent_is_used_and_preserved(self, tmp_path: Path) -> None:
+        """When the custom parent exists it hosts the transient SOP Import, and
+        only the import node is cleaned up (the caller's parent is untouched)."""
+        mod = _load_script("export_sop_to_usd.py")
+        sop = _sop_with_geometry()
+        root = _node("/", "")
+        custom_parent = _node("/custom/existing", "existing", "lopnet")
+        sopimport = _node("/custom/existing/imp", "imp", "sopimport")
+        stage = MagicMock()
+        stage.Traverse.return_value = []
+        stage.Export.side_effect = lambda p: Path(p).write_text("usd", encoding="utf-8")
+        sopimport.stage.return_value = stage
+        custom_parent.createNode.return_value = sopimport
+
+        mock_hou = MagicMock()
+        mock_hou.node.side_effect = lambda p: {
+            "/obj/geo1/box1": sop,
+            "/custom/existing": custom_parent,
+            "/": root,
+        }.get(p)
+        modules = _pxr_stub(0)
+        modules["hou"] = mock_hou
+        out = tmp_path / "custom.usd"
+        with patch.dict(sys.modules, modules):
+            result = mod.export_sop_to_usd("/obj/geo1/box1", str(out), lop_parent_path="/custom/existing")
+
+        assert result["success"] is True
+        # No transient fallback network; the requested parent is used directly.
+        root.createNode.assert_not_called()
+        custom_parent.createNode.assert_called_once()
+        # Cleanup removes only the transient import, not the caller's parent.
+        sopimport.destroy.assert_called_once()
+        custom_parent.destroy.assert_not_called()
+
     def test_no_houdini_errors(self, tmp_path: Path) -> None:
         mod = _load_script("export_sop_to_usd.py")
         with patch.dict(sys.modules, {"hou": None}):
