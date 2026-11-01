@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import traceback
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,58 @@ from dcc_mcp_core.skill import skill_entry, skill_error, skill_exception, skill_
 _OUTPUT_MODES = {"summary", "structured", "full"}
 _MAX_INLINE_CHARS = 1_000_000
 _SPOOL_MEMORY_BYTES = 64 * 1024
+
+# Terminal states for ``context.execution_state``. They describe the host-side
+# execution of the Python file, not the transport result and not the script's
+# own reported outcome.
+_STATE_NOT_STARTED = "not_started"
+_STATE_EXCEPTION = "exception"
+_STATE_COMPLETED = "completed"
+
+# Consumer guidance attached to a completed run. Finding 1 (issue #364): an
+# unattended agent that receives a client-side timeout must not assume the job
+# was cancelled or dead and blindly retry a destructive/long-running script.
+_STATUS_PROMPT = (
+    "Top-level success reports that the Python file finished executing on the "
+    "host (see execution_state); it does NOT certify the script's own work. "
+    "When the script sets `result` to a mapping with a boolean 'success' key, "
+    "that verdict is surfaced separately as script_result_success "
+    "(true/false/null). Distinguish a completed job from a nested "
+    "result.success=false before deciding to retry. This tool is synchronous "
+    "and main-thread bound with no async job handle or cancel path: a "
+    "client-side timeout is NOT a cancellation and the host may still be "
+    "running the script. Do not blindly retry a destructive or long-running "
+    "script on timeout; poll a side-effect status/result file for the terminal "
+    "state instead."
+)
+
+
+def _script_result_success(value: Any) -> Optional[bool]:
+    """Return the executed script's own boolean verdict, if it reported one.
+
+    Many Houdini automation scripts set ``result = {"success": bool, ...}``.
+    Only a strict boolean ``success`` member of a mapping counts as a verdict;
+    anything else (None, a string/number, a non-mapping, or a non-boolean
+    ``success``) is reported as ``None``, meaning "the script did not report a
+    verdict". This keeps the job/transport success separate from the script's
+    own outcome so a nested ``result.success=false`` is never mistaken for a
+    completed-and-successful job.
+    """
+    if isinstance(value, Mapping) and isinstance(value.get("success"), bool):
+        return value["success"]
+    return None
+
+
+def _with_status(result: dict, execution_state: str, raw_result: Any = None) -> dict:
+    """Attach explicit execution/result status semantics to a result envelope."""
+    context = result.setdefault("context", {})
+    context["execution_state"] = execution_state
+    context["script_result_success"] = (
+        _script_result_success(raw_result) if execution_state == _STATE_COMPLETED else None
+    )
+    if execution_state == _STATE_COMPLETED:
+        result["prompt"] = _STATUS_PROMPT
+    return result
 
 
 class _BoundedTextCapture:
@@ -207,32 +260,45 @@ def run_python_file(
     try:
         import hou  # noqa: PLC0415
     except ImportError:
-        return hou_import_error()
+        return _with_status(hou_import_error(), _STATE_NOT_STARTED)
 
     stdout_capture: Optional[_BoundedTextCapture] = None
     stderr_capture: Optional[_BoundedTextCapture] = None
     result_capture: Optional[_BoundedTextCapture] = None
+    # Tracks how far host-side execution got, so an unexpected internal error
+    # is still reported with a meaningful terminal state instead of a bare
+    # generic INTERNAL_ERROR-style failure.
+    execution_state = _STATE_NOT_STARTED
     try:
         if output_mode not in _OUTPUT_MODES:
-            return skill_error(
-                "Invalid output mode",
-                "output_mode must be one of: full, structured, summary",
+            return _with_status(
+                skill_error(
+                    "Invalid output mode",
+                    "output_mode must be one of: full, structured, summary",
+                ),
+                _STATE_NOT_STARTED,
             )
         try:
             max_stdout_chars = _require_char_limit(max_stdout_chars, "max_stdout_chars")
             max_stderr_chars = _require_char_limit(max_stderr_chars, "max_stderr_chars")
             max_result_chars = _require_char_limit(max_result_chars, "max_result_chars")
         except ValueError as exc:
-            return skill_error("Invalid output limit", str(exc))
+            return _with_status(skill_error("Invalid output limit", str(exc)), _STATE_NOT_STARTED)
         if not isinstance(spill_overflow_to_artifact, bool):
-            return skill_error(
-                "Invalid spill option",
-                "spill_overflow_to_artifact must be a boolean",
+            return _with_status(
+                skill_error(
+                    "Invalid spill option",
+                    "spill_overflow_to_artifact must be a boolean",
+                ),
+                _STATE_NOT_STARTED,
             )
 
         path = existing_file(file_path, suffixes={".py"})
         if working_directory is not None and not Path(working_directory).expanduser().is_dir():
-            return skill_error("Working directory not found", str(working_directory))
+            return _with_status(
+                skill_error("Working directory not found", str(working_directory)),
+                _STATE_NOT_STARTED,
+            )
         namespace: Dict[str, Any] = {
             "__file__": str(path),
             "__name__": "__dcc_mcp_houdini_script__",
@@ -243,6 +309,7 @@ def run_python_file(
         namespace.update(context or {})
         stdout_capture = _BoundedTextCapture(max_stdout_chars)
         stderr_capture = _BoundedTextCapture(max_stderr_chars)
+        execution_state = _STATE_EXCEPTION
         try:
             with _pushd(working_directory), contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(
                 stderr_capture
@@ -260,21 +327,26 @@ def run_python_file(
                 result_is_json=False,
                 spill_overflow_to_artifact=spill_overflow_to_artifact,
             )
-            return skill_error(
-                "Python file execution failed",
-                (
-                    "See output_summary artifacts for the captured traceback"
-                    if output_mode == "summary"
-                    else stderr_capture.preview()
+            return _with_status(
+                skill_error(
+                    "Python file execution failed",
+                    (
+                        "See output_summary artifacts for the captured traceback"
+                        if output_mode == "summary"
+                        else stderr_capture.preview()
+                    ),
+                    stdout=None if output_mode == "summary" else stdout_capture.preview(),
+                    stderr=None if output_mode == "summary" else stderr_capture.preview(),
+                    result=None,
+                    output_summary=output_summary,
                 ),
-                stdout=None if output_mode == "summary" else stdout_capture.preview(),
-                stderr=None if output_mode == "summary" else stderr_capture.preview(),
-                result=None,
-                output_summary=output_summary,
+                _STATE_EXCEPTION,
             )
 
+        execution_state = _STATE_COMPLETED
+        raw_result = namespace.get("result")
         result_capture, inline_result, result_is_json = _capture_result(
-            namespace.get("result"),
+            raw_result,
             max_result_chars,
             output_mode,
         )
@@ -295,12 +367,19 @@ def run_python_file(
         }
         if output_mode == "structured" and result_capture.truncated:
             response_context["result_preview"] = result_capture.preview()
-        return skill_success(
-            "Python file executed successfully",
-            **response_context,
+        return _with_status(
+            skill_success(
+                "Python file executed successfully",
+                **response_context,
+            ),
+            _STATE_COMPLETED,
+            raw_result,
         )
     except Exception as exc:
-        return skill_exception(exc, message="Failed to run Houdini Python file")
+        return _with_status(
+            skill_exception(exc, message="Failed to run Houdini Python file"),
+            execution_state,
+        )
     finally:
         if stdout_capture is not None:
             stdout_capture.close()

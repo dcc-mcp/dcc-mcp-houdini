@@ -5,6 +5,15 @@ tools:
       `context` pre-bound. Mutates the session according to the script. Inline
       stdout, stderr, and result payloads are bounded; optional overflow
       artifacts retain the complete UTF-8 output with byte counts and SHA-256.
+      Synchronous and main-thread bound: there is no async job handle or cancel
+      path, so a client-side timeout is NOT a cancellation and the host may
+      still be running the script. Do not blindly retry a destructive or
+      long-running script on timeout. The result separates the host execution
+      state (`context.execution_state`: completed/exception/not_started) from
+      the script's own verdict (`context.script_result_success`: true/false/null
+      when `result` is a mapping with a boolean `success` key); top-level
+      `success` reports that the file finished executing, not that the
+      requested scene work succeeded.
     input_schema:
       type: object
       required: [file_path]
