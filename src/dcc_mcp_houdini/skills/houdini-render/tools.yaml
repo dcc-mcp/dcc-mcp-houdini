@@ -329,8 +329,7 @@ tools:
       ChunkedRunner. Each frame is a bounded step — UI stays interactive,
       cancellation is observable at checkpoints, and only partial outputs are
       reported on cancel. Supports launch/poll/cancel via the ``action`` param.
-    source_file: scripts/render_rop.py
-    entry_point: render_rop_chunked
+    source_file: scripts/render_rop_chunked.py
     execution: async
     affinity: main
     timeout_hint_secs: 7200
