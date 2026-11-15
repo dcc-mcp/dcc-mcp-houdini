@@ -54,6 +54,7 @@ tools:
     next-tools:
       on-success:
         - houdini_geometry__get_geometry_info
+        - houdini_interchange__export_sop_to_usd
   - name: create_curve_guides
     description: >-
       Create bounded open polyline or NURBS guide curves from inline structured
