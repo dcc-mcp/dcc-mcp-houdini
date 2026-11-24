@@ -14,6 +14,7 @@ STAGES: Tuple[str, ...] = (
     "bootstrap",
     "scene",
     "authoring",
+    "validation",
     "interchange",
     "pipeline",
 )
@@ -42,6 +43,7 @@ STAGE_SKILLS: dict[str, Tuple[str, ...]] = {
         "houdini-light-rig",
         "houdini-copernicus",
     ),
+    "validation": ("houdini-modeling-validation",),
     "interchange": (
         "houdini-interchange",
         "houdini-asset-sync",

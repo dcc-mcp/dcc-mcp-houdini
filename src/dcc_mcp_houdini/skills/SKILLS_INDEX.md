@@ -7,6 +7,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | `bootstrap` | `houdini-scripting` | yes |
 | `scene` | `houdini-scene`, `houdini-scene-edit` | `houdini-scene` only |
 | `authoring` | `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus` | no |
+| `validation` | `houdini-modeling-validation` | no |
 | `interchange` | `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`, `houdini-copernicus-unreal` | no |
 | `pipeline` | `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-crowds`, `houdini-pdg` | no |
 
@@ -25,6 +26,7 @@ Progressive loading stages for `dcc-mcp-houdini`. Minimal mode loads **bootstrap
 | Inspect & rewire graph | `load_skill("houdini-node-graph")` → `houdini_node_graph__get_connections` → `houdini_node_graph__connect_input` / `houdini_node_graph__disconnect_input` |
 | Create & inspect geometry | `load_skill("houdini-geometry")` → `houdini_geometry__create_primitive` or bounded `houdini_geometry__create_curve_guides` → `houdini_geometry__get_geometry_info` → `houdini_geometry__list_attributes` / `houdini_geometry__list_groups` |
 | Model typed SOP geometry | `load_skill("houdini-mesh-ops")` → `loft_sections` / `lathe_profile` / `extrude_faces` / `bevel_edges` / `bridge_edges` / `boolean_op` / `add_edge_loop` / `array_instances` / `mirror` / `auto_uv` / `uv_project` → inspect returned readback → `houdini_geometry__get_cook_status` |
+| Validate modeling state | `load_skill("houdini-modeling-validation")` → `houdini_modeling_validation__export_model_state` → core `validate_scene_vs_spec` |
 | Create a DOP solver skeleton | `load_skill("houdini-simulation")` → `create_simulation_network(simulation_type="pyro"|"flip"|"rbd"|"vellum")` → `configure_simulation_solver` → `inspect_simulation_network` → `validate_simulation_setup` |
 | Inspect cached DOP field dimensions | `load_skill("houdini-simulation")` → `inspect_simulation_fields(network_path, object_name, field_names)`; network must report cooked and no cook needed; cached data may predate child edits; per-component resolution and voxel size |
 | Fracture & constrain rigid bodies | `load_skill("houdini-simulation")` → `create_fracture` → `create_simulation_network(simulation_type="rbd")` → `create_constraint_network` → `create_collision_source` → `validate_simulation_setup` |

@@ -35,7 +35,7 @@ server.list_skills()
 - `houdini_success`, `houdini_error`, `with_houdini`
 - `build_minimal_mode_config`, `build_minimal_mode_for_stages`, `MINIMAL_SKILLS`, `STAGES`, `STAGE_SKILLS`
 
-## Bundled tools (43 skills, 296 tools)
+## Bundled tools (44 skills, 297 tools)
 
 ### bootstrap (default)
 - `houdini_scripting__execute_python`, `get_session_info`
@@ -65,6 +65,9 @@ server.list_skills()
 - `houdini_texture_bake__list_bake_targets`, `bake_textures`, `bake_ambient_occlusion`, `bake_lighting`, `transfer_maps`, `configure_udim_bake`, `inspect_bake_output`
 - `houdini_copernicus__create_cop_network`, `create_cop_node`, `build_composite_chain`, `cook_cop_node`, `inspect_cop_output`, `inspect_cop_network`, `validate_cop_network`
 
+### validation (load on demand)
+- `houdini_modeling_validation__export_model_state`
+
 ### interchange (load on demand)
 - `houdini_interchange__probe_file`, `import_geometry`, `export_geometry`, `export_alembic`, `export_fbx`, `export_usd`
 - `houdini_import_to_scene__import_to_scene`
@@ -88,6 +91,7 @@ server.list_skills()
 - `bootstrap`: `houdini-scripting` (default loaded)
 - `scene`: `houdini-scene`, `houdini-scene-edit` (partial default)
 - `authoring`: `houdini-nodes`, `houdini-object-ops`, `houdini-parameters`, `houdini-node-graph`, `houdini-geometry`, `houdini-groom`, `houdini-mesh-ops`, `houdini-vdb`, `houdini-terrain`, `houdini-uv`, `houdini-vex`, `houdini-camera-light`, `houdini-materials`, `houdini-lookdev`, `houdini-hda`, `houdini-material-library`, `houdini-light-rig`, `houdini-copernicus`
+- `validation`: `houdini-modeling-validation`
 - `interchange`: `houdini-interchange`, `houdini-asset-sync`, `houdini-export-preset`, `houdini-import-to-scene`, `houdini-usd-lops`, `houdini-copernicus-unreal`
 - `pipeline`: `houdini-render`, `houdini-karma`, `houdini-husk`, `houdini-animation`, `houdini-chops`, `houdini-constraints`, `houdini-kinefx`, `houdini-hda-automation`, `houdini-pipeline`, `houdini-dev`, `houdini-automation`, `houdini-texture-bake`, `houdini-gsplat-relighting`, `houdini-simulation`, `houdini-particles`, `houdini-crowds`, `houdini-pdg`
 
