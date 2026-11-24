@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from skill_loader import skill_script_import_context
 
 _SKILLS_ROOT = Path(__file__).parent.parent / "src" / "dcc_mcp_houdini" / "skills"
@@ -494,3 +495,30 @@ class TestParmSnapshotRestore:
         snapshot = mod._snapshot_frame_parms(rop)
         assert snapshot == {}
         mod._restore_frame_parms(rop, snapshot)  # no-op, no crash
+
+
+@pytest.mark.parametrize(
+    ("params", "handler", "expected_args", "expected_kwargs"),
+    [
+        (
+            {"action": "launch", "rop_path": "/out/mantra1", "frame_range": [1, 5, 2]},
+            "launch_rop_job",
+            (),
+            {"rop_path": "/out/mantra1", "frame_range": [1, 5, 2]},
+        ),
+        ({"action": "poll", "job_id": "existing-job"}, "get_rop_job", ("existing-job",), {}),
+        ({"action": "cancel", "job_id": "existing-job"}, "cancel_rop_job", ("existing-job",), {}),
+    ],
+)
+def test_chunked_manifest_main_routes_actions(params, handler, expected_args, expected_kwargs):
+    skill = _SKILLS_ROOT / "houdini-render"
+    tools = yaml.safe_load((skill / "tools.yaml").read_text(encoding="utf-8"))["tools"]
+    tool = next(tool for tool in tools if tool["name"] == "render_rop_chunked")
+    backend = _load_script("houdini-render", "_rop_chunked.py")
+    with patch.dict(sys.modules, {"_rop_chunked": backend}):
+        module = _load_script("houdini-render", Path(tool["source_file"]).name)
+        with patch.object(backend, handler, return_value={"success": True, "job_id": "existing-job"}) as dispatch:
+            result = module.main(**params)
+    dispatch.assert_called_once_with(*expected_args, **expected_kwargs)
+    assert result["success"] is True
+    assert result["context"]["job_id"] == "existing-job"
