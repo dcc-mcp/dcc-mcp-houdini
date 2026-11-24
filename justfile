@@ -165,3 +165,8 @@ clean:
 
 ci: test lint-all
     @echo "All CI checks passed"
+
+
+# Verify the pinned VX and just toolchain.
+toolchain-ci:
+    vx just@1.58 --version
